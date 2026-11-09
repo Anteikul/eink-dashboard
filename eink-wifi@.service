@@ -1,0 +1,17 @@
+[Unit]
+Description=Apply an E-ink Wi-Fi setup request
+After=NetworkManager.service
+
+[Service]
+ExecStart=/usr/local/libexec/eink-wifi
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+RuntimeMaxSec=60s
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK

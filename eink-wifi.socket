@@ -1,0 +1,13 @@
+[Unit]
+Description=E-ink Wi-Fi setup requests
+
+[Socket]
+ListenStream=/run/eink-wifi.sock
+SocketUser=@ACCOUNT@
+SocketMode=0600
+Accept=yes
+MaxConnections=1
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

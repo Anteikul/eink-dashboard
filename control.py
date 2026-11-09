@@ -1,4 +1,5 @@
 """Local browser controls and a preview of the last completed panel update."""
+import ipaddress
 import json
 import os
 import struct
@@ -82,7 +83,7 @@ class PanelState:
                     'revision': self.revision, 'trackUrl': self.track_url}
 
 
-def start_server(host, port, state, settings, reload_settings):
+def start_server(host, port, state, settings, reload_settings, *, wifi=None):
     assets = Path(__file__).with_name('web')
     routes = {
         '/': ('index.html', 'text/html; charset=utf-8'),
@@ -90,10 +91,18 @@ def start_server(host, port, state, settings, reload_settings):
         '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
         '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),
     }
+    if wifi is not None:
+        routes = {
+            '/': ('wifi.html', 'text/html; charset=utf-8'),
+            '/app.css': ('app.css', 'text/css; charset=utf-8'),
+            '/wifi.js': ('wifi.js', 'text/javascript; charset=utf-8'),
+        }
+    subnet = ipaddress.IPv4Network(f'{host}/24', strict=False) if wifi is not None else None
     site = {url: (kind, (assets / filename).read_bytes())
             for url, (filename, kind) in routes.items()}
     admin_routes = {'/api/settings', '/api/places', '/api/spotify/start',
                     '/api/spotify/finish', '/api/spotify/disconnect'}
+    allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {'/api/theme'}
 
     class Handler(BaseHTTPRequestHandler):
         def setup(self):
@@ -127,9 +136,17 @@ def start_server(host, port, state, settings, reload_settings):
             if self.headers.get('Host') not in accepted_hosts:
                 self.send_error(400)
                 return
+            if subnet is not None and ipaddress.IPv4Address(self.client_address[0]) not in subnet:
+                self.send_error(403)
+                return
             path = self.path.partition('?')[0]
             if path in site:
                 self.reply(200, *site[path])
+            elif wifi is not None:
+                if path == '/api/wifi':
+                    self.json(200, {'status': wifi.status})
+                else:
+                    self.send_error(404)
             elif path == '/api/state':
                 self.json(200, state.status())
             elif path == '/api/settings':
@@ -141,11 +158,12 @@ def start_server(host, port, state, settings, reload_settings):
                 self.send_error(404)
 
         def do_POST(self):
-            if self.path not in admin_routes and self.path != '/api/theme':
+            if self.path not in allowed_routes:
                 self.send_error(404)
                 return
             if (self.headers.get('Host') not in accepted_hosts
-                    or self.headers.get('Origin') != f'http://{authority}'):
+                    or self.headers.get('Origin') != f'http://{authority}'
+                    or (subnet is not None and ipaddress.IPv4Address(self.client_address[0]) not in subnet)):
                 self.json(403, {'error': 'Open the dashboard directly on the Pi.'})
                 return
             if self.path in admin_routes and not self.setup_access():
@@ -157,6 +175,12 @@ def start_server(host, port, state, settings, reload_settings):
                 payload = json.loads(self.rfile.read(size))
                 if not isinstance(payload, dict):
                     raise ValueError('Invalid request.')
+                if wifi is not None:
+                    if wifi.submit(payload['ssid'], payload['password']):
+                        self.json(202, {'status': 'joining'})
+                    else:
+                        self.json(409, {'error': 'Wi-Fi setup is busy or the hotspot has already closed.'})
+                    return
                 if self.path == '/api/theme':
                     if payload.get('theme') not in THEMES:
                         raise ValueError('Invalid theme.')

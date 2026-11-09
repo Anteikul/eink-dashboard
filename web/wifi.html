@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Set up Wi-Fi · E‑ink</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/wifi.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="device"><span class="mark" aria-hidden="true"></span> E‑INK / NETWORK</p>
+      <h1>Set up Wi-Fi</h1>
+      <p class="intro">Choose the 2.4 GHz network the Raspberry Pi should join.</p>
+    </header>
+    <section class="setup" aria-labelledby="wifi-heading">
+      <h2 id="wifi-heading">Network details</h2>
+      <form id="wifi-form" class="setup-form" method="post" action="/api/wifi">
+        <label for="wifi-ssid">Network name (SSID)</label>
+        <input id="wifi-ssid" name="ssid" maxlength="32" autocomplete="off" spellcheck="false" required>
+        <label for="wifi-password">Network password</label>
+        <input id="wifi-password" name="password" type="password" maxlength="64" autocomplete="off">
+        <p>For an open network, leave the password empty.</p>
+        <button type="submit">Connect Raspberry Pi</button>
+      </form>
+      <p id="setup-status" role="status"></p>
+    </section>
+  </main>
+</body>
+</html>

@@ -16,6 +16,18 @@ You can also clone the repository and run `./install.sh` from the checkout. The 
 
 Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Select the gear in the upper-right corner to open **Settings** and switch between light and dark themes. Under **Device setup**, enter the setup code printed by the installer to change location, time zone, temperature units, rotation, or Spotify access. To recover the code, run `cat .setup-code` from the installation directory on the Pi.
 
+### Join a new Wi-Fi network
+
+Run `sh install.sh --wifi-setup` to enable or update the optional Wi-Fi setup feature. This installs a system service that can configure the Pi's built-in `wlan0` interface. The dashboard account can request the two supported Wi-Fi operations through a private local socket.
+
+When the Pi has no saved Wi-Fi connection available for about 30 seconds, it starts a temporary hotspot. The e-paper screen shows a Wi-Fi icon, the hotspot name, a randomly generated password, and the address `http://10.42.0.1/`.
+
+1. On your phone, join the **EinkSetup** network shown on the display. Stay connected if the phone says the network has no internet.
+2. Open `http://10.42.0.1/` and enter the name and password of the 2.4 GHz network the Pi should join. Leave the password empty for an open network.
+3. The hotspot closes while the Pi tries the new network. If it connects, the Pi saves the network for future boots and returns to the dashboard. If it fails, reconnect to the same hotspot with the same password and try again.
+
+While the setup hotspot is active, restart the Pi to give its saved networks another automatic try.
+
 ### Connect Spotify
 
 1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard). Select **Web API** and add `http://127.0.0.1:8765/callback` as a redirect URI. Spotify requires Premium for your own app in Development Mode.

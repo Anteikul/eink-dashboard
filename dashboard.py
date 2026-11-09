@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 from control import PanelState, preview_png, start_server
 from device_settings import DeviceSettings
 from spotify_playback import SpotifyPlayback
+from wifi_setup import AP_ADDRESS, Link, NetworkSetup
 
 WIDTH, HEIGHT = 250, 122
 ROW_BYTES = (HEIGHT + 7) // 8
@@ -77,6 +78,26 @@ def render(now, weather, theme='light', units='celsius'):
         for x, y in ATLAS['weather'][icon]:
             image[(21 + y) * WIDTH + 188 + x] = 0
     return bytearray(1 - pixel for pixel in image) if theme == 'dark' else image
+
+
+def render_wifi(hotspot, theme='light'):
+    from PIL import Image, ImageDraw
+    from music_screen import font
+
+    image = Image.new('1', (WIDTH, HEIGHT), theme == 'light')
+    draw = ImageDraw.Draw(image)
+    ink = int(theme == 'dark')
+    draw.text((12, 7), 'Wi-Fi setup', font=font(22, bold=True), fill=ink)
+    for radius in (8, 15, 22):
+        draw.arc((217 - radius, 31 - radius, 217 + radius, 31 + radius),
+                 224, 316, fill=ink, width=2)
+    draw.ellipse((215, 29, 219, 33), fill=ink)
+    draw.line((12, 40, 238, 40), fill=ink)
+    for y, text in ((47, f'Wi-Fi: {hotspot.ssid}'),
+                    (71, f'Password: {hotspot.password}'),
+                    (95, f'http://{AP_ADDRESS}')):
+        draw.text((12, y), text, font=font(17), fill=ink)
+    return bytearray(image.getdata())
 
 
 def pack(image, rotation):
@@ -153,7 +174,7 @@ class Weather:
                 stop.wait(60)
 
 
-def run(rotation, duration, listen, port, settings):
+def run(rotation, duration, listen, port, settings, wifi_setup=False):
     from panel import VerifiedEPD, epdconfig
 
     stop = threading.Event()
@@ -184,19 +205,38 @@ def run(rotation, duration, listen, port, settings):
     last_content = None
     displayed_theme = None
     displayed_music = False
+    displayed_hotspot = None
     partial_count = 0
     previous = None
     state = PanelState(FOLDER / 'theme.txt')
+    network = NetworkSetup() if wifi_setup else None
+    if network:
+        threading.Thread(target=network.poll, args=(stop,), daemon=True).start()
+    active_link = Link(listen)
     server = start_server(listen, port, state, settings, reload_settings) if listen else None
     try:
         while not stop.is_set() and time.monotonic() < deadline:
+            link = network.link if network else active_link
+            hotspot = link.hotspot
+            if link != active_link:
+                if server:
+                    server.shutdown()
+                    server.server_close()
+                    server = None
+                if link.address:
+                    server = start_server(link.address, port, state, settings, reload_settings,
+                                          wifi=network if hotspot else None)
+                active_link = link
             now = datetime.now(timezone)
             theme = state.theme
             current_weather = weather.current
             prepared = spotify.current if spotify else None
-            music = prepared is not None
+            music = prepared is not None and hotspot is None
             advancing = False
-            if music:
+            if hotspot:
+                track = None
+                content = (theme, hotspot)
+            elif music:
                 playback, cover = prepared
                 track = playback.track
                 music_view = (theme, track, id(cover))
@@ -215,12 +255,16 @@ def run(rotation, duration, listen, port, settings):
                 stop.wait(min(1 - now.microsecond / 1_000_000, deadline - time.monotonic()))
                 continue
             started = time.monotonic()
-            screen = (render_music(track, theme, cover, filled)
-                      if music else render(now, current_weather, theme, units))
+            if hotspot:
+                screen = render_wifi(hotspot, theme)
+            elif music:
+                screen = render_music(track, theme, cover, filled)
+            else:
+                screen = render(now, current_weather, theme, units)
             pixels = pack(screen, rotation)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.
-            full = (displayed_music != music
+            full = (displayed_music != music or displayed_hotspot != hotspot
                     or needs_full_refresh(displayed_theme, theme, partial_count, advancing=advancing))
             if full:
                 if panel.init() != 0:
@@ -233,7 +277,7 @@ def run(rotation, duration, listen, port, settings):
                 regions = changed_regions(previous, pixels)
                 if not regions:
                     last_content = content
-                    if server:
+                    if not hotspot and (server or network):
                         state.publish(theme, state.frame, track.url if track else None)
                     continue
                 panel.display_regions(pixels, regions)
@@ -244,12 +288,13 @@ def run(rotation, duration, listen, port, settings):
             previous = pixels
             displayed_theme = theme
             displayed_music = music
+            displayed_hotspot = hotspot
             last_content = content
-            if server:
+            if not hotspot and (server or network):
                 state.publish(theme, preview_png(screen, WIDTH, HEIGHT), track.url if track else None)
             mode = 'full' if full else 'partial'
             counts[mode] += 1
-            page = 'music' if music else 'weather'
+            page = 'wifi setup' if hotspot else 'music' if music else 'weather'
             print(f'{now:%H:%M:%S} {detail} {page} {time.monotonic() - started:.3f}s', flush=True)
     finally:
         stop.set()
@@ -271,9 +316,12 @@ def main():
     parser.add_argument('--seconds', type=int, default=90, help='Demo length, 0 runs until stopped')
     parser.add_argument('--listen', help='IPv4 address for the local control page')
     parser.add_argument('--port', type=int, default=80)
+    parser.add_argument('--wifi-setup', action='store_true', help='Manage Wi-Fi with a fallback hotspot')
     args = parser.parse_args()
     if args.seconds < 0:
         parser.error('--seconds must be nonnegative')
+    if args.wifi_setup and (args.listen or args.port != 80):
+        parser.error('--wifi-setup selects its own listen address and uses port 80')
     with (FOLDER / '.panel.lock').open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -281,7 +329,7 @@ def main():
             parser.exit(1, 'Dashboard already running.\n')
         settings = DeviceSettings(FOLDER)
         rotation = settings.values['rotation'] if args.rotation is None else args.rotation
-        restart = run(rotation, args.seconds, args.listen, args.port, settings)
+        restart = run(rotation, args.seconds, args.listen, args.port, settings, args.wifi_setup)
     if restart:
         os.execv(sys.executable, [sys.executable, *sys.orig_argv[1:]])
 

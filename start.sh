@@ -11,6 +11,9 @@ if [ -d .spotify-runtime ]; then
 fi
 
 address=${EINK_LISTEN_ADDRESS:-}
+if [ -z "$address" ] && [ -S /run/eink-wifi.sock ] && [ "$#" -eq 0 ]; then
+    exec authbind --deep python3 -u dashboard.py --seconds 0 --wifi-setup
+fi
 while [ -z "$address" ]; do
     address=$(ip -o -4 addr show up scope global 2>/dev/null |
         awk '{ sub(/\/.*/, "", $4); print $4; exit }')
