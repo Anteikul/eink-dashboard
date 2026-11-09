@@ -1,0 +1,199 @@
+"""Local browser controls and a preview of the last completed panel update."""
+import json
+import os
+import struct
+import tempfile
+import threading
+import time
+import zlib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.error import HTTPError
+
+from device_settings import find_places
+
+THEMES = ('light', 'dark')
+
+
+def pack_row(row):
+    padding = (-len(row)) % 8
+    row = bytes(row) + bytes(padding)
+    return bytes(
+        sum(bit << (7 - index) for index, bit in enumerate(row[start:start+8]))
+        for start in range(0, len(row), 8)
+    )
+
+
+def preview_png(pixels, width, height):
+    def chunk(kind, content):
+        return (struct.pack('>I', len(content)) + kind + content
+                + struct.pack('>I', zlib.crc32(kind + content)))
+
+    rows = b''.join(b'\x00' + pack_row(pixels[y:y+width]) for y in range(0, len(pixels), width))
+    return (
+        b'\x89PNG\r\n\x1a\n'
+        + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 1, 0, 0, 0, 0))
+        + chunk(b'IDAT', zlib.compress(rows))
+        + chunk(b'IEND', b'')
+    )
+
+
+class PanelState:
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+        try:
+            theme = path.read_text(encoding='utf-8').strip()
+        except FileNotFoundError:
+            theme = 'light'
+        self.theme = theme if theme in THEMES else 'light'
+        self.applied_theme = None
+        self.frame = None
+        self.revision = None
+        self.track_url = None
+
+    def set_theme(self, theme):
+        if theme not in THEMES:
+            raise ValueError('Invalid theme')
+        with self.lock:
+            if theme != self.theme:
+                with tempfile.NamedTemporaryFile(
+                    mode='w', encoding='utf-8', dir=self.path.parent, delete=False
+                ) as staged:
+                    temporary = Path(staged.name)
+                    try:
+                        staged.write(theme + '\n')
+                        staged.flush()
+                        os.replace(temporary, self.path)
+                    finally:
+                        temporary.unlink(missing_ok=True)
+                self.theme = theme
+
+    def publish(self, theme, frame, track_url=None):
+        with self.lock:
+            self.applied_theme = theme
+            self.frame = frame
+            self.revision = str(time.time_ns())
+            self.track_url = track_url
+
+    def status(self):
+        with self.lock:
+            return {'theme': self.theme, 'appliedTheme': self.applied_theme,
+                    'revision': self.revision, 'trackUrl': self.track_url}
+
+
+def start_server(host, port, state, settings, reload_settings):
+    assets = Path(__file__).with_name('web')
+    routes = {
+        '/': ('index.html', 'text/html; charset=utf-8'),
+        '/app.css': ('app.css', 'text/css; charset=utf-8'),
+        '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
+        '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),
+    }
+    site = {url: (kind, (assets / filename).read_bytes())
+            for url, (filename, kind) in routes.items()}
+    admin_routes = {'/api/settings', '/api/places', '/api/spotify/start',
+                    '/api/spotify/finish', '/api/spotify/disconnect'}
+
+    class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            super().setup()
+            self.connection.settimeout(5)
+
+        def log_message(self, format, *args):
+            pass
+
+        def reply(self, status, kind, body):
+            self.send_response(status)
+            self.send_header('Content-Type', kind)
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header('Content-Security-Policy',
+                             "default-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def json(self, status, body):
+            self.reply(status, 'application/json', json.dumps(body).encode())
+
+        def setup_access(self):
+            if settings.authorized(self.headers.get('X-Setup-Code', '')):
+                return True
+            self.json(403, {'error': 'Zkontroluj kód nastavení z instalačního terminálu.'})
+            return False
+
+        def do_GET(self):
+            if self.headers.get('Host') != authority:
+                self.send_error(400)
+                return
+            path = self.path.partition('?')[0]
+            if path in site:
+                self.reply(200, *site[path])
+            elif path == '/api/state':
+                self.json(200, state.status())
+            elif path == '/api/settings':
+                if self.setup_access():
+                    self.json(200, settings.status())
+            elif path == '/screen.png' and (frame := state.frame) is not None:
+                self.reply(200, 'image/png', frame)
+            else:
+                self.send_error(404)
+
+        def do_POST(self):
+            if self.path not in admin_routes and self.path != '/api/theme':
+                self.send_error(404)
+                return
+            if (self.headers.get('Host') != authority
+                    or self.headers.get('Origin') != f'http://{authority}'):
+                self.json(403, {'error': 'Otevři ovládání přímo na Pi.'})
+                return
+            if self.path in admin_routes and not self.setup_access():
+                return
+            try:
+                size = int(self.headers.get('Content-Length', '0'))
+                if not 0 < size <= 8192 or self.headers.get_content_type() != 'application/json':
+                    raise ValueError('Neplatný požadavek.')
+                payload = json.loads(self.rfile.read(size))
+                if not isinstance(payload, dict):
+                    raise ValueError('Neplatný požadavek.')
+                if self.path == '/api/theme':
+                    if payload.get('theme') not in THEMES:
+                        raise ValueError('Neplatný režim.')
+                    state.set_theme(payload['theme'])
+                    self.json(200, state.status())
+                    return
+                if self.path == '/api/places':
+                    self.json(200, {'places': find_places(payload['name'])})
+                    return
+                if self.path == '/api/spotify/start':
+                    self.json(200, {'url': settings.authorize(payload['clientId'])})
+                    return
+                if self.path == '/api/settings':
+                    settings.save(payload)
+                elif self.path == '/api/spotify/finish':
+                    settings.finish(payload['callback'])
+                else:
+                    settings.disconnect()
+            except HTTPError as error:
+                self.json(502, {'error': f'Služba vrátila chybu HTTP {error.code}. Zkus akci znovu.'})
+                return
+            except (KeyError, TypeError, json.JSONDecodeError):
+                self.json(400, {'error': 'Zkontroluj zadané údaje.'})
+                return
+            except ValueError as error:
+                self.json(400, {'error': str(error)})
+                return
+            except OSError:
+                self.json(502, {'error': 'Změnu se nepodařilo dokončit. Zkus to znovu.'})
+                return
+            try:
+                self.json(200, settings.status())
+            finally:
+                reload_settings()
+
+    server = ThreadingHTTPServer((host, port), Handler)
+    authority = f'{host}:{server.server_port}'
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f'Control page: http://{authority}', flush=True)
+    return server
