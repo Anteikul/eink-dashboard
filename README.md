@@ -14,7 +14,7 @@ sh install.sh
 
 You can also clone the repository and run `./install.sh` from the checkout. The installer uses `sudo` to install missing packages, grant your account access to HTTP port 80 with `authbind`, and enable automatic startup when the Pi connects to the network. Leave the installation directory in place.
 
-Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Under **Device setup**, enter the setup code printed by the installer. You can search for a city or enter the coordinates and time zone manually, rotate the display, choose °C or °F, and switch between light and dark themes. To recover the code, run `cat .setup-code` from the installation directory on the Pi.
+Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Select the gear in the upper-right corner to open **Settings** and switch between light and dark themes. Under **Device setup**, enter the setup code printed by the installer to change location, time zone, temperature units, rotation, or Spotify access. To recover the code, run `cat .setup-code` from the installation directory on the Pi.
 
 ### Connect Spotify
 

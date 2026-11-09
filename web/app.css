@@ -26,7 +26,8 @@ body { margin: 0; }
 main { max-width: 760px; margin: 0 auto; padding: clamp(25px, 6vw, 64px) clamp(18px, 6vw, 52px); }
 header { margin-bottom: clamp(24px, 5vw, 38px); }
 .device, .section-line span, footer { font: 12px/1.4 var(--mono); }
-.device { display: flex; align-items: center; gap: 9px; margin: 0 0 13px; letter-spacing: .08em; }
+.header-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 9px; }
+.device { display: flex; align-items: center; gap: 9px; margin: 0; letter-spacing: .08em; }
 .mark { width: 12px; height: 12px; background: var(--accent); border: 1px solid var(--ink); border-radius: 2px; }
 h1 { margin: 0; font-size: clamp(45px, 10vw, 73px); line-height: 1; letter-spacing: -.065em; font-weight: 680; }
 .intro { margin: 9px 0 0; color: var(--muted); font-size: 16px; }
@@ -40,7 +41,14 @@ h2 { font-size: 15px; margin: 0; font-weight: 680; }
 .screen p { margin: 0; font: 13px var(--mono); }
 .track-link { margin: 9px 0 0; font-size: 13px; }
 .track-link a { color: inherit; text-underline-offset: 3px; }
-.settings { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px 18px; margin-top: 25px; padding-top: 19px; border-top: 1px solid var(--line); }
+#open-settings { width: 44px; padding: 0; justify-content: center; }
+#open-settings svg { width: 24px; height: 24px; }
+dialog { width: min(580px, calc(100% - 28px)); max-height: calc(100% - 28px); padding: clamp(16px, 5vw, 26px); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 13px; overscroll-behavior: contain; }
+dialog::backdrop { background: rgb(20 25 20 / .6); }
+.dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.dialog-heading h2 { font-size: 22px; }
+.dialog-heading button { border-color: var(--line); }
+.settings { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px 18px; }
 .setting-label p { margin: 5px 0 0; font-size: 13px; color: var(--muted); }
 fieldset { display: flex; padding: 3px; margin: 0; gap: 3px; min-width: 0; border: 1px solid #969d8e; border-radius: 8px; }
 button { min-height: 44px; display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; font: 600 14px/1 system-ui, sans-serif; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 5px; cursor: pointer; }
@@ -49,13 +57,14 @@ button:hover:not(:disabled) { border-color: #52604a; }
 button:disabled { cursor: wait; opacity: .7; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-#status { min-height: 1.5em; margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+#status, #theme-status { min-height: 1.5em; margin: 12px 0 0; color: var(--muted); font-size: 13px; }
 footer { margin-top: 22px; color: var(--muted); }
 footer a { color: inherit; text-underline-offset: 3px; }
 
 .setup { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 18px; }
 .setup [hidden] { display: none !important; }
 .setup-form { display: grid; gap: 8px; margin: 14px 0; }
+.spotify-setup .setup-form { margin: 0; }
 .setup-form h3 { margin: 9px 0 0; font-size: 14px; }
 .setup-form p, #setup-status { margin: 2px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 #setup-status:empty { display: none; }

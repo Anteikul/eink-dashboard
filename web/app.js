@@ -1,12 +1,18 @@
 const controls = document.querySelector('fieldset');
 const buttons = [...controls.querySelectorAll('button')];
 const status = document.querySelector('#status');
+const themeStatus = document.querySelector('#theme-status');
 const image = document.querySelector('#preview');
 const placeholder = document.querySelector('#placeholder');
 const trackLink = document.querySelector('#track-link');
 let revision = null;
 let saving = false;
 let saveError = '';
+
+function showStatus(message) {
+  status.textContent = message;
+  themeStatus.textContent = message;
+}
 
 image.addEventListener('load', () => {
   placeholder.hidden = true;
@@ -26,7 +32,7 @@ function show(data) {
     image.src = '/screen.png?frame=' + revision;
   }
   controls.disabled = false;
-  status.textContent = saveError || (applied ? 'Shown on the display.' : 'Refreshing the display…');
+  showStatus(saveError || (applied ? 'Shown on the display.' : 'Refreshing the display…'));
 }
 
 async function read() {
@@ -37,7 +43,7 @@ async function read() {
     const data = await response.json();
     if (!saving) show(data);
   } catch {
-    status.textContent = 'Connection to the Pi lost. Reconnecting…';
+    showStatus('Connection to the Pi lost. Reconnecting…');
     controls.disabled = true;
   }
 }
@@ -47,7 +53,7 @@ for (const button of buttons) {
     if (saving || button.getAttribute('aria-pressed') === 'true') return;
     saving = true;
     saveError = '';
-    status.textContent = 'Saving theme…';
+    showStatus('Saving theme…');
     try {
       const response = await fetch('/api/theme', {
         method: 'POST',
@@ -59,7 +65,7 @@ for (const button of buttons) {
       show(data);
     } catch (error) {
       saveError = error instanceof TypeError ? 'The Pi did not respond.' : error.message;
-      status.textContent = saveError;
+      showStatus(saveError);
     } finally {
       saving = false;
     }

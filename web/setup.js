@@ -1,3 +1,5 @@
+const openSettings = document.querySelector('#open-settings');
+const settingsDialog = document.querySelector('#settings-dialog');
 const unlockForm = document.querySelector('#unlock-form');
 const deviceForm = document.querySelector('#device-form');
 const spotifyForm = document.querySelector('#spotify-form');
@@ -8,6 +10,9 @@ const places = document.querySelector('#places');
 const disconnect = document.querySelector('#spotify-disconnect');
 let setupCode = '';
 let foundPlaces = [];
+
+openSettings.addEventListener('click', () => settingsDialog.showModal());
+settingsDialog.addEventListener('close', () => openSettings.focus());
 
 async function api(path, payload) {
   const headers = {'X-Setup-Code': setupCode};
@@ -44,6 +49,8 @@ function showSettings(data) {
   document.querySelector('#redirect-uri').textContent = data.redirectUri;
   document.querySelector('#spotify-status').textContent = data.spotifyConnected
     ? 'Your account is connected.' : 'Connect your Spotify account to show music.';
+  spotifyForm.hidden = data.spotifyConnected;
+  if (data.spotifyConnected) finishForm.hidden = true;
   disconnect.hidden = !data.spotifyConnected;
 }
 
@@ -97,7 +104,7 @@ finishForm.addEventListener('submit', (event) => {
   action(async () => {
     showSettings(await api('/api/spotify/finish', {callback: finishForm.elements.callback.value}));
     finishForm.reset();
-    finishForm.hidden = true;
+    disconnect.focus();
     setupStatus.textContent = 'Spotify connected. The display will refresh shortly.';
   });
 });
@@ -106,5 +113,6 @@ disconnect.addEventListener('click', () => action(async () => {
   showSettings(await api('/api/spotify/disconnect', {}));
   finishForm.reset();
   finishForm.hidden = true;
+  spotifyForm.elements.clientId.focus();
   setupStatus.textContent = 'Spotify disconnected.';
 }));
