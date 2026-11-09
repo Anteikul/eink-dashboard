@@ -26,7 +26,7 @@ function show(data) {
     image.src = '/screen.png?frame=' + revision;
   }
   controls.disabled = false;
-  status.textContent = saveError || (applied ? 'Zobrazeno na displeji.' : 'E‑ink se překresluje…');
+  status.textContent = saveError || (applied ? 'Shown on the display.' : 'Refreshing the display…');
 }
 
 async function read() {
@@ -37,7 +37,7 @@ async function read() {
     const data = await response.json();
     if (!saving) show(data);
   } catch {
-    status.textContent = 'Spojení s Pi se přerušilo. Zkouším znovu…';
+    status.textContent = 'Connection to the Pi lost. Reconnecting…';
     controls.disabled = true;
   }
 }
@@ -47,7 +47,7 @@ for (const button of buttons) {
     if (saving || button.getAttribute('aria-pressed') === 'true') return;
     saving = true;
     saveError = '';
-    status.textContent = 'Ukládám režim…';
+    status.textContent = 'Saving theme…';
     try {
       const response = await fetch('/api/theme', {
         method: 'POST',
@@ -58,7 +58,7 @@ for (const button of buttons) {
       if (!response.ok) throw new Error(data.error);
       show(data);
     } catch (error) {
-      saveError = error instanceof TypeError ? 'Pi neodpovídá.' : error.message;
+      saveError = error instanceof TypeError ? 'The Pi did not respond.' : error.message;
       status.textContent = saveError;
     } finally {
       saving = false;

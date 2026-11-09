@@ -21,7 +21,8 @@ from spotify_playback import SpotifyPlayback
 
 WIDTH, HEIGHT = 250, 122
 ROW_BYTES = (HEIGHT + 7) // 8
-WEEKDAYS = ('Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle')
+WEEKDAYS = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
+MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
 FOLDER = Path(__file__).resolve().parent
 ATLAS = json.loads((FOLDER / 'atlas.json').read_text(encoding='utf-8'))
 
@@ -53,7 +54,7 @@ def label(image, x, baseline, text, style, *, centered=False):
 
 
 def screen_content(now, weather, units='celsius'):
-    day = f'{WEEKDAYS[now.weekday()]} {now.day}. {now.month}. {now.year}'
+    day = f'{WEEKDAYS[now.weekday()]} {now.day} {MONTHS[now.month - 1]} {now.year}'
     if weather is None:
         temperature, icon = '—', None
     else:
@@ -269,7 +270,7 @@ def main():
     parser.add_argument('--rotation', choices=(0, 180), type=int)
     parser.add_argument('--seconds', type=int, default=90, help='Demo length, 0 runs until stopped')
     parser.add_argument('--listen', help='IPv4 address for the local control page')
-    parser.add_argument('--port', type=int, default=8080)
+    parser.add_argument('--port', type=int, default=80)
     args = parser.parse_args()
     if args.seconds < 0:
         parser.error('--seconds must be nonnegative')

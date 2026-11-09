@@ -19,7 +19,7 @@ async function api(path, payload) {
   }
   const response = await fetch(path, options);
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Nastavení se nepodařilo načíst.');
+  if (!response.ok) throw new Error(data.error || 'Could not load settings.');
   return data;
 }
 
@@ -43,7 +43,7 @@ function showSettings(data) {
   fillDevice(data.settings);
   document.querySelector('#redirect-uri').textContent = data.redirectUri;
   document.querySelector('#spotify-status').textContent = data.spotifyConnected
-    ? 'Účet je připojený.' : 'Účet ještě není připojený.';
+    ? 'Your account is connected.' : 'Connect your Spotify account to show music.';
   disconnect.hidden = !data.spotifyConnected;
 }
 
@@ -62,10 +62,10 @@ unlockForm.addEventListener('submit', (event) => {
 document.querySelector('#find-city').addEventListener('click', () => action(async () => {
   const data = await api('/api/places', {name: deviceForm.elements.location.value});
   foundPlaces = data.places;
-  places.replaceChildren(new Option('Vyber místo', ''));
+  places.replaceChildren(new Option('Select a location', ''));
   for (const [index, place] of foundPlaces.entries()) places.add(new Option(place.label, index));
   places.hidden = !foundPlaces.length;
-  setupStatus.textContent = foundPlaces.length ? 'Vyber odpovídající místo ze seznamu.' : 'Město se nepodařilo najít.';
+  setupStatus.textContent = foundPlaces.length ? 'Select a location from the list.' : 'No matching locations found.';
 }));
 
 places.addEventListener('change', () => {
@@ -78,7 +78,7 @@ deviceForm.addEventListener('submit', (event) => {
     const form = Object.fromEntries(new FormData(deviceForm));
     for (const key of ['latitude', 'longitude', 'rotation']) form[key] = Number(form[key]);
     showSettings(await api('/api/settings', form));
-    setupStatus.textContent = 'Uloženo. Displej se překreslí za chvíli.';
+    setupStatus.textContent = 'Settings saved. The display will refresh shortly.';
   });
 });
 
@@ -98,7 +98,7 @@ finishForm.addEventListener('submit', (event) => {
     showSettings(await api('/api/spotify/finish', {callback: finishForm.elements.callback.value}));
     finishForm.reset();
     finishForm.hidden = true;
-    setupStatus.textContent = 'Spotify je připojené. Displej se překreslí za chvíli.';
+    setupStatus.textContent = 'Spotify connected. The display will refresh shortly.';
   });
 });
 
@@ -106,5 +106,5 @@ disconnect.addEventListener('click', () => action(async () => {
   showSettings(await api('/api/spotify/disconnect', {}));
   finishForm.reset();
   finishForm.hidden = true;
-  setupStatus.textContent = 'Spotify je odpojené.';
+  setupStatus.textContent = 'Spotify disconnected.';
 }));

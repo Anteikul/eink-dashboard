@@ -38,12 +38,11 @@ MODES = [
 ]
 
 
-# Pokud jsou výsledky blíž než 0.8 bodu,
-# považujeme je prakticky za remízu.
+# Treat close scores as a tie.
 TIE_THRESHOLD = 0.15
 
 
-# Při remíze preferujeme bezpečnější algoritmy.
+# Prefer the more conservative methods when scores are tied.
 SAFE_PRIORITY = [
     "LEGACY",
     "NORMAL",
@@ -125,7 +124,7 @@ def load_image(source):
     if is_url(source):
 
         print(
-            f"\nStahuji obrázek z URL:\n{source}"
+            f"\nDownloading image from URL:\n{source}"
         )
 
         response = requests.get(
@@ -144,7 +143,7 @@ def load_image(source):
 
 
     print(
-        f"\nNačítám lokální soubor:\n{source}"
+        f"\nLoading local file:\n{source}"
     )
 
     return Image.open(
@@ -245,7 +244,7 @@ def print_metrics(gray_image):
         gray_image
     )
 
-    print("\nAnalýza coveru:")
+    print("\nCover analysis:")
 
     print(
         f"  contrast_std    : "
@@ -589,7 +588,7 @@ def process_cover(
 
 
     raise ValueError(
-        f"Neplatný režim: {mode}"
+        f"Invalid mode: {mode}"
     )
 
 
@@ -1428,7 +1427,7 @@ def choose_best_mode(scores):
     ]
 
 
-    # jasný vítěz
+    # Clear winner
     if len(tied_modes) == 1:
 
         return (
@@ -1444,7 +1443,7 @@ def choose_best_mode(scores):
         )
 
 
-    # remíza
+    # Tie
     best_mode = next(
 
         mode
@@ -1813,14 +1812,14 @@ def main():
     else:
 
         source = input(
-            "Vlož URL nebo cestu k obrázku: "
+            "Enter an image URL or file path: "
         ).strip()
 
 
     if not source:
 
         print(
-            "Nebyl zadán žádný obrázek."
+            "No image was provided."
         )
 
         return
@@ -1842,7 +1841,7 @@ def main():
 
         caption = input(
 
-            f"Popisek "
+            f"Caption "
             f"(Enter = {default_caption}): "
 
         ).strip()
@@ -1867,7 +1866,7 @@ def main():
     except Exception as e:
 
         print(
-            "\nChyba při načítání obrázku:"
+            "\nCould not load the image:"
         )
 
         print(e)
@@ -1904,7 +1903,7 @@ def main():
 
 
         print(
-            f"\nGeneruji režim: {mode}"
+            f"\nRendering mode: {mode}"
         )
 
 
@@ -2148,14 +2147,14 @@ def main():
     print("=" * 62)
 
     print(
-        f"VÍTĚZ: {best_mode}"
+        f"WINNER: {best_mode}"
     )
 
     print("=" * 62)
 
 
     print(
-        "\nVýsledek:"
+        "\nResult:"
     )
 
     print(
@@ -2172,7 +2171,7 @@ def main():
 
 
     print(
-        "\nPorovnání:"
+        "\nComparison:"
     )
 
     print(
@@ -2185,7 +2184,7 @@ def main():
 
 
     print(
-        "\nNa Macu:"
+        "\nOn macOS:"
     )
 
     print(

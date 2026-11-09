@@ -72,10 +72,10 @@ def weather_icon(name):
 
 
 digits = '0123456789:'
-czech = 'ěščřžýáíéúůďťňĚŠČŘŽÝÁÍÉÚŮĎŤŇ'
+additional_latin = 'ěščřžýáíéúůďťňĚŠČŘŽÝÁÍÉÚŮĎŤŇ'
 styles = {
     'clock': (MONO, 47, digits),
-    'date': (REGULAR, 14, czech + ' .0123456789' + 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'),
+    'date': (REGULAR, 14, additional_latin + ' .0123456789' + 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'),
     'temperature': (BOLD, 27, '0123456789−°CF—'),
 }
 atlas = {}

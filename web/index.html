@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="cs">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#eeece5">
-  <title>Displej · E‑ink</title>
+  <title>Display · E‑ink</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/app.js" defer></script>
   <script src="/setup.js" defer></script>
@@ -12,86 +12,86 @@
 <body>
   <main>
     <header>
-      <p class="device"><span class="mark" aria-hidden="true"></span> E‑INK / 2,13″</p>
-      <h1>Displej</h1>
-      <p class="intro">Náhled a nastavení vzhledu</p>
+      <p class="device"><span class="mark" aria-hidden="true"></span> E‑INK / 2.13″</p>
+      <h1>Display</h1>
+      <p class="intro">Preview and display settings</p>
     </header>
     <section aria-labelledby="preview-heading">
       <div class="section-line">
-        <h2 id="preview-heading">Obrazovka</h2>
+        <h2 id="preview-heading">Screen</h2>
         <span>250 × 122 px</span>
       </div>
       <div class="bezel">
         <div class="screen">
-          <p id="placeholder">Čekám na první snímek…</p>
-          <img id="preview" width="250" height="122" alt="Poslední obraz odeslaný na displej" hidden>
+          <p id="placeholder">Waiting for the first frame…</p>
+          <img id="preview" width="250" height="122" alt="Last frame sent to the display" hidden>
         </div>
       </div>
-      <p class="track-link" id="track-link" hidden><a rel="noreferrer">Otevřít skladbu ve Spotify</a></p>
+      <p class="track-link" id="track-link" hidden><a rel="noreferrer">Open track in Spotify</a></p>
     </section>
     <section class="settings" aria-labelledby="settings-heading">
       <div class="setting-label">
-        <h2 id="settings-heading">Režim displeje</h2>
-        <p>Volba se uloží do Raspberry Pi.</p>
+        <h2 id="settings-heading">Display theme</h2>
+        <p>The Raspberry Pi saves your selection.</p>
       </div>
       <fieldset aria-labelledby="settings-heading" disabled>
         <button type="button" data-theme="light" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>
-          Světlý
+          Light
         </button>
         <button type="button" data-theme="dark" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 14.1A8.9 8.9 0 0 1 9.9 3.2 9 9 0 1 0 20.8 14.1Z"/></svg>
-          Tmavý
+          Dark
         </button>
       </fieldset>
     </section>
-    <p id="status" role="status">Připojuji se k displeji…</p>
+    <p id="status" role="status">Connecting to the display…</p>
     <section class="setup" aria-labelledby="setup-title">
-      <h2 id="setup-title">Nastavení zařízení</h2>
+      <h2 id="setup-title">Device setup</h2>
       <form id="unlock-form" class="setup-form">
-        <label for="setup-code">Kód nastavení z instalačního terminálu</label>
+        <label for="setup-code">Setup code from the installer</label>
         <div class="setup-row">
           <input id="setup-code" type="password" autocomplete="off" required>
-          <button type="submit">Odemknout</button>
+          <button type="submit">Unlock</button>
         </div>
       </form>
       <p id="setup-status" role="status"></p>
       <div id="setup-fields" hidden>
         <form id="device-form" class="setup-form">
-          <h3>Místo a displej</h3>
-          <label for="city">Město</label>
+          <h3>Location and display</h3>
+          <label for="city">City</label>
           <div class="setup-row">
             <input id="city" name="location" required maxlength="120">
-            <button id="find-city" type="button">Vyhledat</button>
+            <button id="find-city" type="button">Search</button>
           </div>
-          <select id="places" aria-label="Nalezená místa" hidden></select>
+          <select id="places" aria-label="Search results" hidden></select>
           <div class="setup-grid">
-            <label>Zeměpisná šířka<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
-            <label>Zeměpisná délka<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
-            <label>Časové pásmo<input name="timezone" placeholder="Europe/Prague" required></label>
-            <label>Teplota<select name="units"><option value="celsius">°C</option><option value="fahrenheit">°F</option></select></label>
-            <label>Otočení<select name="rotation"><option value="0">0°</option><option value="180">180°</option></select></label>
+            <label>Latitude<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
+            <label>Longitude<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
+            <label>Time zone<input name="timezone" placeholder="Europe/Prague" required></label>
+            <label>Temperature units<select name="units"><option value="celsius">°C</option><option value="fahrenheit">°F</option></select></label>
+            <label>Rotation<select name="rotation"><option value="0">0°</option><option value="180">180°</option></select></label>
           </div>
-          <button type="submit">Uložit nastavení</button>
+          <button type="submit">Save settings</button>
         </form>
         <form id="spotify-form" class="setup-form">
           <h3>Spotify</h3>
           <p id="spotify-status"></p>
-          <p>V <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify Developer Dashboard</a> vyber Web API a přidej tuto adresu do Redirect URIs.</p>
+          <p>In the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify Developer Dashboard</a> select Web API and add this address to Redirect URIs.</p>
           <code id="redirect-uri"></code>
           <label>Client ID<input name="clientId" pattern="[a-fA-F0-9]{32}" autocomplete="off" required></label>
-          <button type="submit">Připravit přihlášení</button>
+          <button type="submit">Prepare sign-in</button>
         </form>
         <form id="spotify-finish" class="setup-form" hidden>
-          <a id="spotify-auth" class="setup-link" target="_blank" rel="noopener noreferrer">Otevřít Spotify a potvrdit přístup</a>
-          <p>Po potvrzení zkopíruj celou adresu z nového okna sem. Stránka na 127.0.0.1 může zobrazit chybu připojení. Adresa v řádku prohlížeče přesto obsahuje údaje potřebné k dokončení.</p>
-          <label>Adresa po potvrzení<textarea name="callback" rows="3" autocomplete="off" required></textarea></label>
-          <button type="submit">Dokončit připojení</button>
+          <a id="spotify-auth" class="setup-link" target="_blank" rel="noopener noreferrer">Open Spotify and authorize access</a>
+          <p>After approving access, copy the full address from the new tab and paste it here. The browser may show a connection error at 127.0.0.1. The address bar still contains the information needed to finish setup.</p>
+          <label>Redirect URL<textarea name="callback" rows="3" autocomplete="off" required></textarea></label>
+          <button type="submit">Finish connecting</button>
         </form>
-        <button id="spotify-disconnect" type="button" hidden>Odpojit Spotify</button>
+        <button id="spotify-disconnect" type="button" hidden>Disconnect Spotify</button>
       </div>
     </section>
-    <footer>Počasí <a href="https://open-meteo.com/">Open‑Meteo</a></footer>
+    <footer>Weather <a href="https://open-meteo.com/">Open‑Meteo</a></footer>
   </main>
 </body>
 </html>

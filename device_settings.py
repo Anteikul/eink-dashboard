@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from spotify_playback import TOKEN_URL
 
 DEFAULTS = {
-    'location': 'Praha', 'latitude': 50.0755, 'longitude': 14.4378,
+    'location': 'Prague', 'latitude': 50.0755, 'longitude': 14.4378,
     'timezone': 'Europe/Prague', 'units': 'celsius', 'rotation': 180,
 }
 REDIRECT_URI = 'http://127.0.0.1:8765/callback'
@@ -39,20 +39,20 @@ def write_private(path, value):
 def validate_settings(payload):
     result = {key: payload[key] for key in DEFAULTS}
     if not isinstance(result['location'], str) or not 0 < len(result['location'].strip()) <= 120:
-        raise ValueError('Zadej název místa.')
+        raise ValueError('Enter a location name.')
     result['location'] = result['location'].strip()
     for key, limit in (('latitude', 90), ('longitude', 180)):
         value = float(result[key])
         if not math.isfinite(value) or abs(value) > limit:
-            raise ValueError('Zkontroluj zeměpisné souřadnice.')
+            raise ValueError('Check the latitude and longitude.')
         result[key] = value
     try:
         ZoneInfo(result['timezone'])
     except (ValueError, ZoneInfoNotFoundError, TypeError) as error:
-        raise ValueError('Zadej platnou časovou zónu, třeba Europe/Prague.') from error
+        raise ValueError('Enter a valid time zone such as Europe/Prague.') from error
     if (result['units'] not in ('celsius', 'fahrenheit')
             or type(result['rotation']) is not int or result['rotation'] not in (0, 180)):
-        raise ValueError('Zkontroluj jednotky a otočení.')
+        raise ValueError('Check the temperature units and rotation.')
     return result
 
 
@@ -83,7 +83,7 @@ class DeviceSettings:
 
     def authorize(self, client_id):
         if not re.fullmatch(r'[a-fA-F0-9]{32}', client_id):
-            raise ValueError('Zadej Client ID z aplikace Spotify.')
+            raise ValueError('Enter the Client ID from your Spotify app.')
         state, verifier = secrets.token_urlsafe(32), secrets.token_urlsafe(64)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
         with self.lock:
@@ -97,20 +97,20 @@ class DeviceSettings:
 
     def finish(self, callback):
         if not isinstance(callback, str):
-            raise ValueError('Vlož adresu, na kterou tě Spotify přesměrovalo.')
+            raise ValueError('Paste the address Spotify redirected you to.')
         parts = urlsplit(callback.strip())
         if (parts.scheme, parts.netloc, parts.path) != ('http', '127.0.0.1:8765', '/callback'):
-            raise ValueError('Vlož celou adresu začínající http://127.0.0.1:8765/callback.')
+            raise ValueError('Paste the full address starting with http://127.0.0.1:8765/callback.')
         query = parse_qs(parts.query)
         with self.lock:
             if not self.pending or time.monotonic() >= self.pending[3]:
-                raise ValueError('Přihlášení vypršelo. Začni znovu.')
+                raise ValueError('The sign-in attempt expired. Start again.')
             state, verifier, client_id, _ = self.pending
             if query.get('state') != [state]:
-                raise ValueError('Adresa nepatří k tomuto přihlášení.')
+                raise ValueError('This redirect URL does not match the current sign-in attempt.')
             self.pending = None
             if len(query.get('code', [])) != 1:
-                raise ValueError('Spotify přístup neudělilo. Začni znovu.')
+                raise ValueError('Spotify did not grant access. Start again.')
             form = urlencode({
                 'grant_type': 'authorization_code', 'code': query['code'][0],
                 'redirect_uri': REDIRECT_URI, 'client_id': client_id, 'code_verifier': verifier,
@@ -120,7 +120,7 @@ class DeviceSettings:
             with urlopen(request, timeout=8) as response:
                 token = json.load(response)
             if not set(SPOTIFY_SCOPE.split()) <= set(token.get('scope', '').split()):
-                raise ValueError('Spotify neudělilo oprávnění ke čtení přehrávání a fronty.')
+                raise ValueError('Spotify did not grant access to playback and the queue.')
             write_private(self.credentials, json.dumps({
                 'client_id': client_id, 'refresh_token': token['refresh_token'],
             }))
@@ -133,8 +133,8 @@ class DeviceSettings:
 
 def find_places(name):
     if not isinstance(name, str) or not 2 <= len(name.strip()) <= 80:
-        raise ValueError('Zadej alespoň dva znaky názvu místa.')
-    query = urlencode({'name': name.strip(), 'count': 8, 'language': 'cs'})
+        raise ValueError('Enter at least two characters of the location name.')
+    query = urlencode({'name': name.strip(), 'count': 8, 'language': 'en'})
     with urlopen('https://geocoding-api.open-meteo.com/v1/search?' + query, timeout=6) as response:
         matches = json.load(response).get('results', [])
     return [{

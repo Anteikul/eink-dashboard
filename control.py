@@ -120,11 +120,11 @@ def start_server(host, port, state, settings, reload_settings):
         def setup_access(self):
             if settings.authorized(self.headers.get('X-Setup-Code', '')):
                 return True
-            self.json(403, {'error': 'Zkontroluj kód nastavení z instalačního terminálu.'})
+            self.json(403, {'error': 'Check the setup code printed by the installer.'})
             return False
 
         def do_GET(self):
-            if self.headers.get('Host') != authority:
+            if self.headers.get('Host') not in accepted_hosts:
                 self.send_error(400)
                 return
             path = self.path.partition('?')[0]
@@ -144,22 +144,22 @@ def start_server(host, port, state, settings, reload_settings):
             if self.path not in admin_routes and self.path != '/api/theme':
                 self.send_error(404)
                 return
-            if (self.headers.get('Host') != authority
+            if (self.headers.get('Host') not in accepted_hosts
                     or self.headers.get('Origin') != f'http://{authority}'):
-                self.json(403, {'error': 'Otevři ovládání přímo na Pi.'})
+                self.json(403, {'error': 'Open the dashboard directly on the Pi.'})
                 return
             if self.path in admin_routes and not self.setup_access():
                 return
             try:
                 size = int(self.headers.get('Content-Length', '0'))
                 if not 0 < size <= 8192 or self.headers.get_content_type() != 'application/json':
-                    raise ValueError('Neplatný požadavek.')
+                    raise ValueError('Invalid request.')
                 payload = json.loads(self.rfile.read(size))
                 if not isinstance(payload, dict):
-                    raise ValueError('Neplatný požadavek.')
+                    raise ValueError('Invalid request.')
                 if self.path == '/api/theme':
                     if payload.get('theme') not in THEMES:
-                        raise ValueError('Neplatný režim.')
+                        raise ValueError('Invalid theme.')
                     state.set_theme(payload['theme'])
                     self.json(200, state.status())
                     return
@@ -176,16 +176,16 @@ def start_server(host, port, state, settings, reload_settings):
                 else:
                     settings.disconnect()
             except HTTPError as error:
-                self.json(502, {'error': f'Služba vrátila chybu HTTP {error.code}. Zkus akci znovu.'})
+                self.json(502, {'error': f'The upstream service returned HTTP {error.code}. Try again.'})
                 return
             except (KeyError, TypeError, json.JSONDecodeError):
-                self.json(400, {'error': 'Zkontroluj zadané údaje.'})
+                self.json(400, {'error': 'Check the values you entered.'})
                 return
             except ValueError as error:
                 self.json(400, {'error': str(error)})
                 return
             except OSError:
-                self.json(502, {'error': 'Změnu se nepodařilo dokončit. Zkus to znovu.'})
+                self.json(502, {'error': 'Could not apply the change. Try again.'})
                 return
             try:
                 self.json(200, settings.status())
@@ -193,7 +193,9 @@ def start_server(host, port, state, settings, reload_settings):
                 reload_settings()
 
     server = ThreadingHTTPServer((host, port), Handler)
-    authority = f'{host}:{server.server_port}'
+    explicit_authority = f'{host}:{server.server_port}'
+    authority = host if server.server_port == 80 else explicit_authority
+    accepted_hosts = {authority, explicit_authority}
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f'Control page: http://{authority}', flush=True)
     return server

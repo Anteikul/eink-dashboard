@@ -23,4 +23,7 @@ done
 if [ -n "$address" ]; then
     set -- --listen "$address" "$@"
 fi
+if command -v authbind >/dev/null; then
+    exec authbind --deep python3 -u dashboard.py --seconds 0 "$@"
+fi
 exec python3 -u dashboard.py --seconds 0 "$@"

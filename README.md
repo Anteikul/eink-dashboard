@@ -1,10 +1,10 @@
 # E‑ink dashboard
 
-Hodiny, počasí a právě přehrávaná skladba na černobílém Waveshare 2.13″ e‑Paper HAT V4. Raspberry Pi Zero 2 W funguje samostatně. Prohlížeč slouží k nastavení a zobrazuje poslední snímek.
+A clock, weather, and the currently playing track on a black-and-white Waveshare 2.13″ e‑Paper HAT V4. The Raspberry Pi Zero 2 W runs on its own. The browser shows the latest frame and handles all dashboard settings.
 
-## Instalace na Pi
+## Install on a Raspberry Pi
 
-Potřebuješ Raspberry Pi OS (ověřeno na Trixie), síť a připojený displej. Stáhni **Code → Download ZIP**, přenes ZIP na Pi a spusť tam:
+Use Raspberry Pi OS (tested on Trixie), a network connection, and a connected e-paper display. Choose **Code → Download ZIP** on GitHub, copy the ZIP to the Pi, and run these commands on the Pi.
 
 ```sh
 python3 -m zipfile -e eink-dashboard-main.zip .
@@ -12,25 +12,25 @@ cd eink-dashboard-main
 sh install.sh
 ```
 
-Případně naklonuj repozitář a spusť `./install.sh` v naklonované složce. Instalátor použije `sudo` pro chybějící balíčky, spustí dashboard a nastaví automatický start po připojení Pi k síti. Složku po instalaci ponech na místě.
+You can also clone the repository and run `./install.sh` from the checkout. The installer uses `sudo` to install missing packages, grant your account access to HTTP port 80 with `authbind`, and enable automatic startup when the Pi connects to the network. Leave the installation directory in place.
 
-Otevři adresu, kterou instalátor vypíše, a v části **Nastavení zařízení** zadej vypsaný kód. Můžeš vyhledat město nebo zadat souřadnice a časové pásmo ručně. Ve webu jde také otočit obraz, vybrat °C/°F a přepnout světlý či tmavý režim. Ztracený kód najdeš ve skrytém souboru `.setup-code` v instalační složce. Web používej ve vlastní místní síti.
+Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Under **Device setup**, enter the setup code printed by the installer. You can search for a city or enter the coordinates and time zone manually, rotate the display, choose °C or °F, and switch between light and dark themes. To recover the code, run `cat .setup-code` from the installation directory on the Pi.
 
-### Připojení Spotify
+### Connect Spotify
 
-1. Vytvoř aplikaci ve [Spotify Developer Dashboard](https://developer.spotify.com/dashboard). Vyber **Web API** a přidej Redirect URI `http://127.0.0.1:8765/callback`. Spotify pro vlastní aplikaci v režimu Development Mode vyžaduje Premium.
-2. Ve webovém nastavení vlož **Client ID** a připrav přihlášení. Otevři odkaz na Spotify a potvrď čtení přehrávání a fronty.
-3. Zkopíruj celou adresu, na kterou tě Spotify přesměruje, do pole **Adresa po potvrzení**. Prohlížeč může na adrese 127.0.0.1 zobrazit chybu připojení. Ke zpracování stačí zkopírovaná adresa. Stiskni **Dokončit připojení**.
+1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard). Select **Web API** and add `http://127.0.0.1:8765/callback` as a redirect URI. Spotify requires Premium for your own app in Development Mode.
+2. Enter your **Client ID** in the dashboard and select **Prepare sign-in**. Open Spotify from the link and approve access to playback and the queue.
+3. Copy the full URL from the browser's address bar after Spotify redirects you. Paste it into **Redirect URL** and select **Finish connecting**. The browser may show a connection error at 127.0.0.1. The address bar still contains the information needed to finish setup.
 
-Hodiny a počasí fungují i bez Spotify. Po připojení účtu Pi samo sleduje přehrávání, připraví obaly ze začátku fronty a ukládá je na disk. Přístup lze ve webu odpojit. [Spotify OAuth](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow)
+The clock and weather work without Spotify. Once connected, the Pi checks playback, prepares covers for upcoming tracks, and caches them on disk. You can disconnect the account in the browser. [Spotify OAuth](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow)
 
-## Zapojení
+## Wiring
 
-HAT můžeš nasadit přímo na 40pinovou lištu. Pro samostatný osmipinový kabel použij toto zapojení s vypnutým Pi. Označení GPIO je v číslování BCM.
+Fit the HAT directly onto the Pi's 40-pin header, or use the included eight-wire cable and the table below. Power off the Pi before wiring. GPIO numbers use BCM numbering.
 
-| Waveshare | GPIO | Fyzický pin Pi |
+| Waveshare | GPIO | Physical Pi pin |
 |---|---:|---:|
-| VCC | 3,3 V | 1 |
+| VCC | 3.3 V | 1 |
 | GND | GND | 6 |
 | DIN | GPIO 10 | 19 |
 | CLK | GPIO 11 | 23 |
@@ -39,13 +39,13 @@ HAT můžeš nasadit přímo na 40pinovou lištu. Pro samostatný osmipinový ka
 | RST | GPIO 17 | 11 |
 | BUSY | GPIO 24 | 18 |
 
-Přenos používá GPIO přes `lgpio`. [Dokumentace Waveshare](https://www.waveshare.com/wiki/2.13inch_e-Paper_HAT_Manual)
+The display driver uses `lgpio`. [Waveshare documentation](https://www.waveshare.com/wiki/2.13inch_e-Paper_HAT_Manual)
 
-## Kontrola běhu
+## Check the dashboard
 
-- `tail -f dashboard.log` ukáže start a obnovy displeje.
-- `crontab -l` ukáže spouštění po startu.
-- `./install.sh --check` ověří dostupnost knihoven bez instalace.
-- Pro ruční spuštění použij `./start.sh`. Může běžet jen jedna instance.
+- `tail -f dashboard.log` shows startup and display updates.
+- `crontab -l` shows the startup entry.
+- `./install.sh --check` checks for the required tools and libraries.
+- `./start.sh` launches the dashboard manually. Only one instance can use the display at a time.
 
-Ovladač `waveshare_epd/epd2in13_V4.py` pochází od Waveshare a nese původní licenční text v hlavičce. Data o počasí poskytuje [Open‑Meteo](https://open-meteo.com/).
+The driver in `waveshare_epd/epd2in13_V4.py` comes from Waveshare and retains its license notice. Weather data comes from [Open‑Meteo](https://open-meteo.com/).

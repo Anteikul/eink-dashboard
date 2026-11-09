@@ -1,5 +1,6 @@
 import io
 import json
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
@@ -76,3 +77,32 @@ with TemporaryDirectory() as folder:
         server.server_close()
 
 print('LAN settings, location, rotation, access control and Spotify PKCE passed.')
+
+
+def bind_test_port(address, handler):
+    server = ThreadingHTTPServer((address[0], 0), handler)
+    server.server_port = 80
+    return server
+
+
+with TemporaryDirectory() as folder, patch('control.ThreadingHTTPServer', bind_test_port):
+    root = Path(folder)
+    settings = DeviceSettings(root)
+    server = start_server('127.0.0.1', 80, PanelState(root / 'theme.txt'),
+                          settings, lambda: None)
+    try:
+        base = f'http://127.0.0.1:{server.server_address[1]}'
+        for host in ('127.0.0.1', '127.0.0.1:80'):
+            with urlopen(Request(base, headers={'Host': host})) as response:
+                assert response.status == 200
+        request = Request(base + '/api/settings', data=json.dumps(DEFAULTS).encode(),
+                          headers={'Host': '127.0.0.1', 'Origin': 'http://127.0.0.1',
+                                   'Content-Type': 'application/json',
+                                   'X-Setup-Code': settings.code})
+        with urlopen(request) as response:
+            assert response.status == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+
+print('Default HTTP port accepts browser requests without a port suffix.')
