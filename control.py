@@ -190,7 +190,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 return
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                limit = 32_768 if self.path in ('/api/layouts', '/api/layout-preview') else 8192
+                limit = 40_960 if self.path in ('/api/layouts', '/api/layout-preview') else 8192
                 if not 0 < size <= limit or self.headers.get_content_type() != 'application/json':
                     raise ValueError('Invalid request.')
                 payload = json.loads(self.rfile.read(size))
@@ -230,13 +230,17 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 if self.path == '/api/layout-preview':
                     screen = payload['screen']
                     layout = validate_layout(screen, payload['layout'])
+                    layers = payload.get('layers', False)
+                    if type(layers) is not bool or (layers and layout is None):
+                        raise ValueError('Invalid preview.')
                     if layout_preview is None:
                         from dashboard import render_layout_preview
                     else:
                         render_layout_preview = layout_preview
                     preferences = settings.values
-                    png = render_layout_preview(screen, layout, state.theme,
-                                                preferences['language'], preferences['units'])
+                    options = {'layers': True} if layers else {}
+                    png = render_layout_preview(screen, layout, state.theme, preferences['language'],
+                                                preferences['units'], **options)
                     self.reply(200, 'image/png', png)
                     return
                 if self.path == '/api/places':

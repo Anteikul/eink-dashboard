@@ -11,11 +11,22 @@
   const tabs = [...dialog.querySelectorAll('[role=tab]')];
   const stage = element('editor-stage');
   const preview = element('editor-image');
+  const frame = preview.getContext('2d');
+  const drawing = element('editor-drawing');
+  const ink = drawing.getContext('2d');
+  const selection = element('editor-selection');
+  const dropMarker = element('editor-drop-marker');
   const previewStatus = element('editor-preview-status');
   const retry = element('editor-preview-retry');
   const widgetList = element('editor-widgets');
-  const addType = element('editor-add-type');
-  const add = element('editor-add');
+  const palette = element('editor-palette');
+  const tools = element('editor-tools');
+  const brushOptions = element('editor-brush-options');
+  const brush = element('editor-brush');
+  const clearDrawing = element('editor-clear-drawing');
+  const undo = element('editor-undo');
+  const redo = element('editor-redo');
+  const blank = element('editor-blank');
   const properties = element('editor-properties');
   const fields = Object.fromEntries(
     [...properties.querySelectorAll('[data-property]')].map(field => [field.dataset.property, field]),
@@ -28,7 +39,7 @@
   const dirtyMessage = element('editor-dirty');
   const saveStatus = element('editor-save-status');
   const drafts = Object.fromEntries(tabs.map(tab => [
-    tab.dataset.screen, {saved: null, layout: null, selection: -1, message: ''},
+    tab.dataset.screen, {saved: null, layout: null, selection: -1, message: '', undo: [], redo: []},
   ]));
   const arrows = {
     ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
@@ -40,18 +51,26 @@
   let hitboxes = [];
   let widgetButtons = [];
   let drag;
+  let paletteDrag;
+  let tool = 'select';
   let loadController;
   let previewController;
   let previewTimer;
-  let previewURL;
+  let atlas;
+  let tiles = new Map();
   let savingScreen;
 
   const current = () => drafts[screen];
-  const widgets = () => current().layout ?? schema.defaults[screen];
+  const widgets = (layout = current().layout) => (layout ?? schema.defaults[screen])
+    .filter(widget => widget.type !== 'drawing');
+  const bitmap = () => current().layout?.at(-1)?.bitmap;
   const definitions = () => schema.widgets[screen];
   const definition = (type) => definitions().find(widget => widget.type === type);
   const hasChanges = ({saved, layout}) => JSON.stringify(saved) !== JSON.stringify(layout);
   const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
+  const stride = () => Math.ceil(schema.width / 8);
+  const layerKey = ({x, y, ...appearance}) => JSON.stringify(appearance);
+  const withDrawing = (layout) => bitmap() ? [...layout, {type: 'drawing', bitmap: bitmap()}] : layout;
 
   async function request(path, {code = setupCode, payload, signal, fallback} = {}) {
     const headers = {'X-Setup-Code': code};
@@ -82,6 +101,10 @@
     }
     dirtyMessage.hidden = !Object.values(drafts).some(hasChanges);
     reset.disabled = current().layout === null;
+    blank.disabled = current().layout?.length === 0;
+    clearDrawing.disabled = !bitmap();
+    undo.disabled = current().undo.length === 0;
+    redo.disabled = current().redo.length === 0;
     save.disabled = Boolean(savingScreen) || !hasChanges(current());
     setText(saveStatus, current().message);
   }
@@ -90,10 +113,20 @@
     return translate(definition(widget.type).label) + ' ' + (index + 1);
   }
 
-  function renderAddOptions() {
-    const previous = addType.value;
-    addType.replaceChildren(...definitions().map(item => new Option(translate(item.label), item.type)));
-    if (definitions().some(item => item.type === previous)) addType.value = previous;
+  function renderPalette() {
+    palette.replaceChildren(...definitions().map(item => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.widget = item.type;
+      button.textContent = translate(item.label);
+      return button;
+    }));
+    updatePalette();
+  }
+
+  function updatePalette() {
+    const full = widgets().length >= schema.maxWidgets;
+    for (const button of palette.children) button.disabled = full;
   }
 
   function updateInspector() {
@@ -133,8 +166,12 @@
     for (const [index, hitbox] of hitboxes.entries()) {
       const selected = String(index === current().selection);
       hitbox.setAttribute('aria-pressed', selected);
+      hitbox.tabIndex = tool === 'select' ? 0 : -1;
       widgetButtons[index].setAttribute('aria-pressed', selected);
     }
+    const widget = widgets()[current().selection];
+    selection.hidden = !widget || tool !== 'select';
+    if (widget) position(selection, widget);
     updateInspector();
   }
 
@@ -176,7 +213,7 @@
       widgetButtons.push(button);
     }
     widgetList.replaceChildren(list);
-    add.disabled = widgets().length >= (schema.maxWidgets ?? 18);
+    updatePalette();
     updateSelection();
   }
 
@@ -186,10 +223,52 @@
   }
 
   function clearPreview() {
-    preview.hidden = true;
-    preview.removeAttribute('src');
-    if (previewURL) URL.revokeObjectURL(previewURL);
-    previewURL = undefined;
+    atlas?.close();
+    atlas = undefined;
+    tiles.clear();
+    frame.clearRect(0, 0, preview.width, preview.height);
+  }
+
+  function compose() {
+    if (!atlas) return;
+    frame.imageSmoothingEnabled = false;
+    frame.drawImage(atlas, 0, 0, 1, 1, 0, 0, schema.width, schema.height);
+    for (const [index, widget] of widgets().entries()) {
+      const fallback = drag?.index === index && drag.origin ? tiles.get(layerKey(drag.origin)) : undefined;
+      const tile = tiles.get(layerKey(widget)) ?? fallback;
+      if (tile) {
+        frame.drawImage(atlas, 0, tile.y, tile.w, tile.h, widget.x, widget.y, widget.w, widget.h);
+      }
+    }
+  }
+
+  function drawingBytes() {
+    const saved = bitmap();
+    return saved
+      ? Uint8Array.from(atob(saved), character => character.charCodeAt(0))
+      : new Uint8Array(stride() * schema.height);
+  }
+
+  function showInk(bytes = drawingBytes()) {
+    const {width, height} = schema;
+    const color = document.documentElement.dataset.theme === 'dark' ? 255 : 0;
+    const image = ink.createImageData(width, height);
+    const rowBytes = stride();
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (!(bytes[y * rowBytes + (x >> 3)] & (128 >> (x & 7)))) continue;
+        const offset = (y * width + x) * 4;
+        image.data.fill(color, offset, offset + 3);
+        image.data[offset + 3] = 255;
+      }
+    }
+    ink.putImageData(image, 0, 0);
+  }
+
+  function storeInk(bytes) {
+    const layout = widgets();
+    if (bytes.some(Boolean)) layout.push({type: 'drawing', bitmap: btoa(String.fromCharCode(...bytes))});
+    if (bitmap() || layout.at(-1)?.type === 'drawing') setDraft(layout);
   }
 
   function stopPreview() {
@@ -211,7 +290,7 @@
     stopPreview();
     retry.hidden = true;
     setText(previewStatus, '');
-    const payload = {screen, layout: current().layout};
+    const payload = {screen, layout: widgets(), layers: true};
     const code = setupCode;
     const controller = new AbortController();
     previewController = controller;
@@ -223,11 +302,17 @@
         const blob = await response.blob();
         if (controller.signal.aborted || previewController !== controller) return;
         if (blob.type !== 'image/png') throw new Error('Could not load the sample preview.');
-        const url = URL.createObjectURL(blob);
-        if (previewURL) URL.revokeObjectURL(previewURL);
-        previewURL = url;
-        preview.src = url;
-        preview.hidden = false;
+        const image = await createImageBitmap(blob);
+        if (controller.signal.aborted || previewController !== controller) {
+          image.close();
+          return;
+        }
+        atlas?.close();
+        atlas = image;
+        tiles = new Map(payload.layout.map((widget, index) => [layerKey(widget), {
+          y: 1 + index * schema.height, w: widget.w, h: widget.h,
+        }]));
+        compose();
       } catch (error) {
         if (controller.signal.aborted || previewController !== controller) return;
         if (error.message === badCode) {
@@ -242,6 +327,8 @@
 
   function showScreen() {
     drag = undefined;
+    paletteDrag = undefined;
+    dropMarker.hidden = true;
     for (const tab of tabs) {
       const active = tab.dataset.screen === screen;
       tab.setAttribute('aria-selected', String(active));
@@ -249,8 +336,9 @@
       if (active) panel.setAttribute('aria-labelledby', tab.id);
     }
     clearPreview();
-    renderAddOptions();
+    renderPalette();
     renderWidgets();
+    showInk();
     updateStatus();
     schedulePreview(0);
   }
@@ -272,13 +360,19 @@
         if (controller.signal.aborted) return;
         schema = data;
         for (const [name, draft] of Object.entries(drafts)) {
-          if (!hasChanges(draft)) draft.layout = data.layouts[name];
+          if (!hasChanges(draft) && JSON.stringify(draft.saved) !== JSON.stringify(data.layouts[name])) {
+            draft.layout = data.layouts[name];
+            draft.undo = [];
+            draft.redo = [];
+          }
           draft.saved = data.layouts[name];
-          const visible = draft.layout ?? data.defaults[name];
+          const visible = (draft.layout ?? data.defaults[name]).filter(widget => widget.type !== 'drawing');
           draft.selection = Math.min(draft.selection, visible.length - 1);
         }
-        preview.width = data.width;
-        preview.height = data.height;
+        for (const canvas of [preview, drawing]) {
+          canvas.width = data.width;
+          canvas.height = data.height;
+        }
         stage.style.aspectRatio = data.width + ' / ' + data.height;
         element('editor-resolution').textContent = data.width + ' × ' + data.height + ' px';
       }
@@ -300,27 +394,45 @@
     }
   }
 
-  function setDraft(layout, structureChanged = false) {
+  function recordHistory(previous) {
+    const {undo, redo, layout} = current();
+    if (JSON.stringify(previous) === JSON.stringify(layout)) return;
+    undo.push(previous);
+    if (undo.length > 40) undo.shift();
+    redo.length = 0;
+  }
+
+  function refreshPreview() {
+    if (!atlas || widgets().some(widget => !tiles.has(layerKey(widget)))) schedulePreview(80);
+  }
+
+  function setDraft(layout, structureChanged = false, remember = true) {
     const draft = current();
+    const previous = draft.layout;
+    const previousBitmap = bitmap();
     draft.layout = layout;
+    if (remember) recordHistory(previous);
     draft.message = '';
     if (structureChanged) {
       renderWidgets();
     } else {
-      position(hitboxes[draft.selection], layout[draft.selection]);
-      updateInspector();
+      const widget = widgets()[draft.selection];
+      if (widget) position(hitboxes[draft.selection], widget);
+      updateSelection();
     }
+    if (bitmap() !== previousBitmap) showInk();
+    compose();
     updateStatus();
-    schedulePreview();
+    if (!drag) refreshPreview();
   }
 
-  function editWidget(change) {
+  function editWidget(change, remember = true) {
     const index = current().selection;
     const layout = widgets().slice();
     const widget = layout[index];
     if (!widget || Object.entries(change).every(([name, value]) => widget[name] === value)) return;
     layout[index] = {...widget, ...change};
-    setDraft(layout);
+    setDraft(withDrawing(layout), false, remember);
   }
 
   function moveWidget(dx, dy, origin = widgets()[current().selection]) {
@@ -328,7 +440,113 @@
     editWidget({
       x: clamp(x + dx, 0, schema.width - w),
       y: clamp(y + dy, 0, schema.height - h),
-    });
+    }, !drag);
+  }
+
+  function resizeWidget(dx, dy, {origin, corner}) {
+    const {x, y, w, h} = origin;
+    const [right, bottom] = [x + w, y + h];
+    const left = corner.includes('w') ? clamp(x + dx, 0, right - 1) : x;
+    const top = corner.includes('n') ? clamp(y + dy, 0, bottom - 1) : y;
+    editWidget({
+      x: left, y: top,
+      w: (corner.includes('e') ? clamp(right + dx, x + 1, schema.width) : right) - left,
+      h: (corner.includes('s') ? clamp(bottom + dy, y + 1, schema.height) : bottom) - top,
+    }, false);
+  }
+
+  function setTool(value) {
+    tool = value;
+    stage.dataset.tool = value;
+    brushOptions.hidden = value === 'select';
+    for (const button of tools.children) {
+      button.setAttribute('aria-pressed', String(button.dataset.tool === value));
+    }
+    setText(element('editor-move-help'), value === 'select'
+      ? 'Drag widgets onto the canvas. Drag their corners to resize them.'
+      : 'Draw directly on the screen. The eraser only removes your strokes.');
+    updateSelection();
+  }
+
+  function stepHistory(from, to) {
+    const draft = current();
+    if (drag || paletteDrag || !draft[from].length) return;
+    draft[to].push(draft.layout);
+    const next = draft[from].pop();
+    draft.selection = Math.min(draft.selection, widgets(next).length - 1);
+    setDraft(next, true, false);
+  }
+
+  function canvasPoint(event) {
+    const {left, top, width, height} = stage.getBoundingClientRect();
+    return {
+      x: (event.clientX - left) / width * schema.width,
+      y: (event.clientY - top) / height * schema.height,
+    };
+  }
+
+  function brushPoint(event) {
+    const {x, y} = canvasPoint(event);
+    return [clamp(Math.floor(x), 0, schema.width - 1), clamp(Math.floor(y), 0, schema.height - 1)];
+  }
+
+  function strokeTo(point) {
+    const {bytes, radius, erase} = drag;
+    let [x, y] = drag.point;
+    const [endX, endY] = point;
+    const dx = Math.abs(endX - x);
+    const dy = -Math.abs(endY - y);
+    const stepX = Math.sign(endX - x);
+    const stepY = Math.sign(endY - y);
+    const rowBytes = stride();
+    let error = dx + dy;
+    // Stamp a round brush along an integer line so rapid motions have no gaps.
+    for (;;) {
+      for (let py = Math.max(0, y - radius); py <= Math.min(schema.height - 1, y + radius); py++) {
+        for (let px = Math.max(0, x - radius); px <= Math.min(schema.width - 1, x + radius); px++) {
+          if ((px - x) ** 2 + (py - y) ** 2 > (radius + .35) ** 2) continue;
+          const index = py * rowBytes + (px >> 3);
+          const bit = 128 >> (px & 7);
+          bytes[index] = erase ? bytes[index] & ~bit : bytes[index] | bit;
+        }
+      }
+      if (x === endX && y === endY) break;
+      const step = 2 * error;
+      if (step >= dy) {
+        error += dy;
+        x += stepX;
+      }
+      if (step <= dx) {
+        error += dx;
+        y += stepY;
+      }
+    }
+    drag.point = point;
+    showInk(bytes);
+  }
+
+  function widgetAt(item, point) {
+    const {w, h} = item.template;
+    return {
+      x: clamp(Math.round(point.x - w / 2), 0, schema.width - w),
+      y: clamp(Math.round(point.y - h / 2), 0, schema.height - h),
+      w, h,
+    };
+  }
+
+  function insideCanvas({x, y}) {
+    return x >= 0 && y >= 0 && x < schema.width && y < schema.height;
+  }
+
+  function addWidget(item, point) {
+    if (widgets().length >= schema.maxWidgets) return;
+    const widget = {...item.template, ...(point && widgetAt(item, point))};
+    if (widget.type === 'text') widget.text = translate(widget.text);
+    const layout = [...widgets(), widget];
+    current().selection = layout.length - 1;
+    setTool('select');
+    setDraft(withDrawing(layout), true);
+    hitboxes.at(-1).focus({preventScroll: true});
   }
 
   function reorder(direction) {
@@ -338,7 +556,7 @@
     if (index < 0 || target < 0 || target >= layout.length) return;
     [layout[index], layout[target]] = [layout[target], layout[index]];
     current().selection = target;
-    setDraft(layout, true);
+    setDraft(withDrawing(layout), true);
     if (document.activeElement === document.body) widgetButtons[target].focus();
   }
 
@@ -359,6 +577,7 @@
     unlock.querySelector('button').disabled = false;
     unlock.reset();
     drag = undefined;
+    paletteDrag = undefined;
     stopPreview();
     clearPreview();
     openButton.focus();
@@ -389,38 +608,69 @@
   }
 
   stage.addEventListener('click', (event) => {
-    selectWidget(event.target === stage ? -1 : Number(event.target.dataset.index));
+    const hitbox = event.target.closest('.editor-hitbox');
+    if (event.detail === 0 && hitbox) selectWidget(Number(hitbox.dataset.index));
   });
   stage.addEventListener('pointerdown', (event) => {
+    if (drag || paletteDrag || event.button !== 0) return;
+    if (tool !== 'select') {
+      event.preventDefault();
+      const point = brushPoint(event);
+      drag = {
+        id: event.pointerId, point, bytes: drawingBytes(), radius: Number(brush.value) >> 1,
+        erase: tool === 'erase',
+      };
+      stage.setPointerCapture(event.pointerId);
+      strokeTo(point);
+      return;
+    }
+    const corner = event.target.dataset.corner;
     const hitbox = event.target.closest('.editor-hitbox');
-    if (!hitbox || drag || event.button !== 0) return;
+    if (!hitbox && !corner) {
+      selectWidget(-1);
+      return;
+    }
     event.preventDefault();
-    hitbox.focus({preventScroll: true});
-    selectWidget(Number(hitbox.dataset.index));
-    const {width, height} = stage.getBoundingClientRect();
+    const index = hitbox ? Number(hitbox.dataset.index) : current().selection;
+    hitboxes[index].focus({preventScroll: true});
+    selectWidget(index);
     drag = {
-      id: event.pointerId, startX: event.clientX, startY: event.clientY,
-      width, height, origin: widgets()[current().selection],
+      id: event.pointerId, point: canvasPoint(event), index, corner, origin: widgets()[index],
+      before: current().layout,
     };
-    hitbox.setPointerCapture(event.pointerId);
+    stage.setPointerCapture(event.pointerId);
   });
   stage.addEventListener('pointermove', (event) => {
     if (drag?.id !== event.pointerId) return;
-    moveWidget(
-      Math.round((event.clientX - drag.startX) / drag.width * schema.width),
-      Math.round((event.clientY - drag.startY) / drag.height * schema.height),
-      drag.origin,
-    );
+    if (drag.bytes) {
+      strokeTo(brushPoint(event));
+      return;
+    }
+    const point = canvasPoint(event);
+    const dx = Math.round(point.x - drag.point.x);
+    const dy = Math.round(point.y - drag.point.y);
+    if (drag.corner) resizeWidget(dx, dy, drag);
+    else moveWidget(dx, dy, drag.origin);
   });
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-    stage.addEventListener(event, ({pointerId}) => {
-      if (drag?.id === pointerId) drag = undefined;
+    stage.addEventListener(event, ({pointerId, type}) => {
+      if (drag?.id !== pointerId) return;
+      const {bytes, before} = drag;
+      drag = undefined;
+      if (bytes) {
+        if (type === 'pointerup') storeInk(bytes);
+        else showInk();
+      } else {
+        recordHistory(before);
+        updateStatus();
+        refreshPreview();
+      }
     });
   }
   stage.addEventListener('keydown', (event) => {
     const hitbox = event.target.closest('.editor-hitbox');
     const offset = arrows[event.key];
-    if (!hitbox || !Array.isArray(offset)) return;
+    if (drag || tool !== 'select' || !hitbox || !Array.isArray(offset)) return;
     event.preventDefault();
     selectWidget(Number(hitbox.dataset.index));
     const step = event.shiftKey ? 10 : 1;
@@ -429,19 +679,58 @@
 
   widgetList.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-index]');
-    if (button) selectWidget(Number(button.dataset.index));
+    if (button && !drag) {
+      setTool('select');
+      selectWidget(Number(button.dataset.index));
+    }
   });
 
-  add.addEventListener('click', () => {
-    const item = definition(addType.value);
-    if (!item || add.disabled) return;
-    const widget = {...item.template};
-    if (widget.type === 'text') widget.text = translate(widget.text);
-    const layout = [...widgets(), widget];
-    current().selection = layout.length - 1;
-    setDraft(layout, true);
-    widgetButtons.at(-1).focus({preventScroll: true});
-    widgetButtons.at(-1).scrollIntoView({block: 'nearest'});
+  palette.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-widget]');
+    if (event.detail === 0 && button && !drag) addWidget(definition(button.dataset.widget));
+  });
+  palette.addEventListener('pointerdown', (event) => {
+    const button = event.target.closest('button[data-widget]');
+    if (!button || button.disabled || drag || paletteDrag || event.button !== 0) return;
+    event.preventDefault();
+    button.focus({preventScroll: true});
+    button.setPointerCapture(event.pointerId);
+    paletteDrag = {id: event.pointerId, item: definition(button.dataset.widget), button};
+  });
+  palette.addEventListener('pointermove', (event) => {
+    if (paletteDrag?.id !== event.pointerId) return;
+    const point = canvasPoint(event);
+    dropMarker.hidden = !insideCanvas(point);
+    if (!dropMarker.hidden) position(dropMarker, widgetAt(paletteDrag.item, point));
+  });
+  for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+    palette.addEventListener(event, (event) => {
+      if (paletteDrag?.id !== event.pointerId) return;
+      const {item, button} = paletteDrag;
+      paletteDrag = undefined;
+      dropMarker.hidden = true;
+      if (event.type !== 'pointerup') return;
+      const point = canvasPoint(event);
+      if (insideCanvas(point)) addWidget(item, point);
+      else if (button.contains(document.elementFromPoint(event.clientX, event.clientY))) addWidget(item);
+    });
+  }
+
+  tools.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-tool]');
+    if (button && !drag) setTool(button.dataset.tool);
+  });
+  undo.addEventListener('click', () => stepHistory('undo', 'redo'));
+  redo.addEventListener('click', () => stepHistory('redo', 'undo'));
+  clearDrawing.addEventListener('click', () => {
+    if (!drag) setDraft(widgets());
+  });
+  dialog.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' ||
+        content.hidden || event.target.matches('input, textarea, select')) return;
+    event.preventDefault();
+    if (event.shiftKey) stepHistory('redo', 'undo');
+    else stepHistory('undo', 'redo');
   });
 
   moveUp.addEventListener('click', () => reorder(-1));
@@ -449,8 +738,8 @@
   remove.addEventListener('click', () => {
     const layout = widgets().filter((_, index) => index !== current().selection);
     current().selection = Math.min(current().selection, layout.length - 1);
-    setDraft(layout, true);
-    (widgetButtons[current().selection] ?? addType).focus();
+    setDraft(withDrawing(layout), true);
+    (widgetButtons[current().selection] ?? palette.firstElementChild).focus();
   });
 
   properties.addEventListener('change', (event) => {
@@ -483,12 +772,17 @@
     setDraft(null, true);
     (save.disabled ? closeButton : save).focus();
   });
+  blank.addEventListener('click', () => {
+    current().selection = -1;
+    setDraft([], true);
+    save.focus();
+  });
 
   retry.addEventListener('click', () => schedulePreview(0));
 
   save.addEventListener('click', async () => {
     const draft = current();
-    if (!hasChanges(draft) || savingScreen) return;
+    if (!hasChanges(draft) || savingScreen || drag || paletteDrag) return;
     const payload = {screen, layout: draft.layout};
     const code = setupCode;
     savingScreen = screen;
@@ -509,16 +803,22 @@
     }
   });
 
-  new MutationObserver(() => {
+  new MutationObserver(records => {
     if (!schema || content.hidden) return;
-    delete fields.variant.dataset.type;
-    for (const [index, widget] of widgets().entries()) {
-      hitboxes[index].setAttribute('aria-label', widgetLabel(widget, index));
-      widgetButtons[index].firstElementChild.textContent = translate(definition(widget.type).label);
+    const root = document.documentElement;
+    if (records.some(record => record.attributeName === 'lang')) {
+      delete fields.variant.dataset.type;
+      for (const [index, widget] of widgets().entries()) {
+        hitboxes[index].setAttribute('aria-label', widgetLabel(widget, index));
+        widgetButtons[index].firstElementChild.textContent = translate(definition(widget.type).label);
+      }
+      renderPalette();
+      updateInspector();
+      updateStatus();
+    } else if (!records.some(record => record.oldValue !== root.getAttribute('data-theme'))) {
+      return;
     }
-    renderAddOptions();
-    updateInspector();
-    updateStatus();
+    showInk(drag?.bytes);
     schedulePreview();
-  }).observe(document.documentElement, {attributes: true, attributeFilter: ['lang']});
+  }).observe(document.documentElement, {attributeOldValue: true, attributeFilter: ['lang', 'data-theme']});
 }

@@ -86,28 +86,58 @@
           <div class="editor-grid">
             <section class="editor-preview" aria-labelledby="editor-preview-title">
               <div class="section-line">
-                <h3 id="editor-preview-title" data-i18n>Sample preview</h3>
+                <h3 id="editor-preview-title" data-i18n>Display canvas</h3>
                 <span id="editor-resolution">250 × 122 px</span>
               </div>
-              <div class="bezel">
-                <div id="editor-stage" aria-label="Widget positions" data-i18n-attributes="aria-label" role="group" aria-describedby="editor-move-help">
-                  <img id="editor-image" alt="Sample e-ink frame" data-i18n-attributes="alt" width="250" height="122" draggable="false" hidden>
+              <div class="editor-toolbar">
+                <div id="editor-tools" class="editor-tools" role="group" aria-label="Canvas tools" data-i18n-attributes="aria-label">
+                  <button type="button" data-tool="select" aria-pressed="true" data-i18n>Select</button>
+                  <button type="button" data-tool="draw" aria-pressed="false" data-i18n>Draw</button>
+                  <button type="button" data-tool="erase" aria-pressed="false" data-i18n>Eraser</button>
+                </div>
+                <div class="editor-history">
+                  <button id="editor-undo" type="button" data-i18n>Undo</button>
+                  <button id="editor-redo" type="button" data-i18n>Redo</button>
                 </div>
               </div>
-              <p id="editor-move-help" class="editor-help" data-i18n>Drag a widget or use the arrow keys to move it. Hold Shift to move 10 pixels.</p>
+              <div id="editor-brush-options" class="editor-brush-options" hidden>
+                <label><span data-i18n>Brush width</span>
+                  <select id="editor-brush">
+                    <option value="1">1 px</option>
+                    <option value="3">3 px</option>
+                    <option value="5">5 px</option>
+                    <option value="9">9 px</option>
+                  </select>
+                </label>
+                <button id="editor-clear-drawing" type="button" data-i18n>Clear drawing</button>
+              </div>
+              <div class="bezel">
+                <div id="editor-stage" data-tool="select" aria-label="Display canvas" data-i18n-attributes="aria-label" role="group" aria-describedby="editor-move-help">
+                  <canvas id="editor-image" width="250" height="122" role="img" aria-label="Sample e-ink frame" data-i18n-attributes="aria-label"></canvas>
+                  <canvas id="editor-drawing" width="250" height="122" aria-hidden="true"></canvas>
+                  <div id="editor-selection" hidden aria-hidden="true">
+                    <span class="editor-handle" data-corner="nw"></span>
+                    <span class="editor-handle" data-corner="ne"></span>
+                    <span class="editor-handle" data-corner="sw"></span>
+                    <span class="editor-handle" data-corner="se"></span>
+                  </div>
+                  <div id="editor-drop-marker" hidden aria-hidden="true"></div>
+                </div>
+              </div>
+              <p id="editor-move-help" class="editor-help" data-i18n>Drag widgets onto the canvas. Drag their corners to resize them.</p>
               <div class="editor-preview-status">
                 <p id="editor-preview-status" class="editor-message" role="status"></p>
                 <button id="editor-preview-retry" type="button" hidden data-i18n>Retry preview</button>
               </div>
-              <div class="editor-widgets">
-                <h3 id="editor-widgets-title" data-i18n>Widgets</h3>
-                <ul id="editor-widgets" aria-labelledby="editor-widgets-title"></ul>
-                <div class="setup-row editor-add">
-                  <select id="editor-add-type" aria-label="Widget type" data-i18n-attributes="aria-label"></select>
-                  <button id="editor-add" type="button" data-i18n>Add widget</button>
-                </div>
-              </div>
             </section>
+            <aside class="editor-palette" aria-labelledby="editor-palette-title">
+              <h3 id="editor-palette-title" data-i18n>Add widgets</h3>
+              <div id="editor-palette" role="group" aria-labelledby="editor-palette-title"></div>
+              <div class="editor-widgets">
+                <h3 id="editor-widgets-title" data-i18n>Layers</h3>
+                <ul id="editor-widgets" aria-labelledby="editor-widgets-title"></ul>
+              </div>
+            </aside>
             <section class="editor-inspector" aria-labelledby="editor-inspector-title">
               <h3 id="editor-inspector-title" data-i18n>Widget settings</h3>
               <p id="editor-no-selection" class="editor-help" data-i18n>Select a widget to edit its layout and style.</p>
@@ -140,6 +170,7 @@
               <p id="editor-save-status" class="editor-message" role="status"></p>
             </div>
             <div class="editor-footer-buttons">
+              <button id="editor-blank" type="button" data-i18n>Start blank</button>
               <button id="editor-reset" type="button" data-i18n>Reset to default</button>
               <button id="editor-save" type="button" data-i18n>Save layout</button>
             </div>

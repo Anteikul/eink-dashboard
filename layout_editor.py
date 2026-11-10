@@ -1,4 +1,5 @@
-"""Validate screen layouts and composite their widgets at the panel's resolution."""
+"""Validate screen layouts and composite their layers at the panel's resolution."""
+from base64 import b64decode, b64encode
 from copy import deepcopy
 from functools import lru_cache
 from math import cos, pi, sin, tau
@@ -9,6 +10,8 @@ from music_screen import fit_lines, font
 
 WIDTH, HEIGHT = 250, 122
 MAX_WIDGETS = 18
+DRAWING_BYTES = ((WIDTH + 7) // 8) * HEIGHT
+DRAWING_LENGTH = 4 * ((DRAWING_BYTES + 2) // 3)
 FONTS = ('regular', 'bold', 'mono')
 ALIGNMENTS = ('left', 'center', 'right')
 WRAPPING = (('wrapped', 'Wrapped'), ('single', 'Single line'))
@@ -79,6 +82,7 @@ def editor_schema():
     return deepcopy({
         'width': WIDTH,
         'height': HEIGHT,
+        'maxWidgets': MAX_WIDGETS,
         'defaults': {
             'dashboard': [dashboard['clock']['template'].copy(), dashboard['date']['template'].copy(),
                           {**dashboard['divider']['template'], 'variant': 'vertical',
@@ -96,14 +100,29 @@ def validate_layout(screen, layout):
         raise ValueError('Choose Dashboard or Playback.')
     if layout is None:
         return None
-    if not isinstance(layout, list) or len(layout) > MAX_WIDGETS:
+    if not isinstance(layout, list) or len(layout) > MAX_WIDGETS + 1:
         raise ValueError(f'Use up to {MAX_WIDGETS} widgets per layout.')
 
     widgets = WIDGETS[screen]
     normalized = []
+    drawing = None
     for supplied in layout:
         if not isinstance(supplied, dict) or not isinstance(supplied.get('type'), str):
             raise ValueError('Choose a widget type.')
+        if supplied['type'] == 'drawing':
+            if drawing is not None:
+                raise ValueError('Use one drawing layer per screen.')
+            bitmap = supplied.get('bitmap')
+            if not isinstance(bitmap, str) or len(bitmap) != DRAWING_LENGTH:
+                raise ValueError('The drawing is invalid.')
+            try:
+                pixels = b64decode(bitmap, validate=True)
+            except ValueError as error:
+                raise ValueError('The drawing is invalid.') from error
+            if len(pixels) != DRAWING_BYTES:
+                raise ValueError('The drawing is invalid.')
+            drawing = {'type': 'drawing', 'bitmap': b64encode(pixels).decode()}
+            continue
         definition = widgets.get(supplied['type'])
         if definition is None:
             raise ValueError('This widget is unavailable on this screen.')
@@ -124,6 +143,10 @@ def validate_layout(screen, layout):
         except UnicodeEncodeError as error:
             raise ValueError('Use valid Unicode text.') from error
         normalized.append(widget)
+    if len(normalized) > MAX_WIDGETS:
+        raise ValueError(f'Use up to {MAX_WIDGETS} widgets per layout.')
+    if drawing is not None:
+        normalized.append(drawing)
     return normalized
 
 
@@ -190,7 +213,10 @@ def _playback_time(progress, duration_ms, variant):
 
 
 def _widget_content(widget, now, weather, track, cover, progress, duration_ms, units, language):
-    kind, variant = widget['type'], widget['variant']
+    kind = widget['type']
+    if kind == 'drawing':
+        return None
+    variant = widget['variant']
     if kind == 'clock':
         return _clock(now, variant)
     if kind == 'date':
@@ -395,23 +421,23 @@ def _draw_progress(mask, widget, filled):
             draw.rectangle((inset, inset, inset + filled - 1, h - 1 - inset), fill=1)
 
 
-def render_custom(layout, now, theme, language, *, weather=None, units='celsius', track=None,
-                  cover=None, progress=0.0, duration_ms=0):
-    """Draw widgets back to front, using their boxes to clip every layer."""
-    foreground = int(theme == 'dark')
-    image = Image.new('1', (WIDTH, HEIGHT), 1 - foreground)
+def _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms):
+    """Yield a widget's offset, pixel data and whether it is opaque art."""
     values = content_key(layout, now, weather, track, cover, progress, duration_ms=duration_ms,
                          units=units, language=language)
     for widget, value in zip(layout, values):
         kind = widget['type']
-        x, y, w, h = (widget[key] for key in ('x', 'y', 'w', 'h'))
+        if kind == 'drawing':
+            yield (0, 0), Image.frombytes('1', (WIDTH, HEIGHT), b64decode(widget['bitmap'])), False
+            continue
+        w, h = widget['w'], widget['h']
         if kind == 'cover':
+            art = None
             if cover is not None:
-                if widget['variant'] == 'fill':
-                    art = ImageOps.fit(cover, (w, h), Image.Resampling.NEAREST)
-                else:
-                    art = _contain(cover, w, h)
-                image.paste(art, (x + (w - art.width) // 2, y + (h - art.height) // 2))
+                art = (ImageOps.fit(cover, (w, h), Image.Resampling.NEAREST)
+                       if widget['variant'] == 'fill' else _contain(cover, w, h))
+            offset = ((w - art.width) // 2, (h - art.height) // 2) if art is not None else (0, 0)
+            yield offset, art, True
             continue
         mask = Image.new('1', (w, h))
         if kind == 'clock':
@@ -425,5 +451,40 @@ def render_custom(layout, now, theme, language, *, weather=None, units='celsius'
         else:
             _draw_text(mask, widget, value, wrapped=widget['variant'] == 'wrapped',
                        fit=kind in ('date', 'playback-time'))
-        image.paste(foreground, (x, y), mask)
+        yield (0, 0), mask, False
+
+
+def render_custom(layout, now, theme, language, *, weather=None, units='celsius', track=None,
+                  cover=None, progress=0.0, duration_ms=0):
+    """Draw widgets back to front, using their boxes to clip every layer."""
+    foreground = int(theme == 'dark')
+    image = Image.new('1', (WIDTH, HEIGHT), 1 - foreground)
+    layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms)
+    for widget, ((dx, dy), layer, opaque) in zip(layout, layers):
+        if layer is None:
+            continue
+        position = (widget.get('x', 0) + dx, widget.get('y', 0) + dy)
+        if opaque:
+            image.paste(layer, position)
+        else:
+            image.paste(foreground, position, layer)
     return bytearray(image.convert('L').tobytes().translate(PIXEL_BITS))
+
+
+def render_layer_atlas(layout, now, theme, language, *, weather=None, units='celsius', track=None,
+                       cover=None, progress=0.0, duration_ms=0):
+    """Put independent transparent widgets in fixed slots below one background pixel."""
+    foreground = 255 if theme == 'dark' else 0
+    background = 255 - foreground
+    atlas = Image.new('RGBA', (WIDTH, 1 + HEIGHT * len(layout)))
+    atlas.putpixel((0, 0), (background, background, background, 255))
+    layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms)
+    for index, ((x, y), layer, opaque) in enumerate(layers):
+        if layer is None:
+            continue
+        position = (x, y + 1 + HEIGHT * index)
+        if opaque:
+            atlas.paste(layer.convert('RGBA'), position)
+        else:
+            atlas.paste((foreground, foreground, foreground, 255), position, layer)
+    return atlas

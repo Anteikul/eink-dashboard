@@ -21,13 +21,15 @@ You can also open `http://eink.local/` on the same network. To stop publishing t
 
 ### Build your own screens
 
-Open the pencil in the dashboard header and enter the device setup code. The **Dashboard** and **Playback** tabs have separate layouts. Add widgets, drag them on the preview, or set their position and size in pixels. Select a widget to change its display style, text, font, or alignment where supported.
+Open the pencil in the dashboard header and enter the device setup code. The **Dashboard** and **Playback** tabs have separate layouts. Drag widgets from the palette onto the canvas, or click a widget in the palette to add it. Drag a widget to move it and pull a corner to resize it. The inspector also supports exact pixel positions and sizes, appearance, and layer order.
 
 - Clocks include 12-hour and 24-hour formats, seconds, stacked digits, and an analog face. You can also add the date, your own text, or a divider.
 - Weather can show only the icon, only the temperature, or both side by side or stacked.
 - Playback can show album art, track and artist text, a progress indicator, or elapsed and remaining time.
 
-The 250 × 122 preview uses sample data and the same renderer as the display. Save each screen separately to apply it on the Pi. Use the default reset to restore the built-in screen.
+Use **Draw** to sketch freehand with a mouse, pen, or finger. The eraser removes strokes without disturbing the widgets. Drawings use the screen's foreground color and sit above the widgets. **Undo** and **Redo** work on both drawings and widget edits.
+
+The 250 × 122 canvas uses sample data and the same widget renderer as the display. Save each screen separately to apply it on the Pi. **Start blank** clears the current draft and **Reset to default** restores the built-in screen when saved.
 
 ### Join a new Wi-Fi network
 

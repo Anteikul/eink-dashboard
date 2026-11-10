@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 from control import PanelState, preview_png, start_server
 from device_settings import DeviceSettings
-from layout_editor import content_key, render_custom
+from layout_editor import content_key, render_custom, render_layer_atlas
 from local_name import LocalName
 from spotify_playback import SpotifyPlayback, Track
 from wifi_setup import AP_ADDRESS, Link, NetworkSetup
@@ -101,22 +101,29 @@ def sample_cover():
     return cover
 
 
-def render_layout_preview(screen, layout, theme, language, units):
+def render_layout_preview(screen, layout, theme, language, units, *, layers=False):
+    from io import BytesIO
     from music_screen import progress_pixels, render_music
 
     now = datetime(2026, 11, 10, 14, 38, 27)
     weather = (16 if units == 'celsius' else 61, 2, True)
-    if screen == 'playback':
-        track = Track('preview', 'Night Drive', 'The Midnight')
-        cover = sample_cover()
-        progress = 0.42
-        pixels = (render_music(track, theme, cover, progress_pixels(progress, cover)) if layout is None
-                  else render_custom(layout, now, theme, language, weather=weather, units=units,
-                                     track=track, cover=cover, progress=progress, duration_ms=242_000))
-    elif layout is None:
-        pixels = render(now, weather, theme, units, language)
+    music = screen == 'playback'
+    sample = {'weather': weather, 'units': units}
+    if music:
+        sample.update(track=Track('preview', 'Night Drive', 'The Midnight'), cover=sample_cover(),
+                      progress=0.42, duration_ms=242_000)
+    if layers:
+        atlas = render_layer_atlas(layout, now, theme, language, **sample)
+        with BytesIO() as png:
+            atlas.save(png, format='PNG')
+            return png.getvalue()
+    if layout is not None:
+        pixels = render_custom(layout, now, theme, language, **sample)
+    elif music:
+        track, cover, progress = (sample[key] for key in ('track', 'cover', 'progress'))
+        pixels = render_music(track, theme, cover, progress_pixels(progress, cover))
     else:
-        pixels = render_custom(layout, now, theme, language, weather=weather, units=units)
+        pixels = render(now, weather, theme, units, language)
     return preview_png(pixels, WIDTH, HEIGHT)
 
 

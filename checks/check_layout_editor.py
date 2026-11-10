@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 from pathlib import Path
@@ -51,6 +52,37 @@ with TemporaryDirectory() as folder:
                     assert status == 200, (page, option['type'], variant, png)
                     assert png.startswith(b'\x89PNG\r\n\x1a\n')
         assert settings.layouts['dashboard'] is None and state.revision is None
+
+        stride = (schema['width'] + 7) // 8
+        bitmap = bytearray(stride * schema['height'])
+        bitmap[0] = 0x80
+        bitmap[-1] = 0x40
+        drawing = {'type': 'drawing', 'bitmap': base64.b64encode(bitmap).decode()}
+        status, png = request('/api/layout-preview', {'screen': 'dashboard', 'layout': [drawing]})
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            assert preview.getpixel((0, 0)) == preview.getpixel((249, 121)) == 0
+            assert preview.getpixel((1, 0)) == 255
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [drawing, drawing]})[0] == 400
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [{**drawing, 'bitmap': 'AA=='}]})[0] == 400
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [drawing]})[0] == 200
+        assert DeviceSettings(root).layouts == {'dashboard': [drawing], 'playback': None}
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': None})[0] == 200
+
+        layout = schema['defaults']['playback']
+        status, png = request('/api/layout-preview', {'screen': 'playback', 'layout': layout, 'layers': True})
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as atlas:
+            assert atlas.mode == 'RGBA' and atlas.size == (250, 1 + 122 * len(layout))
+            background = Image.new('RGBA', (250, 122), atlas.getpixel((0, 0)))
+            for index, widget in enumerate(layout):
+                y = 1 + 122 * index
+                layer = atlas.crop((0, y, widget['w'], y + widget['h']))
+                background.alpha_composite(layer, (widget['x'], widget['y']))
+        status, png = request('/api/layout-preview', {'screen': 'playback', 'layout': layout})
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            assert background.convert('1').tobytes() == preview.tobytes()
 
         text = next(option['template'] for option in schema['widgets']['dashboard'] if option['type'] == 'text')
         custom = [{**text, 'text': 'Dobrý den <3'}]
