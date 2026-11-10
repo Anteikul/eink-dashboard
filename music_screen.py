@@ -19,12 +19,16 @@ TEXT_X = 13
 BAR_RIGHT = 237
 
 
-@lru_cache(maxsize=8)
-def font(size, bold=False):
-    name = 'DejaVuSans-Bold.ttf' if bold else 'DejaVuSans.ttf'
-    fallback = 'Arial Bold.ttf' if bold else 'Arial.ttf'
+@lru_cache(maxsize=64)
+def font(size, bold=False, *, mono=False):
+    if mono:
+        name = 'DejaVuSansMono.ttf'
+        fallback = Path('/System/Library/Fonts/Menlo.ttc')
+    else:
+        name = 'DejaVuSans-Bold.ttf' if bold else 'DejaVuSans.ttf'
+        fallback = Path('/System/Library/Fonts/Supplemental') / ('Arial Bold.ttf' if bold else 'Arial.ttf')
     for path in (FONTS / name, Path('/usr/share/fonts/truetype/dejavu') / name,
-                 Path('/System/Library/Fonts/Supplemental') / fallback):
+                 fallback):
         try:
             return ImageFont.truetype(str(path), size)
         except OSError:

@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 
 from device_settings import find_places
+from layout_editor import editor_schema, validate_layout
 from local_name import HOSTNAME
 
 THEMES = ('light', 'dark')
@@ -84,7 +85,7 @@ class PanelState:
                     'revision': self.revision, 'trackUrl': self.track_url}
 
 
-def start_server(host, port, state, settings, reload_settings, *, wifi=None):
+def start_server(host, port, state, settings, reload_settings, *, wifi=None, layout_preview=None):
     assets = Path(__file__).with_name('web')
     routes = {
         '/': ('index.html', 'text/html; charset=utf-8'),
@@ -92,6 +93,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
         '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
         '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),
         '/locale.js': ('locale.js', 'text/javascript; charset=utf-8'),
+        '/editor.js': ('editor.js', 'text/javascript; charset=utf-8'),
     }
     if wifi is not None:
         routes = {
@@ -104,7 +106,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
     site = {url: (kind, (assets / filename).read_bytes())
             for url, (filename, kind) in routes.items()}
     admin_routes = {'/api/settings', '/api/setup-code', '/api/local-name', '/api/places', '/api/spotify/start',
-                    '/api/spotify/finish', '/api/spotify/disconnect'}
+                    '/api/spotify/finish', '/api/spotify/disconnect', '/api/layouts', '/api/layout-preview'}
     allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {'/api/theme', '/api/language'}
 
     def panel_status():
@@ -125,7 +127,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Content-Security-Policy',
-                             "default-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+                             "default-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'")
             self.end_headers()
             self.wfile.write(body)
 
@@ -166,6 +168,9 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
             elif path == '/api/settings':
                 if self.setup_access():
                     self.json(200, settings.status())
+            elif path == '/api/layouts':
+                if self.setup_access():
+                    self.json(200, {**editor_schema(), 'layouts': settings.layouts})
             elif path == '/screen.png' and (frame := state.frame) is not None:
                 self.reply(200, 'image/png', frame)
             else:
@@ -185,7 +190,8 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
                 return
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= 8192 or self.headers.get_content_type() != 'application/json':
+                limit = 32_768 if self.path in ('/api/layouts', '/api/layout-preview') else 8192
+                if not 0 < size <= limit or self.headers.get_content_type() != 'application/json':
                     raise ValueError('Invalid request.')
                 payload = json.loads(self.rfile.read(size))
                 if not isinstance(payload, dict):
@@ -215,6 +221,23 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
                         self.json(200, {})
                     else:
                         self.json(403, {'error': 'Check the device setup code.'})
+                    return
+                if self.path == '/api/layouts':
+                    screen = payload['screen']
+                    layout = settings.save_layout(screen, payload['layout'])
+                    self.json(200, {'screen': screen, 'layout': layout})
+                    return
+                if self.path == '/api/layout-preview':
+                    screen = payload['screen']
+                    layout = validate_layout(screen, payload['layout'])
+                    if layout_preview is None:
+                        from dashboard import render_layout_preview
+                    else:
+                        render_layout_preview = layout_preview
+                    preferences = settings.values
+                    png = render_layout_preview(screen, layout, state.theme,
+                                                preferences['language'], preferences['units'])
+                    self.reply(200, 'image/png', png)
                     return
                 if self.path == '/api/places':
                     self.json(200, {'places': find_places(payload['name'], settings.values['language'])})

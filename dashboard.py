@@ -9,6 +9,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from itertools import groupby
 from math import ceil
 from pathlib import Path
@@ -18,8 +19,9 @@ from zoneinfo import ZoneInfo
 
 from control import PanelState, preview_png, start_server
 from device_settings import DeviceSettings
+from layout_editor import content_key, render_custom
 from local_name import LocalName
-from spotify_playback import SpotifyPlayback
+from spotify_playback import SpotifyPlayback, Track
 from wifi_setup import AP_ADDRESS, Link, NetworkSetup
 
 WIDTH, HEIGHT = 250, 122
@@ -85,6 +87,37 @@ def render(now, weather, theme='light', units='celsius', language='en'):
         for x, y in ATLAS['weather'][icon]:
             image[(21 + y) * WIDTH + 188 + x] = 0
     return bytearray(1 - pixel for pixel in image) if theme == 'dark' else image
+
+
+@lru_cache(maxsize=1)
+def sample_cover():
+    from PIL import Image, ImageDraw
+
+    cover = Image.new('1', (96, 96), 0)
+    draw = ImageDraw.Draw(cover)
+    draw.ellipse((12, 12, 83, 83), fill=1)
+    draw.polygon(((0, 86), (35, 37), (63, 68), (74, 56), (95, 83), (95, 95), (0, 95)), fill=0)
+    draw.line(((0, 86), (35, 37), (63, 68), (74, 56), (95, 83)), fill=1, width=2)
+    return cover
+
+
+def render_layout_preview(screen, layout, theme, language, units):
+    from music_screen import progress_pixels, render_music
+
+    now = datetime(2026, 11, 10, 14, 38, 27)
+    weather = (16 if units == 'celsius' else 61, 2, True)
+    if screen == 'playback':
+        track = Track('preview', 'Night Drive', 'The Midnight')
+        cover = sample_cover()
+        progress = 0.42
+        pixels = (render_music(track, theme, cover, progress_pixels(progress, cover)) if layout is None
+                  else render_custom(layout, now, theme, language, weather=weather, units=units,
+                                     track=track, cover=cover, progress=progress, duration_ms=242_000))
+    elif layout is None:
+        pixels = render(now, weather, theme, units, language)
+    else:
+        pixels = render_custom(layout, now, theme, language, weather=weather, units=units)
+    return preview_png(pixels, WIDTH, HEIGHT)
 
 
 def render_wifi(hotspot, theme='light', language='en'):
@@ -230,6 +263,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     last_content = None
     displayed_theme = None
     displayed_music = False
+    displayed_track = None
+    displayed_layout = None
     displayed_hotspot = None
     displayed_join = False
     join_notice = None
@@ -241,7 +276,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     if network:
         threading.Thread(target=network.poll, args=(stop,), daemon=True).start()
     active_link = Link(listen)
-    server = start_server(listen, port, state, settings, reload_settings) if listen else None
+    server = (start_server(listen, port, state, settings, reload_settings, layout_preview=render_layout_preview)
+              if listen else None)
     local_name = LocalName()
     try:
         while not stop.is_set() and time.monotonic() < deadline:
@@ -254,7 +290,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                     server = None
                 if link.address:
                     server = start_server(link.address, port, state, settings, reload_settings,
-                                          wifi=network if hotspot else None)
+                                          wifi=network if hotspot else None, layout_preview=render_layout_preview)
                 active_link = link
             local_name.update(link.address if server and not hotspot and settings.values['local_name'] else None)
             now = datetime.now(timezone)
@@ -269,19 +305,32 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             showing_join = joined is not None and seconds > 0
             prepared = spotify.current if spotify else None
             music = prepared is not None and hotspot is None and not showing_join
-            advancing = False
-            if hotspot:
-                track = None
-                content = (theme, hotspot, language)
-            elif showing_join:
-                track = None
-                advancing = True
-                content = (theme, joined.address, seconds, language)
-            elif music:
+            layout = None if hotspot or showing_join else settings.layouts['playback' if music else 'dashboard']
+            track, cover, progress, duration_ms = None, None, 0, 0
+            if music:
                 playback, cover = prepared
                 track = playback.track
+                progress = playback.progress_at(time.monotonic())
+                duration_ms = playback.duration_ms
+            advancing = False
+            if hotspot:
+                content = (theme, hotspot, language)
+            elif showing_join:
+                advancing = True
+                content = (theme, joined.address, seconds, language)
+            elif layout is not None:
+                widgets = content_key(layout, now, current_weather, track, cover, progress,
+                                      duration_ms=duration_ms, units=units, language=language)
+                content = (theme, language, layout, track, widgets)
+                advancing = displayed_layout == layout and (
+                    (music and displayed_music and displayed_track == track)
+                    or (partial_count < 120 and any(
+                        widget['type'] == 'clock' and widget['variant'] == 'seconds' for widget in layout
+                    ))
+                )
+            elif music:
                 music_view = (theme, track, id(cover))
-                filled = progress_pixels(playback.progress_at(time.monotonic()), cover)
+                filled = progress_pixels(progress, cover)
                 if displayed_music and last_content[:-1] == music_view:
                     previous_fill = last_content[-1]
                     # A one-pixel correction can come from normal API timing jitter.
@@ -290,7 +339,6 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                     advancing = filled > previous_fill
                 content = (*music_view, filled)
             else:
-                track = None
                 content = (theme, *screen_content(now, current_weather, units, language))
             if content == last_content:
                 stop.wait(min(1 - now.microsecond / 1_000_000, deadline - time.monotonic()))
@@ -300,6 +348,9 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 screen = render_wifi(hotspot, theme, language)
             elif showing_join:
                 screen = render_joined(joined.address, seconds, theme, language)
+            elif layout is not None:
+                screen = render_custom(layout, now, theme, language, weather=current_weather, units=units,
+                                       track=track, cover=cover, progress=progress, duration_ms=duration_ms)
             elif music:
                 screen = render_music(track, theme, cover, filled)
             else:
@@ -307,7 +358,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             pixels = pack(screen, rotation)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.
-            full = (displayed_music != music or displayed_hotspot != hotspot or displayed_join != showing_join
+            full = (displayed_music != music or displayed_layout != layout
+                    or displayed_hotspot != hotspot or displayed_join != showing_join
                     or needs_full_refresh(displayed_theme, theme, partial_count, advancing=advancing))
             if full:
                 if panel.init() != 0:
@@ -320,6 +372,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 regions = changed_regions(previous, pixels)
                 if not regions:
                     last_content = content
+                    displayed_track = track
                     if not hotspot and (server or network):
                         state.publish(theme, state.frame, track.url if track else None)
                     continue
@@ -331,6 +384,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             previous = pixels
             displayed_theme = theme
             displayed_music = music
+            displayed_track = track
+            displayed_layout = layout
             displayed_hotspot = hotspot
             displayed_join = showing_join
             last_content = content

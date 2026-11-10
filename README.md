@@ -19,6 +19,16 @@ Open the address printed by the installer, such as `http://192.168.1.25/`, from 
 
 You can also open `http://eink.local/` on the same network. To stop publishing that name, unlock **Device setup** and turn off **Use eink.local**. If the page was open by name, it switches to the Pi's IP address. The setup hotspot uses the address shown on the e-paper display.
 
+### Build your own screens
+
+Open the pencil in the dashboard header and enter the device setup code. The **Dashboard** and **Playback** tabs have separate layouts. Add widgets, drag them on the preview, or set their position and size in pixels. Select a widget to change its display style, text, font, or alignment where supported.
+
+- Clocks include 12-hour and 24-hour formats, seconds, stacked digits, and an analog face. You can also add the date, your own text, or a divider.
+- Weather can show only the icon, only the temperature, or both side by side or stacked.
+- Playback can show album art, track and artist text, a progress indicator, or elapsed and remaining time.
+
+The 250 × 122 preview uses sample data and the same renderer as the display. Save each screen separately to apply it on the Pi. Use the default reset to restore the built-in screen.
+
 ### Join a new Wi-Fi network
 
 Run `sh install.sh --wifi-setup` to enable or update the optional Wi-Fi setup feature. This installs a system service that can configure the Pi's built-in `wlan0` interface. The dashboard account can request the two supported Wi-Fi operations through a private local socket.

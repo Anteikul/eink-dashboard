@@ -9,18 +9,24 @@
   <script src="/locale.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/setup.js" defer></script>
+  <script src="/editor.js" defer></script>
 </head>
 <body>
   <main>
     <header>
       <div class="header-line">
         <p class="device" data-i18n><span class="mark" aria-hidden="true"></span> E‑INK / 2.13″</p>
-        <button id="open-settings" type="button" aria-label="Settings" data-i18n-attributes="aria-label" aria-haspopup="dialog" aria-controls="settings-dialog" data-i18n>
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M10 3h4l.5 2.5 1.3.7 2.4-.8 2 3.5-1.9 1.7v1.5l1.9 1.7-2 3.5-2.4-.8-1.3.7L14 20h-4l-.5-2.8-1.3-.7-2.4.8-2-3.5 1.9-1.7v-1.5L3.8 8.9l2-3.5 2.4.8 1.3-.7z"/>
-            <circle cx="12" cy="11.5" r="3"/>
-          </svg>
-        </button>
+        <div class="header-actions">
+          <button id="open-editor" type="button" aria-label="Edit layouts" title="Edit layouts" data-i18n-attributes="aria-label title" aria-haspopup="dialog" aria-controls="layout-editor">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4m-14 6 4 4M16 4l1-1a1.4 1.4 0 0 1 2 0l2 2a1.4 1.4 0 0 1 0 2l-1 1"/></svg>
+          </button>
+          <button id="open-settings" type="button" aria-label="Settings" data-i18n-attributes="aria-label" aria-haspopup="dialog" aria-controls="settings-dialog" data-i18n>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10 3h4l.5 2.5 1.3.7 2.4-.8 2 3.5-1.9 1.7v1.5l1.9 1.7-2 3.5-2.4-.8-1.3.7L14 20h-4l-.5-2.8-1.3-.7-2.4.8-2-3.5 1.9-1.7v-1.5L3.8 8.9l2-3.5 2.4.8 1.3-.7z"/>
+              <circle cx="12" cy="11.5" r="3"/>
+            </svg>
+          </button>
+        </div>
       </div>
       <h1 data-i18n>Display</h1>
       <p class="intro" data-i18n>Live display preview</p>
@@ -56,6 +62,91 @@
     </section>
     <p id="status" role="status" data-i18n>Connecting to the display…</p>
     <footer data-i18n>Weather <a href="https://open-meteo.com/">Open‑Meteo</a></footer>
+    <dialog id="layout-editor" aria-labelledby="editor-title">
+      <div class="dialog-heading">
+        <h2 id="editor-title" data-i18n>Edit layouts</h2>
+        <form method="dialog">
+          <button type="submit" id="editor-close" autofocus data-i18n>Close</button>
+        </form>
+      </div>
+      <form id="editor-unlock" class="setup-form" hidden>
+        <label for="editor-code" data-i18n>Setup code</label>
+        <div class="setup-row">
+          <input id="editor-code" type="password" autocomplete="off" required>
+          <button type="submit" data-i18n>Unlock</button>
+        </div>
+      </form>
+      <p id="editor-access-status" class="editor-message" role="status"></p>
+      <div id="editor-content" hidden>
+        <div class="editor-tabs" role="tablist" aria-label="Layouts" data-i18n-attributes="aria-label">
+          <button id="editor-dashboard-tab" type="button" role="tab" aria-selected="true" aria-controls="editor-panel" data-screen="dashboard"><span data-i18n>Dashboard</span><span class="editor-tab-dirty" hidden aria-hidden="true">•</span></button>
+          <button id="editor-playback-tab" type="button" role="tab" aria-selected="false" aria-controls="editor-panel" data-screen="playback" tabindex="-1"><span data-i18n>Playback</span><span class="editor-tab-dirty" hidden aria-hidden="true">•</span></button>
+        </div>
+        <div id="editor-panel" role="tabpanel" aria-labelledby="editor-dashboard-tab">
+          <div class="editor-grid">
+            <section class="editor-preview" aria-labelledby="editor-preview-title">
+              <div class="section-line">
+                <h3 id="editor-preview-title" data-i18n>Sample preview</h3>
+                <span id="editor-resolution">250 × 122 px</span>
+              </div>
+              <div class="bezel">
+                <div id="editor-stage" aria-label="Widget positions" data-i18n-attributes="aria-label" role="group" aria-describedby="editor-move-help">
+                  <img id="editor-image" alt="Sample e-ink frame" data-i18n-attributes="alt" width="250" height="122" draggable="false" hidden>
+                </div>
+              </div>
+              <p id="editor-move-help" class="editor-help" data-i18n>Drag a widget or use the arrow keys to move it. Hold Shift to move 10 pixels.</p>
+              <div class="editor-preview-status">
+                <p id="editor-preview-status" class="editor-message" role="status"></p>
+                <button id="editor-preview-retry" type="button" hidden data-i18n>Retry preview</button>
+              </div>
+              <div class="editor-widgets">
+                <h3 id="editor-widgets-title" data-i18n>Widgets</h3>
+                <ul id="editor-widgets" aria-labelledby="editor-widgets-title"></ul>
+                <div class="setup-row editor-add">
+                  <select id="editor-add-type" aria-label="Widget type" data-i18n-attributes="aria-label"></select>
+                  <button id="editor-add" type="button" data-i18n>Add widget</button>
+                </div>
+              </div>
+            </section>
+            <section class="editor-inspector" aria-labelledby="editor-inspector-title">
+              <h3 id="editor-inspector-title" data-i18n>Widget settings</h3>
+              <p id="editor-no-selection" class="editor-help" data-i18n>Select a widget to edit its layout and style.</p>
+              <div id="editor-properties" class="setup-form" hidden>
+                <p id="editor-selected-widget"></p>
+                <div class="editor-geometry">
+                  <label data-i18n>X<input type="number" min="0" step="1" data-property="x"></label>
+                  <label data-i18n>Y<input type="number" min="0" step="1" data-property="y"></label>
+                  <label data-i18n>Width<input type="number" min="1" step="1" data-property="w"></label>
+                  <label data-i18n>Height<input type="number" min="1" step="1" data-property="h"></label>
+                </div>
+                <label id="editor-variant-label" data-i18n>Variant<select data-property="variant"></select></label>
+                <div id="editor-text-style" class="editor-text-style">
+                  <label data-i18n>Font<select data-property="font"><option value="regular" data-i18n>Regular</option><option value="bold" data-i18n>Bold</option><option value="mono" data-i18n>Monospace</option></select></label>
+                  <label data-i18n>Font size<input type="number" min="8" max="60" step="1" data-property="size"></label>
+                  <label data-i18n>Alignment<select data-property="align"><option value="left" data-i18n>Left</option><option value="center" data-i18n>Center</option><option value="right" data-i18n>Right</option></select></label>
+                </div>
+                <label id="editor-text-label" data-i18n>Custom text<textarea rows="3" maxlength="240" data-property="text"></textarea></label>
+                <div class="editor-order">
+                  <button id="editor-move-up" type="button" data-i18n>Move up</button>
+                  <button id="editor-move-down" type="button" data-i18n>Move down</button>
+                  <button id="editor-remove" type="button" data-i18n>Remove</button>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div class="editor-footer">
+            <div class="editor-footer-status">
+              <p id="editor-dirty" class="editor-message" hidden data-i18n>Unsaved changes are kept here until you reload the page.</p>
+              <p id="editor-save-status" class="editor-message" role="status"></p>
+            </div>
+            <div class="editor-footer-buttons">
+              <button id="editor-reset" type="button" data-i18n>Reset to default</button>
+              <button id="editor-save" type="button" data-i18n>Save layout</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </dialog>
     <dialog id="settings-dialog" aria-labelledby="dialog-title">
       <div class="dialog-heading">
         <h2 id="dialog-title" data-i18n>Settings</h2>

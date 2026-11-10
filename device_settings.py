@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from layout_editor import validate_layout
 from spotify_playback import TOKEN_URL
 
 DEFAULTS = {
@@ -65,14 +66,36 @@ def validate_settings(payload):
 class DeviceSettings:
     def __init__(self, directory):
         self.path = directory / '.settings.json'
+        self.layouts_path = directory / '.layouts.json'
         self.code_path = directory / '.setup-code'
         self.credentials = directory / '.spotify.json'
         self.lock = threading.Lock()
         self.pending = None
         self.values = validate_settings({**DEFAULTS, **json.loads(self.path.read_text())}) if self.path.is_file() else DEFAULTS.copy()
+        self.layouts = self.load_layouts()
         if not self.code_path.exists():
             write_private(self.code_path, secrets.token_urlsafe(18) + '\n')
         self.code = self.code_path.read_text().strip()
+
+    def load_layouts(self):
+        defaults = {'dashboard': None, 'playback': None}
+        try:
+            saved = json.loads(self.layouts_path.read_text())
+            return {screen: validate_layout(screen, saved.get(screen)) for screen in defaults}
+        except FileNotFoundError:
+            pass
+        except (AttributeError, TypeError, ValueError, OSError):
+            print('Could not read the saved layouts. Using the built-in screens.', flush=True)
+        return defaults
+
+    def save_layout(self, screen, layout):
+        layout = validate_layout(screen, layout)
+        with self.lock:
+            layouts = {**self.layouts, screen: layout}
+            if layouts != self.layouts:
+                write_private(self.layouts_path, json.dumps(layouts, ensure_ascii=False) + '\n')
+                self.layouts = layouts
+        return layout
 
     def authorized(self, code):
         return hmac.compare_digest(self.code.encode(), code.encode())
