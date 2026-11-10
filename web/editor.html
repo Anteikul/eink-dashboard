@@ -83,21 +83,49 @@
                 </button>
               </div>
             </div>
-            <div class="editor-brush-options">
-              <div class="editor-brush-width">
-                <label id="editor-brush-label" class="editor-icon" for="editor-brush" aria-label="Brush width" data-i18n-attributes="aria-label">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16m-16 7h16m-16 7h16" stroke-width="1.5"/><path d="M5 12h14" stroke-width="2.5"/><path d="M6 19h12" stroke-width="4"/></svg>
-                </label>
-                <select id="editor-brush" aria-labelledby="editor-brush-label">
-                  <option value="1">1 px</option>
-                  <option value="3">3 px</option>
-                  <option value="5">5 px</option>
-                  <option value="9">9 px</option>
-                </select>
+            <div class="editor-contextbar">
+              <div id="editor-brush-options" class="editor-brush-options" hidden>
+                <div id="editor-brush-width" class="editor-tool-size" hidden>
+                  <label id="editor-brush-label" class="editor-icon" for="editor-brush" aria-label="Brush width" data-i18n-attributes="aria-label">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16m-16 7h16m-16 7h16" stroke-width="1.5"/><path d="M5 12h14" stroke-width="2.5"/><path d="M6 19h12" stroke-width="4"/></svg>
+                  </label>
+                  <select id="editor-brush" aria-labelledby="editor-brush-label">
+                    <option value="1">1 px</option>
+                    <option value="3">3 px</option>
+                    <option value="5">5 px</option>
+                    <option value="9">9 px</option>
+                  </select>
+                </div>
+                <button id="editor-clear-drawing" class="editor-icon" type="button" aria-label="Clear drawing" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
+                </button>
               </div>
-              <button id="editor-clear-drawing" class="editor-icon" type="button" aria-label="Clear drawing" data-i18n-attributes="aria-label">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
-              </button>
+              <div id="editor-font-options" class="editor-tool-size" hidden>
+                <label id="editor-font-size-label" class="editor-icon" for="editor-font-size" aria-label="Font size" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 18 5-12 5 12M5 14h6m4-3h6m-3-3v6m-3 4h6"/></svg>
+                </label>
+                <input id="editor-font-size" type="number" min="8" max="60" step="1" aria-labelledby="editor-font-size-label">
+              </div>
+              <div id="editor-canvas-alignment" class="editor-canvas-alignment" role="group" aria-label="Align layer to canvas" data-i18n-attributes="aria-label" hidden>
+                <button type="button" class="editor-icon" data-canvas-align="left" aria-label="Align layer left" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v18m3-15h10v4H7Zm0 8h13v4H7Z"/></svg>
+                </button>
+                <button type="button" class="editor-icon" data-canvas-align="center" aria-label="Center layer horizontally" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3m0 4v4m0 4v3M7 6h10v4H7Zm-3 8h16v4H4Z"/></svg>
+                </button>
+                <button type="button" class="editor-icon" data-canvas-align="right" aria-label="Align layer right" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 3v18M7 6h10v4H7Zm-3 8h13v4H4Z"/></svg>
+                </button>
+                <button type="button" class="editor-icon" data-canvas-align="top" aria-label="Align layer top" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18M6 7h4v10H6Zm8 0h4v13h-4Z"/></svg>
+                </button>
+                <button type="button" class="editor-icon" data-canvas-align="middle" aria-label="Center layer vertically" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h3m4 0h4m4 0h3M6 7h4v10H6Zm8-3h4v16h-4Z"/></svg>
+                </button>
+                <button type="button" class="editor-icon" data-canvas-align="bottom" aria-label="Align layer bottom" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M6 7h4v10H6Zm8-3h4v13h-4Z"/></svg>
+                </button>
+              </div>
             </div>
             <div class="editor-canvas-area">
               <div class="bezel">
@@ -162,7 +190,6 @@
                 <label id="editor-variant-label" data-i18n>Variant<select data-property="variant"></select></label>
                 <div id="editor-text-style" class="editor-text-style">
                   <label data-i18n>Font<select data-property="font"><option value="regular" data-i18n>Regular</option><option value="bold" data-i18n>Bold</option><option value="mono" data-i18n>Monospace</option></select></label>
-                  <label data-i18n>Font size<input type="number" min="8" max="60" step="1" data-property="size"></label>
                   <div id="editor-alignment" class="editor-alignment" role="group" aria-label="Alignment" data-i18n-attributes="aria-label">
                     <button type="button" class="editor-icon" data-align="left" aria-label="Align left" data-i18n-attributes="aria-label" aria-pressed="false">
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></svg>

@@ -27,7 +27,7 @@ function show(data) {
     image.src = '/screen.png?frame=' + revision;
   }
   controls.disabled = false;
-  setText(status, saveError || (applied ? 'Shown on the display.' : 'Refreshing the display…'));
+  setText(status, saveError || (applied ? '' : 'Refreshing the display…'));
 }
 
 async function read() {

@@ -14,7 +14,7 @@
   <main>
     <header>
       <div class="header-line">
-        <p class="device" data-i18n><span class="mark" aria-hidden="true"></span> E‑INK / 2.13″</p>
+        <h1 data-i18n>Display</h1>
         <div class="header-actions">
           <a id="open-editor" href="/editor" aria-label="Edit layouts" title="Edit layouts" data-i18n-attributes="aria-label title">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4m-14 6 4 4M16 4l1-1a1.4 1.4 0 0 1 2 0l2 2a1.4 1.4 0 0 1 0 2l-1 1"/></svg>
@@ -27,14 +27,8 @@
           </button>
         </div>
       </div>
-      <h1 data-i18n>Display</h1>
-      <p class="intro" data-i18n>Live display preview</p>
     </header>
-    <section aria-labelledby="preview-heading">
-      <div class="section-line">
-        <h2 id="preview-heading" data-i18n>Screen</h2>
-        <span>250 × 122 px</span>
-      </div>
+    <section aria-label="Screen" data-i18n-attributes="aria-label">
       <div class="bezel">
         <div class="screen">
           <p id="placeholder" data-i18n>Waiting for the first frame…</p>
@@ -44,10 +38,7 @@
       <p class="track-link" id="track-link" hidden data-i18n><a rel="noreferrer" data-i18n>Open track in Spotify</a></p>
     </section>
     <section class="settings" aria-labelledby="settings-heading">
-      <div class="setting-label">
-        <h2 id="settings-heading" data-i18n>Display theme</h2>
-        <p data-i18n>The Raspberry Pi saves your selection.</p>
-      </div>
+      <h2 id="settings-heading" data-i18n>Display theme</h2>
       <fieldset aria-labelledby="settings-heading" disabled>
         <button type="button" data-theme="light" aria-pressed="false" data-i18n>
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>
@@ -60,7 +51,6 @@
       </fieldset>
     </section>
     <p id="status" role="status" data-i18n>Connecting to the display…</p>
-    <footer data-i18n>Weather <a href="https://open-meteo.com/">Open‑Meteo</a></footer>
     <dialog id="settings-dialog" aria-labelledby="dialog-title">
       <div class="dialog-heading">
         <h2 id="dialog-title" data-i18n>Settings</h2>
@@ -137,6 +127,7 @@
           </form>
         </div>
       </section>
+      <p class="weather-credit" data-i18n>Weather data from <a href="https://open-meteo.com/">Open‑Meteo</a></p>
     </dialog>
   </main>
 </body>

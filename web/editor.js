@@ -25,6 +25,11 @@
   const palette = element('editor-palette');
   const tools = element('editor-tools');
   const brush = element('editor-brush');
+  const brushOptions = element('editor-brush-options');
+  const brushWidth = element('editor-brush-width');
+  const fontOptions = element('editor-font-options');
+  const fontSize = element('editor-font-size');
+  const canvasAlignment = element('editor-canvas-alignment');
   const clearDrawing = element('editor-clear-drawing');
   const drawingProperties = element('editor-drawing-properties');
   const undo = element('editor-undo');
@@ -176,18 +181,24 @@
   function updateInspector() {
     const widget = layers()[current().selection];
     const isDrawing = widget?.type === 'drawing';
+    const item = widget && !isDrawing ? definition(widget.type) : null;
+    const textStyle = item?.textStyle && !(
+      (widget.type === 'clock' && widget.variant === 'analog') ||
+      (widget.type === 'weather' && widget.variant === 'icon-only')
+    );
+    brushOptions.hidden = tool === 'select';
+    brushWidth.hidden = tool !== 'draw';
+    fontOptions.hidden = tool !== 'select' || !textStyle;
+    canvasAlignment.hidden = tool !== 'select' || !widget;
+    if (textStyle && fontSize.value !== String(widget.size)) fontSize.value = widget.size;
     properties.hidden = !widget || isDrawing;
     drawingProperties.hidden = !isDrawing;
     element('editor-inspector-title').hidden = !widget;
     if (!widget || isDrawing) return;
 
-    const item = definition(widget.type);
     element('editor-selected-widget').textContent = widgetLabel(widget, current().selection);
     element('editor-variant-label').hidden = item.variants.length === 0;
-    element('editor-text-style').hidden = !item.textStyle || (
-      (widget.type === 'clock' && widget.variant === 'analog') ||
-      (widget.type === 'weather' && widget.variant === 'icon-only')
-    );
+    element('editor-text-style').hidden = !textStyle;
     element('editor-text-label').hidden = widget.type !== 'text';
 
     if (fields.variant.dataset.type !== widget.type) {
@@ -1029,7 +1040,7 @@
     const h = Math.min(schema.height, Math.max(widget.h, 40 / height * schema.height));
     position(inlineText, {x: Math.min(widget.x, schema.width - w),
       y: Math.min(widget.y, schema.height - h), w, h});
-    inlineText.style.fontSize = clamp(widget.size * width / schema.width, 16, 38) + 'px';
+    setInlineFontSize(widget.size, width);
     inlineText.style.fontFamily = widget.font === 'mono' ? 'var(--mono)' : '';
     inlineText.style.fontWeight = widget.font === 'bold' ? '700' : '';
     inlineText.style.textAlign = widget.align;
@@ -1038,6 +1049,10 @@
     textEditing = {index, screen};
     inlineText.focus({preventScroll: true});
     inlineText.select();
+  }
+
+  function setInlineFontSize(size, width = stage.getBoundingClientRect().width) {
+    inlineText.style.fontSize = clamp(size * width / schema.width, 16, 38) + 'px';
   }
 
   function finishText(apply, refocus = false) {
@@ -1128,7 +1143,12 @@
     const hitbox = event.target.closest('.editor-hitbox');
     if (hitbox) startText(Number(hitbox.dataset.index));
   });
-  inlineText.addEventListener('blur', () => finishText(true));
+  inlineText.addEventListener('blur', (event) => {
+    if (event.relatedTarget !== fontSize) finishText(true);
+  });
+  fontSize.addEventListener('blur', (event) => {
+    if (event.relatedTarget !== inlineText) finishText(true);
+  });
   inlineText.addEventListener('keydown', (event) => {
     if (event.isComposing) return;
     const singleLine = layers()[current().selection]?.variant === 'single';
@@ -1380,6 +1400,27 @@
   alignment.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-align]');
     if (button && !drag && !paletteDrag && !layerDrag) editWidget({align: button.dataset.align});
+  });
+  canvasAlignment.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-canvas-align]');
+    const layer = layers()[current().selection];
+    if (!button || !layer || drag || paletteDrag || layerDrag) return;
+    const side = button.dataset.canvasAlign;
+    const horizontal = ['left', 'center', 'right'].indexOf(side);
+    const vertical = ['top', 'middle', 'bottom'].indexOf(side);
+    if (horizontal >= 0) editWidget({x: Math.round((schema.width - layer.w) * horizontal / 2)});
+    if (vertical >= 0) editWidget({y: Math.round((schema.height - layer.h) * vertical / 2)});
+  });
+  fontSize.addEventListener('change', () => {
+    if (fontOptions.hidden) return;
+    if (!Number.isFinite(fontSize.valueAsNumber)) {
+      updateInspector();
+      return;
+    }
+    const size = clamp(Math.round(fontSize.valueAsNumber), Number(fontSize.min), Number(fontSize.max));
+    fontSize.value = size;
+    editWidget({size});
+    if (textEditing) setInlineFontSize(size);
   });
   scaleField.addEventListener('change', () => {
     const widget = layers()[current().selection];
