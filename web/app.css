@@ -263,8 +263,9 @@ footer a { color: inherit; text-underline-offset: 3px; }
   flex-wrap: wrap;
   gap: 5px;
 }
-.editor-toolbar { justify-content: space-between; margin-bottom: 8px; }
-.editor-brush-options { margin-bottom: 8px; gap: 8px; }
+.editor-toolbar, .editor-brush-options { justify-content: center; margin-bottom: 8px; }
+.editor-toolbar { column-gap: 12px; }
+.editor-brush-options { gap: 8px; }
 .editor-brush-options button { min-height: 36px; }
 .editor-brush-width { display: flex; align-items: center; gap: 4px; }
 .editor-brush-width label { display: grid; width: 28px; min-height: 36px; place-items: center; cursor: pointer; }
