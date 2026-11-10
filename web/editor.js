@@ -23,7 +23,6 @@
   const widgetList = element('editor-widgets');
   const palette = element('editor-palette');
   const tools = element('editor-tools');
-  const brushOptions = element('editor-brush-options');
   const brush = element('editor-brush');
   const clearDrawing = element('editor-clear-drawing');
   const drawingProperties = element('editor-drawing-properties');
@@ -34,8 +33,7 @@
   const fields = Object.fromEntries(
     [...properties.querySelectorAll('[data-property]')].map(field => [field.dataset.property, field]),
   );
-  const moveUp = element('editor-move-up');
-  const moveDown = element('editor-move-down');
+  const scaleField = element('editor-scale');
   const remove = element('editor-remove');
   const reset = element('editor-reset');
   const save = element('editor-save');
@@ -159,10 +157,9 @@
     palette.replaceChildren(...definitions().map(item => {
       const button = document.createElement('button');
       button.type = 'button';
+      button.className = 'editor-icon';
       button.dataset.widget = item.type;
-      const label = translate(item.label);
-      button.title = label;
-      button.setAttribute('aria-label', label);
+      button.setAttribute('aria-label', translate(item.label));
       button.append(icon(item.type));
       return button;
     }));
@@ -205,8 +202,12 @@
       const value = String(widget[name] ?? '');
       if (field.value !== value) field.value = value;
     }
-    moveUp.disabled = current().selection === layers().length - 1;
-    moveDown.disabled = current().selection === 0;
+    const size = Math.max(widget.w, widget.h);
+    scaleField.max = Math.floor(Math.min(
+      (schema.width - widget.x) * size / widget.w,
+      (schema.height - widget.y) * size / widget.h,
+    ));
+    scaleField.value = size;
   }
 
   function updateSelection() {
@@ -602,13 +603,9 @@
   function setTool(value) {
     tool = value;
     stage.dataset.tool = value;
-    brushOptions.hidden = value === 'select';
     for (const button of tools.querySelectorAll('[data-tool]')) {
       button.setAttribute('aria-pressed', String(button.dataset.tool === value));
     }
-    setText(element('editor-move-help'), value === 'select'
-      ? 'Drag a corner to resize. Hold Shift to stretch freely. Double-click text to type.'
-      : 'Draw directly on the screen. The eraser only removes your strokes.');
     updateSelection();
   }
 
@@ -1075,8 +1072,6 @@
     }
   });
 
-  moveUp.addEventListener('click', () => reorder(current().selection, current().selection + 1));
-  moveDown.addEventListener('click', () => reorder(current().selection, current().selection - 1));
   remove.addEventListener('click', () => {
     removeLayer(current().selection);
     (widgetButtons[current().selection] ?? palette.firstElementChild).focus();
@@ -1097,6 +1092,20 @@
     } else {
       editWidget({[name]: field.value});
     }
+  });
+  scaleField.addEventListener('change', () => {
+    const widget = layers()[current().selection];
+    if (!widget || widget.type === 'drawing') return;
+    if (!Number.isFinite(scaleField.valueAsNumber)) {
+      updateInspector();
+      return;
+    }
+    const size = clamp(Math.round(scaleField.valueAsNumber), 1, Number(scaleField.max));
+    const ratio = size / Math.max(widget.w, widget.h);
+    scaleField.value = size;
+    const change = {w: Math.max(1, Math.round(widget.w * ratio)), h: Math.max(1, Math.round(widget.h * ratio))};
+    if (!element('editor-text-style').hidden) change.size = clamp(Math.round(widget.size * ratio), 8, 60);
+    editWidget(change);
   });
   for (const event of ['input', 'compositionend']) {
     fields.text.addEventListener(event, ({isComposing}) => {
