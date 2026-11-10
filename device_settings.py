@@ -19,6 +19,7 @@ from spotify_playback import TOKEN_URL
 DEFAULTS = {
     'location': 'Prague', 'latitude': 50.0755, 'longitude': 14.4378,
     'timezone': 'Europe/Prague', 'units': 'celsius', 'rotation': 180, 'language': 'en',
+    'local_name': True,
 }
 LANGUAGES = ('en', 'cs')
 REDIRECT_URI = 'http://127.0.0.1:8765/callback'
@@ -56,6 +57,8 @@ def validate_settings(payload):
         raise ValueError('Check the temperature units and rotation.')
     if result['language'] not in LANGUAGES:
         raise ValueError('Choose English or Czech.')
+    if type(result['local_name']) is not bool:
+        raise ValueError('Choose whether to use the local address.')
     return result
 
 
@@ -90,7 +93,16 @@ class DeviceSettings:
 
     def save(self, payload):
         with self.lock:
-            self.write_values(validate_settings({**payload, 'language': self.values['language']}))
+            self.write_values(validate_settings({
+                **payload, 'language': self.values['language'], 'local_name': self.values['local_name'],
+            }))
+
+    def set_local_name(self, enabled):
+        if type(enabled) is not bool:
+            raise ValueError('Choose whether to use the local address.')
+        with self.lock:
+            if self.values['local_name'] != enabled:
+                self.write_values({**self.values, 'local_name': enabled})
 
     def set_language(self, language):
         if language not in LANGUAGES:

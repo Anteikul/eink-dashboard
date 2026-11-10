@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 
 from device_settings import find_places
+from local_name import HOSTNAME
 
 THEMES = ('light', 'dark')
 
@@ -102,7 +103,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
     subnet = ipaddress.IPv4Network(f'{host}/24', strict=False) if wifi is not None else None
     site = {url: (kind, (assets / filename).read_bytes())
             for url, (filename, kind) in routes.items()}
-    admin_routes = {'/api/settings', '/api/setup-code', '/api/places', '/api/spotify/start',
+    admin_routes = {'/api/settings', '/api/setup-code', '/api/local-name', '/api/places', '/api/spotify/start',
                     '/api/spotify/finish', '/api/spotify/disconnect'}
     allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {'/api/theme', '/api/language'}
 
@@ -137,8 +138,16 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
             self.json(403, {'error': 'Check the device setup code.'})
             return False
 
+        def request_authority(self):
+            request_host = self.headers.get('Host', '').lower()
+            if request_host in ip_hosts:
+                return authority
+            if wifi is None and settings.values['local_name'] and request_host in local_hosts:
+                return local_authority
+            return None
+
         def do_GET(self):
-            if self.headers.get('Host') not in accepted_hosts:
+            if self.request_authority() is None:
                 self.send_error(400)
                 return
             if subnet is not None and ipaddress.IPv4Address(self.client_address[0]) not in subnet:
@@ -166,8 +175,9 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
             if self.path not in allowed_routes:
                 self.send_error(404)
                 return
-            if (self.headers.get('Host') not in accepted_hosts
-                    or self.headers.get('Origin') != f'http://{authority}'
+            request_authority = self.request_authority()
+            if (request_authority is None
+                    or self.headers.get('Origin') != f'http://{request_authority}'
                     or (subnet is not None and ipaddress.IPv4Address(self.client_address[0]) not in subnet)):
                 self.json(403, {'error': 'Open the dashboard directly on the Pi.'})
                 return
@@ -195,6 +205,10 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
                 if self.path == '/api/language':
                     settings.set_language(payload['language'])
                     self.json(200, panel_status())
+                    return
+                if self.path == '/api/local-name':
+                    settings.set_local_name(payload['enabled'])
+                    self.json(200, {'enabled': settings.values['local_name'], 'ipUrl': f'http://{authority}'})
                     return
                 if self.path == '/api/setup-code':
                     if settings.change_code(self.headers.get('X-Setup-Code', ''), payload['newCode']):
@@ -234,7 +248,10 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
     server = ThreadingHTTPServer((host, port), Handler)
     explicit_authority = f'{host}:{server.server_port}'
     authority = host if server.server_port == 80 else explicit_authority
-    accepted_hosts = {authority, explicit_authority}
+    ip_hosts = {authority, explicit_authority}
+    explicit_local = f'{HOSTNAME}:{server.server_port}'
+    local_authority = HOSTNAME if server.server_port == 80 else explicit_local
+    local_hosts = {local_authority, explicit_local}
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f'Control page: http://{authority}', flush=True)
     return server

@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 
 from control import PanelState, preview_png, start_server
 from device_settings import DeviceSettings
+from local_name import LocalName
 from spotify_playback import SpotifyPlayback
 from wifi_setup import AP_ADDRESS, Link, NetworkSetup
 
@@ -241,6 +242,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
         threading.Thread(target=network.poll, args=(stop,), daemon=True).start()
     active_link = Link(listen)
     server = start_server(listen, port, state, settings, reload_settings) if listen else None
+    local_name = LocalName()
     try:
         while not stop.is_set() and time.monotonic() < deadline:
             link = network.link if network else active_link
@@ -254,6 +256,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                     server = start_server(link.address, port, state, settings, reload_settings,
                                           wifi=network if hotspot else None)
                 active_link = link
+            local_name.update(link.address if server and not hotspot and settings.values['local_name'] else None)
             now = datetime.now(timezone)
             theme = state.theme
             language = settings.values['language']
@@ -341,6 +344,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             print(f'{now:%H:%M:%S} {detail} {page} {time.monotonic() - started:.3f}s', flush=True)
     finally:
         stop.set()
+        local_name.close()
         try:
             if initialized:
                 panel.sleep()

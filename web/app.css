@@ -74,6 +74,8 @@ footer a { color: inherit; text-underline-offset: 3px; }
 .setup-form p, #setup-status { margin: 2px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 #setup-status:empty { display: none; }
 .setup-form label { display: grid; gap: 4px; font-size: 13px; }
+.setup-form .checkbox-setting { display: flex; align-items: center; gap: 8px; }
+.setup-form .checkbox-setting input { width: 18px; height: 18px; min-height: 0; margin: 0; }
 .setup-form input, .setup-form select, .setup-form textarea { width: 100%; min-height: 40px; padding: 8px 10px; font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 5px; }
 .setup-form :is(input,select,textarea):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .setup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }

@@ -17,6 +17,8 @@ The installer uses `sudo` for missing packages and enables startup on boot. Leav
 
 Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Light and dark themes are below the preview. Use the gear to choose English or Czech. Unlock **Device setup** with the code printed by the installer to change location, time zone, temperature units, rotation, Spotify access, or the setup code itself. To recover the current code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
 
+You can also open `http://eink.local/` on the same network. To stop publishing that name, unlock **Device setup** and turn off **Use eink.local**. If the page was open by name, it switches to the Pi's IP address. The setup hotspot uses the address shown on the e-paper display.
+
 ### Join a new Wi-Fi network
 
 Run `sh install.sh --wifi-setup` to enable or update the optional Wi-Fi setup feature. This installs a system service that can configure the Pi's built-in `wlan0` interface. The dashboard account can request the two supported Wi-Fi operations through a private local socket.

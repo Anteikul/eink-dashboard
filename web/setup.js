@@ -10,6 +10,8 @@ const places = document.querySelector('#places');
 const disconnect = document.querySelector('#spotify-disconnect');
 const setupCodeForm = document.querySelector('#setup-code-form');
 const setupCodeStatus = document.querySelector('#setup-code-status');
+const localName = document.querySelector('#local-name');
+const localNameStatus = document.querySelector('#local-name-status');
 let setupCode = '';
 let foundPlaces = [];
 
@@ -64,6 +66,7 @@ function fillDevice(settings) {
 
 function showSettings(data) {
   fillDevice(data.settings);
+  if (!localName.disabled) localName.checked = data.settings.local_name;
   document.querySelector('#redirect-uri').textContent = data.redirectUri;
   setText(document.querySelector('#spotify-status'), data.spotifyConnected
     ? 'Your account is connected.' : 'Connect your Spotify account to show music.');
@@ -71,6 +74,26 @@ function showSettings(data) {
   if (data.spotifyConnected) finishForm.hidden = true;
   disconnect.hidden = !data.spotifyConnected;
 }
+
+localName.addEventListener('change', async () => {
+  const enabled = localName.checked;
+  localName.disabled = true;
+  setText(localNameStatus, '');
+  try {
+    const data = await api('/api/local-name', {enabled});
+    localName.checked = data.enabled;
+    if (!data.enabled && window.location.hostname === 'eink.local') {
+      window.location.replace(data.ipUrl);
+      return;
+    }
+    setText(localNameStatus, data.enabled ? 'Local address enabled.' : 'Local address disabled.');
+  } catch (error) {
+    localName.checked = !enabled;
+    setText(localNameStatus, error.message);
+  } finally {
+    localName.disabled = false;
+  }
+});
 
 unlockForm.addEventListener('submit', (event) => {
   event.preventDefault();

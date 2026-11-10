@@ -18,6 +18,13 @@ const czech = new Map(Object.entries({
   'Close': 'Zavřít',
   'Language': 'Jazyk',
   'Device setup': 'Nastavení zařízení',
+  'Local address': 'Místní adresa',
+  'Use eink.local': 'Používat eink.local',
+  "Open the dashboard by name from the same local network. The Pi's IP address also works.":
+    'Dashboard můžeš v místní síti otevřít podle jména. Funguje i IP adresa Pi.',
+  'Local address enabled.': 'Místní adresa je zapnutá.',
+  'Local address disabled.': 'Místní adresa je vypnutá.',
+  'Choose whether to use the local address.': 'Zvol, zda chceš používat místní adresu.',
   'Setup code': 'Kód nastavení',
   'Unlock': 'Odemknout',
   'Location and display': 'Poloha a displej',

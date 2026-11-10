@@ -5,6 +5,7 @@ cd "$(dirname "$0")"
 check_dependencies() {
     command -v crontab >/dev/null && command -v flock >/dev/null &&
         command -v ip >/dev/null && command -v authbind >/dev/null &&
+        command -v avahi-publish-address >/dev/null && [ -r /etc/avahi/avahi-daemon.conf ] &&
         python3 -c 'import lgpio, numpy, requests; from PIL import Image, ImageFont'
 }
 
@@ -38,7 +39,8 @@ fi
 if ! check_dependencies >/dev/null 2>&1 || [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]; then
     sudo apt-get update
     sudo apt-get install -y --no-install-recommends python3-lgpio python3-pil python3-numpy \
-        python3-requests fonts-dejavu-core ca-certificates tzdata cron iproute2 util-linux authbind
+        python3-requests fonts-dejavu-core ca-certificates tzdata cron iproute2 util-linux authbind \
+        avahi-daemon avahi-utils
 fi
 if [ ! -w /dev/gpiochip0 ]; then
     printf 'Run sudo usermod -aG gpio %s to enable GPIO, then sign in again.\n' "$(id -un)" >&2
@@ -83,6 +85,41 @@ if ! grep -Fxq "$job" "$tmp/current" && grep -q 'start-at-boot\.sh' "$tmp/curren
     printf '%s\n' 'Cron already points to another dashboard installation. Update it in its existing directory.' >&2
     exit 1
 fi
+
+# Let the dashboard own eink.local if Avahi would otherwise publish it itself.
+avahi_config=/etc/avahi/avahi-daemon.conf
+python3 - "$avahi_config" > "$tmp/avahi-daemon.conf" <<'PY'
+import re
+import socket
+import sys
+from configparser import ConfigParser
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text()
+config = ConfigParser(interpolation=None, strict=False)
+config.read_string(source)
+host = config.get('server', 'host-name', fallback=socket.gethostname().split('.')[0])
+domain = config.get('server', 'domain-name', fallback='local').rstrip('.')
+machine_name = config.getboolean('server', 'host-name-from-machine-id', fallback=False)
+if not machine_name and host.lower() == 'eink' and domain.lower() == 'local':
+    block = re.search(r'(?ms)^\[publish\][ \t]*\n.*?(?=^\[|\Z)', source)
+    if block is None:
+        source = source.rstrip() + '\n\n[publish]\npublish-addresses=no\n'
+    else:
+        value = re.sub(r'(?m)^[ \t]*publish-addresses[ \t]*=.*$', 'publish-addresses=no', block[0])
+        if not re.search(r'(?m)^publish-addresses=no$', value):
+            heading, body = value.split('\n', 1)
+            value = heading + '\npublish-addresses=no\n' + body
+        source = source[:block.start()] + value + source[block.end():]
+sys.stdout.write(source)
+PY
+if ! cmp -s "$tmp/avahi-daemon.conf" "$avahi_config"; then
+    sudo cp -n "$avahi_config" "$avahi_config.eink-backup"
+    sudo install -o root -g root -m 0644 "$tmp/avahi-daemon.conf" "$avahi_config"
+    sudo systemctl restart avahi-daemon.service
+fi
+sudo systemctl enable --now avahi-daemon.service
+
 if [ "$wifi_setup" -eq 1 ]; then
     account=$(id -un)
     case "$account" in

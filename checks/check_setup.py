@@ -22,8 +22,10 @@ with TemporaryDirectory() as folder:
                           settings, lambda: calls.append('reload'))
     base = f'http://127.0.0.1:{server.server_port}'
 
-    def get(path, body=None, code=None, origin=base):
+    def get(path, body=None, code=None, origin=base, host=None):
         headers = {'X-Setup-Code': code if code is not None else settings.code}
+        if host is not None:
+            headers['Host'] = host
         if body is not None:
             headers.update({'Content-Type': 'application/json', 'Origin': origin})
         request = Request(base + path, headers=headers,
@@ -32,12 +34,25 @@ with TemporaryDirectory() as folder:
             with urlopen(request) as response:
                 return response.status, json.load(response)
         except HTTPError as error:
-            return error.code, json.load(error)
+            return error.code, json.load(error) if error.headers.get_content_type() == 'application/json' else None
 
     try:
         with urlopen(base) as response:
             html = response.read().decode()
         assert html.index('data-theme="light"') < html.index('<dialog')
+        alias = f'eink.local:{server.server_port}'
+        alias_origin = f'http://{alias}'
+        assert get('/api/state', host=alias)[0] == 200
+        assert get('/api/theme', {'theme': 'dark'}, host=alias, origin=alias_origin)[0] == 200
+        assert get('/api/theme', {'theme': 'light'}, host=alias, origin=base)[0] == 403
+        assert get('/api/local-name', {'enabled': False}, code='wrong')[0] == 403
+        assert get('/api/local-name', {'enabled': False}, host=alias, origin=alias_origin) == (
+            200, {'enabled': False, 'ipUrl': base})
+        assert DeviceSettings(root).values['local_name'] is False
+        assert get('/api/state', host=alias)[0] == 400
+        assert get('/api/state')[0] == 200
+        assert get('/api/local-name', {'enabled': True})[0] == 200
+        assert get('/api/state', host=alias)[0] == 200
         assert get('/api/settings', code='wrong')[0] == 403
         assert get('/api/settings', DEFAULTS, origin='http://other.example')[0] == 403
         status, data = get('/api/settings')

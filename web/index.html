@@ -82,6 +82,12 @@
         </form>
         <p id="setup-status" role="status" data-i18n></p>
         <div id="setup-fields" hidden>
+          <div class="setup-form">
+            <h3 data-i18n>Local address</h3>
+            <label class="checkbox-setting" data-i18n><input id="local-name" type="checkbox"> Use eink.local</label>
+            <p data-i18n>Open the dashboard by name from the same local network. The Pi's IP address also works.</p>
+            <p id="local-name-status" role="status"></p>
+          </div>
           <form id="device-form" class="setup-form">
             <h3 data-i18n>Location and display</h3>
             <label for="city" data-i18n>City</label>
