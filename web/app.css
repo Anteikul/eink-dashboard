@@ -112,8 +112,6 @@ footer a { color: inherit; text-underline-offset: 3px; }
 #layout-editor [hidden] { display: none !important; }
 .editor-header { display: flex; flex: none; align-items: center; gap: 16px; margin: 0 0 6px; }
 .editor-header h1 { font-size: clamp(19px, 2vw, 26px); letter-spacing: -.035em; }
-.editor-back { gap: 6px; padding: 0 8px; font-size: 14px; }
-.editor-back svg { width: 20px; height: 20px; }
 #editor-unlock { max-width: 420px; }
 #editor-access-status:empty { display: none; }
 #layout-editor h3 { margin: 0; font-size: 14px; font-weight: 680; }
@@ -132,10 +130,9 @@ footer a { color: inherit; text-underline-offset: 3px; }
 .editor-tabs, .editor-actions { display: flex; gap: 5px; }
 .editor-actions { margin-bottom: 5px; }
 .editor-topbar button { min-height: 40px; }
-.editor-actions button { padding-inline: 9px; white-space: nowrap; }
 .editor-tabs button { margin-bottom: -1px; border-radius: 5px 5px 0 0; }
 .editor-tabs button[aria-selected=true] { border-bottom: 2px solid var(--focus); background: color-mix(in srgb, var(--accent) 24%, var(--paper)); }
-.editor-tab-dirty { color: var(--focus); }
+.editor-tab-dirty { position: absolute; top: 2px; right: 5px; color: var(--focus); }
 .editor-grid {
   display: grid;
   flex: 1;
@@ -268,8 +265,9 @@ footer a { color: inherit; text-underline-offset: 3px; }
 }
 .editor-toolbar { justify-content: space-between; margin-bottom: 8px; }
 .editor-brush-options { margin-bottom: 8px; gap: 8px; }
-.editor-brush-options button { min-height: 36px; padding-block: 6px; }
-.editor-brush-options label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.editor-brush-options button { min-height: 36px; }
+.editor-brush-width { display: flex; align-items: center; gap: 4px; }
+.editor-brush-width label { display: grid; width: 28px; min-height: 36px; place-items: center; cursor: pointer; }
 .editor-brush-options select {
   min-height: 36px;
   padding: 4px 8px;
@@ -303,7 +301,8 @@ footer a { color: inherit; text-underline-offset: 3px; }
   white-space: nowrap;
   pointer-events: none;
 }
-.editor-history .editor-icon::after { inset-inline: auto 0; }
+.editor-history .editor-icon::after, .editor-actions .editor-icon::after,
+.editor-layer-heading .editor-icon::after { inset-inline: auto 0; }
 .editor-icon:focus-visible::after { display: block; }
 @media (hover: hover) {
   .editor-icon:hover::after { display: block; }
@@ -347,14 +346,15 @@ footer a { color: inherit; text-underline-offset: 3px; }
 #editor-properties { gap: 6px; margin-top: 7px; margin-bottom: 0; }
 #editor-properties :is(input, select, textarea) { min-height: 34px; padding: 5px 7px; }
 .editor-layer-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.editor-layer-heading button { min-height: 32px; padding: 5px 7px; font-size: 12px; }
+.editor-layer-heading button { flex: 0 0 auto; width: 36px; min-height: 32px; }
 #editor-properties .editor-scale { grid-template-columns: 1fr 4.5rem; align-items: center; }
 #editor-scale-help { font-size: 12px; margin-top: -4px; }
 .editor-precision { border: 1px solid var(--line); border-radius: 5px; }
 .editor-precision summary { padding: 7px 8px; font-size: 13px; cursor: pointer; }
 .editor-precision .editor-geometry { padding: 0 8px 8px; }
 .editor-geometry, .editor-text-style { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.editor-text-style label:last-child { grid-column: 1 / -1; }
+.editor-alignment { display: flex; grid-column: 1 / -1; gap: 4px; }
+.editor-alignment button { width: 36px; min-height: 34px; }
 .editor-status {
   display: flex;
   flex: 0 0 32px;
@@ -375,6 +375,7 @@ footer a { color: inherit; text-underline-offset: 3px; }
     gap: 8px;
   }
   .editor-palette { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  #editor-palette-help { display: none; }
   #editor-palette { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 0; }
   .editor-inspector {
     display: grid;
@@ -394,7 +395,6 @@ footer a { color: inherit; text-underline-offset: 3px; }
 @media (max-width: 540px) {
   .editor-topbar { gap: 4px 8px; margin-bottom: 8px; }
   .editor-topbar button { min-height: 36px; font-size: 13px; }
-  .editor-actions button { padding-inline: 7px; }
   .editor-palette { display: block; }
   #editor-palette { margin-top: 4px; }
   .editor-icon { width: 40px; min-height: 40px; }

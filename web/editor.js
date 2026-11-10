@@ -30,6 +30,7 @@
   const redo = element('editor-redo');
   const blank = element('editor-blank');
   const properties = element('editor-properties');
+  const alignment = element('editor-alignment');
   const fields = Object.fromEntries(
     [...properties.querySelectorAll('[data-property]')].map(field => [field.dataset.property, field]),
   );
@@ -128,12 +129,8 @@
     for (const tab of tabs) {
       const dirty = hasChanges(drafts[tab.dataset.screen]);
       tab.querySelector('.editor-tab-dirty').hidden = !dirty;
-      if (dirty) {
-        const title = tab.firstElementChild.textContent;
-        tab.setAttribute('aria-label', title + ' (' + translate('Unsaved changes') + ')');
-      } else {
-        tab.removeAttribute('aria-label');
-      }
+      const label = translate(tab.dataset.label);
+      tab.setAttribute('aria-label', dirty ? label + ' (' + translate('Unsaved changes') + ')' : label);
     }
     dirtyMessage.hidden = !Object.values(drafts).some(hasChanges);
     reset.disabled = current().layout === null;
@@ -201,6 +198,9 @@
     for (const [name, field] of Object.entries(fields)) {
       const value = String(widget[name] ?? '');
       if (field.value !== value) field.value = value;
+    }
+    for (const button of alignment.children) {
+      button.setAttribute('aria-pressed', String(widget.align === button.dataset.align));
     }
     const size = Math.max(widget.w, widget.h);
     scaleField.max = Math.floor(Math.min(
@@ -1001,7 +1001,9 @@
 
   palette.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-widget]');
-    if (event.detail === 0 && button && !drag) addWidget(definition(button.dataset.widget));
+    if (event.detail === 0 && button && !drag && !paletteDrag && !layerDrag) {
+      addWidget(definition(button.dataset.widget));
+    }
   });
   palette.addEventListener('pointerdown', (event) => {
     const button = event.target.closest('button[data-widget]');
@@ -1009,10 +1011,15 @@
     event.preventDefault();
     button.focus({preventScroll: true});
     button.setPointerCapture(event.pointerId);
-    paletteDrag = {id: event.pointerId, item: definition(button.dataset.widget), button};
+    paletteDrag = {
+      id: event.pointerId, item: definition(button.dataset.widget), button,
+      startX: event.clientX, startY: event.clientY, moved: false,
+    };
   });
   palette.addEventListener('pointermove', (event) => {
     if (paletteDrag?.id !== event.pointerId) return;
+    paletteDrag.moved ||= Math.hypot(event.clientX - paletteDrag.startX, event.clientY - paletteDrag.startY) >= 5;
+    if (!paletteDrag.moved) return;
     const point = canvasPoint(event);
     dropMarker.hidden = !insideCanvas(point);
     if (!dropMarker.hidden) position(dropMarker, widgetAt(paletteDrag.item, point));
@@ -1021,14 +1028,14 @@
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) {
     palette.addEventListener(event, (event) => {
       if (paletteDrag?.id !== event.pointerId) return;
-      const {item, button} = paletteDrag;
+      const {item, button, moved} = paletteDrag;
       paletteDrag = undefined;
       dropMarker.hidden = true;
       showGuides();
       if (event.type !== 'pointerup') return;
       const point = canvasPoint(event);
       if (insideCanvas(point)) addWidget(item, point);
-      else if (button.contains(document.elementFromPoint(event.clientX, event.clientY))) addWidget(item);
+      else if (!moved && button.contains(document.elementFromPoint(event.clientX, event.clientY))) addWidget(item);
     });
   }
 
@@ -1092,6 +1099,10 @@
     } else {
       editWidget({[name]: field.value});
     }
+  });
+  alignment.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-align]');
+    if (button && !drag && !paletteDrag && !layerDrag) editWidget({align: button.dataset.align});
   });
   scaleField.addEventListener('change', () => {
     const widget = layers()[current().selection];

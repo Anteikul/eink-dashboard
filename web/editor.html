@@ -12,9 +12,8 @@
 <body>
   <main id="layout-editor">
     <header class="editor-header">
-      <a class="editor-back" href="/" id="editor-back">
+      <a class="editor-back editor-icon" href="/" id="editor-back" aria-label="Back to display" data-i18n-attributes="aria-label">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7"/></svg>
-        <span data-i18n>Back to display</span>
       </a>
       <h1 data-i18n>Edit layouts</h1>
     </header>
@@ -29,13 +28,25 @@
     <div id="editor-content" hidden>
       <div class="editor-topbar">
         <div class="editor-tabs" role="tablist" aria-label="Layouts" data-i18n-attributes="aria-label">
-          <button id="editor-dashboard-tab" type="button" role="tab" aria-selected="true" aria-controls="editor-panel" data-screen="dashboard"><span data-i18n>Dashboard</span><span class="editor-tab-dirty" hidden aria-hidden="true">•</span></button>
-          <button id="editor-playback-tab" type="button" role="tab" aria-selected="false" aria-controls="editor-panel" data-screen="playback" tabindex="-1"><span data-i18n>Playback</span><span class="editor-tab-dirty" hidden aria-hidden="true">•</span></button>
+          <button id="editor-dashboard-tab" class="editor-icon" type="button" role="tab" aria-label="Dashboard" aria-selected="true" aria-controls="editor-panel" data-screen="dashboard" data-label="Dashboard">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3ZM3 9h18M11 9v11m3-7h4m-4 4h4"/></svg>
+            <span class="editor-tab-dirty" hidden aria-hidden="true">•</span>
+          </button>
+          <button id="editor-playback-tab" class="editor-icon" type="button" role="tab" aria-label="Playback" aria-selected="false" aria-controls="editor-panel" data-screen="playback" data-label="Playback" tabindex="-1">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 10 6-10 6V6ZM12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/></svg>
+            <span class="editor-tab-dirty" hidden aria-hidden="true">•</span>
+          </button>
         </div>
         <div class="editor-actions">
-          <button id="editor-blank" type="button" data-i18n>Start blank</button>
-          <button id="editor-reset" type="button" aria-label="Reset to default" data-i18n-attributes="aria-label" data-i18n>Reset</button>
-          <button id="editor-save" type="button" aria-label="Save layout" data-i18n-attributes="aria-label" data-i18n>Save</button>
+          <button id="editor-blank" class="editor-icon" type="button" aria-label="Start blank" data-i18n-attributes="aria-label">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h9l5 5v13H5Zm9 0v5h5m-7 3v6m-3-3h6"/></svg>
+          </button>
+          <button id="editor-reset" class="editor-icon" type="button" aria-label="Reset to default" data-i18n-attributes="aria-label">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v5h5m-5-.5a8.5 8.5 0 1 1 .9 8.6"/></svg>
+          </button>
+          <button id="editor-save" class="editor-icon" type="button" aria-label="Save layout" data-i18n-attributes="aria-label">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l4 4v14H3V3Zm3 0v6h10V3M7 21v-8h10v8m-3-15v3"/></svg>
+          </button>
         </div>
       </div>
       <div id="editor-panel" role="tabpanel" aria-labelledby="editor-dashboard-tab">
@@ -70,15 +81,20 @@
               </div>
             </div>
             <div class="editor-brush-options">
-              <label><span data-i18n>Brush width</span>
-                <select id="editor-brush">
+              <div class="editor-brush-width">
+                <label id="editor-brush-label" class="editor-icon" for="editor-brush" aria-label="Brush width" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16m-16 7h16m-16 7h16" stroke-width="1.5"/><path d="M5 12h14" stroke-width="2.5"/><path d="M6 19h12" stroke-width="4"/></svg>
+                </label>
+                <select id="editor-brush" aria-labelledby="editor-brush-label">
                   <option value="1">1 px</option>
                   <option value="3">3 px</option>
                   <option value="5">5 px</option>
                   <option value="9">9 px</option>
                 </select>
-              </label>
-              <button id="editor-clear-drawing" type="button" data-i18n>Clear drawing</button>
+              </div>
+              <button id="editor-clear-drawing" class="editor-icon" type="button" aria-label="Clear drawing" data-i18n-attributes="aria-label">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
+              </button>
             </div>
             <div class="editor-canvas-area">
               <div class="bezel">
@@ -100,12 +116,15 @@
             <p id="editor-move-help" class="editor-help" data-i18n>Shift stretches freely. Double-click text to edit it.</p>
             <div class="editor-preview-status">
               <p id="editor-preview-status" class="editor-message" role="status"></p>
-              <button id="editor-preview-retry" type="button" hidden data-i18n>Retry preview</button>
+              <button id="editor-preview-retry" class="editor-icon" type="button" aria-label="Retry preview" data-i18n-attributes="aria-label" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v5h-5m5-.5A8 8 0 1 0 20 16"/></svg>
+              </button>
             </div>
           </section>
           <aside class="editor-palette" aria-labelledby="editor-palette-title">
             <h3 id="editor-palette-title" data-i18n>Add widgets</h3>
-            <div id="editor-palette" role="group" aria-labelledby="editor-palette-title"></div>
+            <div id="editor-palette" role="group" aria-labelledby="editor-palette-title" aria-describedby="editor-palette-help"></div>
+            <p id="editor-palette-help" class="editor-help" data-i18n>Click or drag onto the canvas.</p>
           </aside>
           <section class="editor-inspector" aria-labelledby="editor-inspector-title">
             <div class="editor-widgets">
@@ -118,12 +137,16 @@
               <p id="editor-no-selection" class="editor-help" data-i18n>Select a widget to edit its layout and style.</p>
               <div id="editor-drawing-properties" class="setup-form" hidden>
                 <p class="editor-help" data-i18n>Drag the drawing on the canvas to move it.</p>
-                <button id="editor-remove-drawing" type="button" data-i18n>Clear drawing</button>
+                <button id="editor-remove-drawing" class="editor-icon" type="button" aria-label="Clear drawing" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
+                </button>
               </div>
               <div id="editor-properties" class="setup-form" hidden>
                 <div class="editor-layer-heading">
                   <p id="editor-selected-widget"></p>
-                  <button id="editor-remove" type="button" data-i18n>Remove</button>
+                  <button id="editor-remove" class="editor-icon" type="button" aria-label="Remove" data-i18n-attributes="aria-label">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
+                  </button>
                 </div>
                 <label class="editor-scale" for="editor-scale">
                   <span data-i18n>Size (px)</span>
@@ -143,7 +166,17 @@
                 <div id="editor-text-style" class="editor-text-style">
                   <label data-i18n>Font<select data-property="font"><option value="regular" data-i18n>Regular</option><option value="bold" data-i18n>Bold</option><option value="mono" data-i18n>Monospace</option></select></label>
                   <label data-i18n>Font size<input type="number" min="8" max="60" step="1" data-property="size"></label>
-                  <label data-i18n>Alignment<select data-property="align"><option value="left" data-i18n>Left</option><option value="center" data-i18n>Center</option><option value="right" data-i18n>Right</option></select></label>
+                  <div id="editor-alignment" class="editor-alignment" role="group" aria-label="Alignment" data-i18n-attributes="aria-label">
+                    <button type="button" class="editor-icon" data-align="left" aria-label="Align left" data-i18n-attributes="aria-label" aria-pressed="false">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></svg>
+                    </button>
+                    <button type="button" class="editor-icon" data-align="center" aria-label="Align center" data-i18n-attributes="aria-label" aria-pressed="false">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 10h10M4 14h16M7 18h10"/></svg>
+                    </button>
+                    <button type="button" class="editor-icon" data-align="right" aria-label="Align right" data-i18n-attributes="aria-label" aria-pressed="false">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M10 10h10M4 14h16M10 18h10"/></svg>
+                    </button>
+                  </div>
                 </div>
                 <label id="editor-text-label" data-i18n>Custom text<textarea rows="2" maxlength="240" data-property="text"></textarea></label>
               </div>
