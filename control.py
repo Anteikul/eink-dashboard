@@ -10,6 +10,7 @@ import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
+from urllib.parse import parse_qs
 
 from device_settings import find_places
 from layout_editor import editor_schema, validate_layout
@@ -107,7 +108,8 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
     site = {url: (kind, (assets / filename).read_bytes())
             for url, (filename, kind) in routes.items()}
     admin_routes = {'/api/settings', '/api/setup-code', '/api/local-name', '/api/places', '/api/spotify/start',
-                    '/api/spotify/finish', '/api/spotify/disconnect', '/api/layouts', '/api/layout-preview'}
+                    '/api/spotify/finish', '/api/spotify/disconnect', '/api/layouts', '/api/layout-preview',
+                    '/api/layout-library'}
     allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {'/api/theme', '/api/language'}
 
     def panel_status():
@@ -156,7 +158,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             if subnet is not None and ipaddress.IPv4Address(self.client_address[0]) not in subnet:
                 self.send_error(403)
                 return
-            path = self.path.partition('?')[0]
+            path, _, query = self.path.partition('?')
             if path in site:
                 self.reply(200, *site[path])
             elif wifi is not None:
@@ -172,6 +174,19 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             elif path == '/api/layouts':
                 if self.setup_access():
                     self.json(200, {**editor_schema(), 'layouts': settings.layouts})
+            elif path == '/api/layout-library':
+                if self.setup_access():
+                    params = parse_qs(query, keep_blank_values=True)
+                    screen = params.get('screen', [''])[0]
+                    name = params.get('name', [None])[0]
+                    try:
+                        self.json(200, settings.get_layout_library(screen, name))
+                    except KeyError:
+                        self.json(404, {'error': 'That saved layout no longer exists.'})
+                    except ValueError as error:
+                        self.json(400, {'error': str(error)})
+                    except OSError:
+                        self.json(500, {'error': 'Could not read the layout library.'})
             elif path == '/screen.png' and (frame := state.frame) is not None:
                 self.reply(200, 'image/png', frame)
             else:
@@ -191,7 +206,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 return
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                limit = 40_960 if self.path in ('/api/layouts', '/api/layout-preview') else 8192
+                limit = 40_960 if self.path in ('/api/layouts', '/api/layout-preview', '/api/layout-library') else 8192
                 if not 0 < size <= limit or self.headers.get_content_type() != 'application/json':
                     raise ValueError('Invalid request.')
                 payload = json.loads(self.rfile.read(size))
@@ -227,6 +242,17 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     screen = payload['screen']
                     layout = settings.save_layout(screen, payload['layout'])
                     self.json(200, {'screen': screen, 'layout': layout})
+                    return
+                if self.path == '/api/layout-library':
+                    screen, name = payload['screen'], payload['name']
+                    delete = payload.get('delete', False)
+                    if type(delete) is not bool:
+                        raise ValueError('Invalid request.')
+                    layout = None if delete else payload['layout']
+                    try:
+                        self.json(200, settings.edit_layout_library(screen, name, layout, delete=delete))
+                    except KeyError:
+                        self.json(404, {'error': 'That saved layout no longer exists.'})
                     return
                 if self.path == '/api/layout-preview':
                     screen = payload['screen']

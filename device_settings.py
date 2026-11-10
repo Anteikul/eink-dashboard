@@ -10,6 +10,7 @@ import secrets
 import tempfile
 import threading
 import time
+import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -25,6 +26,15 @@ DEFAULTS = {
 LANGUAGES = ('en', 'cs')
 REDIRECT_URI = 'http://127.0.0.1:8765/callback'
 SPOTIFY_SCOPE = 'user-read-currently-playing user-read-playback-state'
+LAYOUT_SCREENS = ('dashboard', 'playback')
+MAX_SAVED_LAYOUTS = 30
+
+
+def layout_name(value):
+    name = unicodedata.normalize('NFC', value.strip()) if isinstance(value, str) else ''
+    if not 1 <= len(name) <= 64 or not name.isprintable():
+        raise ValueError('Enter a layout name with 1–64 characters.')
+    return name
 
 
 def write_private(path, value):
@@ -67,6 +77,7 @@ class DeviceSettings:
     def __init__(self, directory):
         self.path = directory / '.settings.json'
         self.layouts_path = directory / '.layouts.json'
+        self.library_path = directory / '.layout-library.json'
         self.code_path = directory / '.setup-code'
         self.credentials = directory / '.spotify.json'
         self.lock = threading.Lock()
@@ -96,6 +107,47 @@ class DeviceSettings:
                 write_private(self.layouts_path, json.dumps(layouts, ensure_ascii=False) + '\n')
                 self.layouts = layouts
         return layout
+
+    def read_library(self):
+        try:
+            library = json.loads(self.library_path.read_text(encoding='utf-8'))
+            if not isinstance(library, dict) or any(
+                not isinstance(library.get(screen), dict) for screen in LAYOUT_SCREENS
+            ):
+                raise ValueError
+            return library
+        except FileNotFoundError:
+            return {screen: {} for screen in LAYOUT_SCREENS}
+        except ValueError as error:
+            raise OSError('Could not read the layout library.') from error
+
+    def get_layout_library(self, screen, name=None):
+        if screen not in LAYOUT_SCREENS:
+            raise ValueError('Choose Dashboard or Playback.')
+        entries = self.read_library()[screen]
+        if name is None:
+            return {'names': sorted(entries, key=str.casefold)}
+        return {'layout': validate_layout(screen, entries[layout_name(name)])}
+
+    def edit_layout_library(self, screen, name, layout, *, delete=False):
+        if screen not in LAYOUT_SCREENS:
+            raise ValueError('Choose Dashboard or Playback.')
+        name = layout_name(name)
+        if not delete:
+            layout = validate_layout(screen, layout)
+        with self.lock:
+            library = self.read_library()
+            entries = library[screen]
+            if delete:
+                del entries[name]
+            else:
+                if name in entries:
+                    raise ValueError('A saved layout already has that name.')
+                if len(entries) >= MAX_SAVED_LAYOUTS:
+                    raise ValueError(f'This screen already has {MAX_SAVED_LAYOUTS} saved layouts.')
+                entries[name] = layout
+            write_private(self.library_path, json.dumps(library, ensure_ascii=False) + '\n')
+            return {'names': sorted(entries, key=str.casefold)}
 
     def authorized(self, code):
         return hmac.compare_digest(self.code.encode(), code.encode())

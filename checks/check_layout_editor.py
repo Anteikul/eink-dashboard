@@ -124,6 +124,28 @@ with TemporaryDirectory() as folder:
         assert (root / '.layouts.json').stat().st_mode & 0o777 == 0o600
         assert request('/api/layouts', {'screen': 'dashboard', 'layout': None})[0] == 200
         assert DeviceSettings(root).layouts == {'dashboard': None, 'playback': []}
+
+        library = '/api/layout-library'
+        listing = library + '?screen=dashboard'
+        entry = listing + '&name=Moje%20plocha'
+        draft = {'screen': 'dashboard', 'name': 'Moje plocha', 'layout': [*custom, drawing]}
+        assert request(listing, code='wrong')[0] == 403
+        assert request(library, draft, code='wrong')[0] == 403
+        assert request(listing) == (200, b'{"names": []}')
+        assert request(library, {**draft, 'name': ' '})[0] == 400
+        assert request(library, {**draft, 'layout': [{**text, 'x': 250}]})[0] == 400
+        assert request(library, draft)[0] == 200
+        assert request(library, {**draft, 'layout': []})[0] == 400
+        assert json.loads(request(entry)[1])['layout'] == draft['layout']
+        assert json.loads(request(listing)[1])['names'] == ['Moje plocha']
+        assert json.loads(request(library + '?screen=playback')[1])['names'] == []
+        assert DeviceSettings(root).read_library()['dashboard']['Moje plocha'] == draft['layout']
+        assert (root / '.layout-library.json').stat().st_mode & 0o777 == 0o600
+        assert settings.layouts == {'dashboard': None, 'playback': []}
+        delete = {'screen': 'dashboard', 'name': 'Moje plocha', 'delete': True}
+        assert request(library, delete)[0] == 200
+        assert request(entry)[0] == 404
+        assert request(listing) == (200, b'{"names": []}')
     finally:
         server.shutdown()
         server.server_close()

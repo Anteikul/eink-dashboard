@@ -6,6 +6,7 @@ __pycache__/
 .spotify.json
 .settings.json
 .layouts.json
+.layout-library.json
 .setup-code
 .hotspot-password
 .cover-cache/

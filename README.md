@@ -29,7 +29,9 @@ Open the pencil in the dashboard header to visit the full-page editor and enter 
 
 Use **Draw** to sketch freehand with a mouse, pen, or finger. The eraser removes strokes without disturbing the widgets. Reorder widgets and the drawing by dragging them in the **Layers** panel. The top row is frontmost. Press **Delete** to remove the selected layer, or double-click a custom text widget to edit it directly on the canvas. **Undo** and **Redo** work on drawings, widget edits, and changes to layer order.
 
-The 250 × 122 canvas uses sample data and the same widget renderer as the display. Save each screen separately to apply it on the Pi. **Start blank** clears the current draft and **Reset to default** restores the built-in screen when saved.
+The 250 × 122 canvas uses sample data and the same widget renderer as the display. Use the save icon to apply the current screen on the Pi. **Start blank** clears the current draft and **Reset to default** restores the built-in screen when applied.
+
+The folder icon opens the layout library for the current screen. Save the canvas under a name to keep a reusable copy on the Pi. Opening a saved layout loads it into the editor. Use **Apply to display** to put it on the e-paper screen.
 
 ### Join a new Wi-Fi network
 

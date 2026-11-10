@@ -38,10 +38,18 @@
   const remove = element('editor-remove');
   const reset = element('editor-reset');
   const save = element('editor-save');
-  const dirtyMessage = element('editor-dirty');
   const saveStatus = element('editor-save-status');
+  const libraryToggle = element('editor-library-toggle');
+  const library = element('editor-library');
+  const libraryForm = element('editor-library-form');
+  const libraryName = element('editor-library-name');
+  const librarySave = element('editor-library-save');
+  const libraryList = element('editor-library-list');
+  const libraryOpen = element('editor-library-open');
+  const libraryDelete = element('editor-library-delete');
+  const libraryStatus = element('editor-library-status');
   const drafts = Object.fromEntries(tabs.map(tab => [
-    tab.dataset.screen, {saved: null, layout: null, selection: -1, message: '', undo: [], redo: []},
+    tab.dataset.screen, {saved: null, librarySaved: null, layout: null, selection: -1, message: '', undo: [], redo: []},
   ]));
   const arrows = {
     ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
@@ -79,6 +87,7 @@
   let atlas;
   let tiles = new Map();
   let savingScreen;
+  let libraryOperation;
 
   const current = () => drafts[screen];
   const layers = (layout = current().layout) => layout ?? schema.defaults[screen];
@@ -130,9 +139,8 @@
       const dirty = hasChanges(drafts[tab.dataset.screen]);
       tab.querySelector('.editor-tab-dirty').hidden = !dirty;
       const label = translate(tab.dataset.label);
-      tab.setAttribute('aria-label', dirty ? label + ' (' + translate('Unsaved changes') + ')' : label);
+      tab.setAttribute('aria-label', dirty ? label + ' (' + translate('Unapplied changes') + ')' : label);
     }
-    dirtyMessage.hidden = !Object.values(drafts).some(hasChanges);
     reset.disabled = current().layout === null;
     blank.disabled = current().layout?.length === 0;
     clearDrawing.disabled = !bitmap();
@@ -173,7 +181,7 @@
     const isDrawing = widget?.type === 'drawing';
     properties.hidden = !widget || isDrawing;
     drawingProperties.hidden = !isDrawing;
-    element('editor-no-selection').hidden = Boolean(widget);
+    element('editor-inspector-title').hidden = !widget;
     if (!widget || isDrawing) return;
 
     const item = definition(widget.type);
@@ -352,6 +360,7 @@
   }
 
   function askForCode(message) {
+    setLibraryVisible(false);
     stopPreview();
     clearPreview();
     content.hidden = true;
@@ -418,6 +427,74 @@
     renderWidgets();
     updateStatus();
     schedulePreview(0);
+    if (!library.hidden) loadLibrary();
+  }
+
+  function updateLibraryControls() {
+    const busy = Boolean(libraryOperation);
+    librarySave.disabled = busy || !libraryName.value.trim();
+    libraryList.disabled = busy || !libraryList.value;
+    libraryOpen.disabled = libraryList.disabled;
+    libraryDelete.disabled = libraryList.disabled;
+  }
+
+  function showLibraryNames(names, selected = '') {
+    libraryList.replaceChildren(...names.map(name => new Option(name, name)));
+    if (!names.length) libraryList.add(new Option(translate('No saved layouts'), ''));
+    else if (names.includes(selected)) libraryList.value = selected;
+    updateLibraryControls();
+  }
+
+  async function requestLibrary({name, payload, onSuccess}) {
+    if (libraryOperation) return;
+    const controller = new AbortController();
+    libraryOperation = controller;
+    const signal = controller.signal;
+    const params = new URLSearchParams({screen});
+    if (name !== undefined) params.set('name', name);
+    const path = '/api/layout-library' + (payload ? '' : '?' + params);
+    setText(libraryStatus, '');
+    updateLibraryControls();
+    try {
+      const response = await request(path, {
+        signal,
+        payload: payload ? {screen, ...payload} : undefined,
+        fallback: 'Could not open the layout library.',
+      });
+      const data = await response.json();
+      if (!signal.aborted) onSuccess(data);
+    } catch (error) {
+      if (signal.aborted) return;
+      const message = error instanceof TypeError ? 'The Pi did not respond.' : error.message;
+      if (message === badCode) askForCode(message);
+      else setText(libraryStatus, message);
+    } finally {
+      if (libraryOperation === controller) {
+        libraryOperation = undefined;
+        updateLibraryControls();
+      }
+    }
+  }
+
+  function loadLibrary() {
+    libraryOperation?.abort();
+    libraryOperation = undefined;
+    libraryForm.reset();
+    libraryList.replaceChildren();
+    requestLibrary({onSuccess: data => showLibraryNames(data.names)});
+  }
+
+  function setLibraryVisible(visible) {
+    libraryToggle.setAttribute('aria-expanded', String(visible));
+    library.hidden = !visible;
+    element('editor-layer-panel').hidden = visible;
+    element('editor-widget-settings').hidden = visible;
+    if (visible) {
+      loadLibrary();
+    } else {
+      libraryOperation?.abort();
+      libraryOperation = undefined;
+    }
   }
 
   async function loadLayouts(code) {
@@ -824,7 +901,9 @@
   }
 
   window.addEventListener('beforeunload', (event) => {
-    if (!textEditing && !Object.values(drafts).some(hasChanges)) return;
+    const unsaved = Object.values(drafts).some(draft => hasChanges(draft) &&
+      (!draft.librarySaved || JSON.stringify(draft.librarySaved.layout) !== JSON.stringify(draft.layout)));
+    if (!textEditing && !unsaved) return;
     event.preventDefault();
     event.returnValue = '';
   });
@@ -1139,6 +1218,54 @@
   });
 
   retry.addEventListener('click', () => schedulePreview(0));
+
+  libraryToggle.addEventListener('click', () => setLibraryVisible(library.hidden));
+  libraryName.addEventListener('input', updateLibraryControls);
+  libraryForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (drag || layerDrag || paletteDrag) return;
+    const name = libraryName.value.trim().normalize('NFC');
+    if (!name) {
+      setText(libraryStatus, 'Enter a layout name with 1–64 characters.');
+      return;
+    }
+    const draft = current();
+    const snapshot = draft.layout;
+    requestLibrary({
+      payload: {name, layout: layers()},
+      onSuccess: ({names}) => {
+        draft.librarySaved = {name, layout: snapshot};
+        libraryForm.reset();
+        showLibraryNames(names, name);
+        setText(libraryStatus, 'Layout saved to the library.');
+      },
+    });
+  });
+  libraryOpen.addEventListener('click', () => {
+    if (drag || layerDrag || paletteDrag) return;
+    const name = libraryList.value;
+    requestLibrary({
+      name,
+      onSuccess: ({layout}) => {
+        current().selection = -1;
+        setDraft(layout, true);
+        current().librarySaved = {name, layout};
+        setLibraryVisible(false);
+        libraryToggle.focus();
+      },
+    });
+  });
+  libraryDelete.addEventListener('click', () => {
+    const name = libraryList.value;
+    if (!window.confirm(translate('Delete this saved layout?'))) return;
+    requestLibrary({
+      payload: {name, delete: true},
+      onSuccess: ({names}) => {
+        if (current().librarySaved?.name === name) current().librarySaved = null;
+        showLibraryNames(names);
+      },
+    });
+  });
 
   save.addEventListener('click', async () => {
     finishText(true);

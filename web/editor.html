@@ -38,13 +38,16 @@
           </button>
         </div>
         <div class="editor-actions">
+          <button id="editor-library-toggle" class="editor-icon" type="button" aria-label="Saved layouts" data-i18n-attributes="aria-label" aria-expanded="false" aria-controls="editor-library">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v13H3Zm0 4h18m-11 4h4"/></svg>
+          </button>
           <button id="editor-blank" class="editor-icon" type="button" aria-label="Start blank" data-i18n-attributes="aria-label">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h9l5 5v13H5Zm9 0v5h5m-7 3v6m-3-3h6"/></svg>
           </button>
           <button id="editor-reset" class="editor-icon" type="button" aria-label="Reset to default" data-i18n-attributes="aria-label">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v5h5m-5-.5a8.5 8.5 0 1 1 .9 8.6"/></svg>
           </button>
-          <button id="editor-save" class="editor-icon" type="button" aria-label="Save layout" data-i18n-attributes="aria-label">
+          <button id="editor-save" class="editor-icon" type="button" aria-label="Apply to display" data-i18n-attributes="aria-label">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l4 4v14H3V3Zm3 0v6h10V3M7 21v-8h10v8m-3-15v3"/></svg>
           </button>
         </div>
@@ -98,7 +101,7 @@
             </div>
             <div class="editor-canvas-area">
               <div class="bezel">
-                <div id="editor-stage" data-tool="select" aria-label="Display canvas" data-i18n-attributes="aria-label" role="group" aria-describedby="editor-move-help">
+                <div id="editor-stage" data-tool="select" aria-label="Display canvas" data-i18n-attributes="aria-label" role="group">
                   <canvas id="editor-image" width="250" height="122" role="img" aria-label="Sample e-ink frame" data-i18n-attributes="aria-label"></canvas>
                   <div id="editor-selection" hidden aria-hidden="true">
                     <span class="editor-handle" data-corner="nw"></span>
@@ -113,7 +116,6 @@
                 </div>
               </div>
             </div>
-            <p id="editor-move-help" class="editor-help" data-i18n>Shift stretches freely. Double-click text to edit it.</p>
             <div class="editor-preview-status">
               <p id="editor-preview-status" class="editor-message" role="status"></p>
               <button id="editor-preview-retry" class="editor-icon" type="button" aria-label="Retry preview" data-i18n-attributes="aria-label" hidden>
@@ -123,20 +125,16 @@
           </section>
           <aside class="editor-palette" aria-labelledby="editor-palette-title">
             <h3 id="editor-palette-title" data-i18n>Add widgets</h3>
-            <div id="editor-palette" role="group" aria-labelledby="editor-palette-title" aria-describedby="editor-palette-help"></div>
-            <p id="editor-palette-help" class="editor-help" data-i18n>Click or drag onto the canvas.</p>
+            <div id="editor-palette" role="group" aria-labelledby="editor-palette-title"></div>
           </aside>
-          <section class="editor-inspector" aria-labelledby="editor-inspector-title">
-            <div class="editor-widgets">
+          <aside class="editor-inspector">
+            <div id="editor-layer-panel" class="editor-widgets">
               <h3 id="editor-widgets-title" data-i18n>Layers</h3>
-              <p id="editor-layer-help" class="editor-help" data-i18n>Drag to reorder. Press Delete to remove the selected layer.</p>
-              <ul id="editor-widgets" aria-labelledby="editor-widgets-title" aria-describedby="editor-layer-help"></ul>
+              <ul id="editor-widgets" aria-labelledby="editor-widgets-title"></ul>
             </div>
-            <div class="editor-widget-settings">
+            <div id="editor-widget-settings" class="editor-widget-settings">
               <h3 id="editor-inspector-title" data-i18n>Widget settings</h3>
-              <p id="editor-no-selection" class="editor-help" data-i18n>Select a widget to edit its layout and style.</p>
               <div id="editor-drawing-properties" class="setup-form" hidden>
-                <p class="editor-help" data-i18n>Drag the drawing on the canvas to move it.</p>
                 <button id="editor-remove-drawing" class="editor-icon" type="button" aria-label="Clear drawing" data-i18n-attributes="aria-label">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
                 </button>
@@ -150,9 +148,8 @@
                 </div>
                 <label class="editor-scale" for="editor-scale">
                   <span data-i18n>Size (px)</span>
-                  <input id="editor-scale" type="number" min="1" step="1" aria-describedby="editor-scale-help">
+                  <input id="editor-scale" type="number" min="1" step="1">
                 </label>
-                <p id="editor-scale-help" data-i18n>Longest side. Scales both dimensions.</p>
                 <details class="editor-precision">
                   <summary data-i18n>Position and dimensions</summary>
                   <div class="editor-geometry">
@@ -181,10 +178,31 @@
                 <label id="editor-text-label" data-i18n>Custom text<textarea rows="2" maxlength="240" data-property="text"></textarea></label>
               </div>
             </div>
-          </section>
+            <section id="editor-library" aria-labelledby="editor-library-title" hidden>
+              <h3 id="editor-library-title" data-i18n>Saved layouts</h3>
+              <form id="editor-library-form" class="setup-form">
+                <label for="editor-library-name" data-i18n>Layout name</label>
+                <div class="editor-library-row">
+                  <input id="editor-library-name" required maxlength="64" autocomplete="off">
+                  <button id="editor-library-save" class="editor-icon" type="submit" aria-label="Save to library" data-i18n-attributes="aria-label" disabled>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l4 4v14H3V3Zm3 0v6h10V3M7 21v-8h10v8m-3-15v3"/></svg>
+                  </button>
+                </div>
+              </form>
+              <div class="editor-library-row">
+                <select id="editor-library-list" aria-labelledby="editor-library-title" disabled></select>
+                <button id="editor-library-open" class="editor-icon" type="button" aria-label="Open saved layout" data-i18n-attributes="aria-label" disabled>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19V6h6l2 2h9v4M3 19h16l3-7H7Z"/></svg>
+                </button>
+                <button id="editor-library-delete" class="editor-icon" type="button" aria-label="Delete saved layout" data-i18n-attributes="aria-label" disabled>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
+                </button>
+              </div>
+              <p id="editor-library-status" class="editor-message" role="status"></p>
+            </section>
+          </aside>
         </div>
         <div class="editor-status">
-          <p id="editor-dirty" class="editor-message" hidden data-i18n>Unsaved changes</p>
           <p id="editor-save-status" class="editor-message" role="status"></p>
         </div>
       </div>
