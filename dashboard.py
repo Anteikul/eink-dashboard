@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from itertools import groupby
+from math import ceil
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -22,6 +23,7 @@ from wifi_setup import AP_ADDRESS, Link, NetworkSetup
 
 WIDTH, HEIGHT = 250, 122
 ROW_BYTES = (HEIGHT + 7) // 8
+JOIN_CONFIRM_SECONDS = 15
 WEEKDAYS = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
 WEEKDAYS_CS = ('Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne')
 MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
@@ -102,6 +104,23 @@ def render_wifi(hotspot, theme='light', language='en'):
                     (71, f'{password}: {hotspot.password}'),
                     (95, f'http://{AP_ADDRESS}')):
         draw.text((12, y), text, font=font(17), fill=ink)
+    return bytearray(image.getdata())
+
+
+def render_joined(address, seconds, theme='light', language='en'):
+    from PIL import Image, ImageDraw
+    from music_screen import font
+
+    image = Image.new('1', (WIDTH, HEIGHT), theme == 'light')
+    draw = ImageDraw.Draw(image)
+    ink = int(theme == 'dark')
+    title, timer = ('Připojeno', 'Návrat za') if language == 'cs' else ('Connected', 'Dashboard in')
+    draw.text((12, 8), title, font=font(23, bold=True), fill=ink)
+    draw.line(((205, 22), (214, 31), (234, 11)), fill=ink, width=3)
+    draw.line((12, 43, 238, 43), fill=ink)
+    draw.text((12, 55), f'http://{address}', font=font(19), fill=ink)
+    draw.text((12, 94), timer, font=font(16), fill=ink)
+    draw.text((238, 91), f'{seconds:02d} s', font=font(19, bold=True), fill=ink, anchor='ra')
     return bytearray(image.getdata())
 
 
@@ -211,6 +230,9 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     displayed_theme = None
     displayed_music = False
     displayed_hotspot = None
+    displayed_join = False
+    join_notice = None
+    join_until = None
     partial_count = 0
     previous = None
     state = PanelState(FOLDER / 'theme.txt')
@@ -236,12 +258,22 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             theme = state.theme
             language = settings.values['language']
             current_weather = weather.current
+            joined = network.joined if network else None
+            if joined is not join_notice:
+                join_notice = joined
+                join_until = None
+            seconds = JOIN_CONFIRM_SECONDS if join_until is None else ceil(join_until - time.monotonic())
+            showing_join = joined is not None and seconds > 0
             prepared = spotify.current if spotify else None
-            music = prepared is not None and hotspot is None
+            music = prepared is not None and hotspot is None and not showing_join
             advancing = False
             if hotspot:
                 track = None
                 content = (theme, hotspot, language)
+            elif showing_join:
+                track = None
+                advancing = True
+                content = (theme, joined.address, seconds, language)
             elif music:
                 playback, cover = prepared
                 track = playback.track
@@ -263,6 +295,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             started = time.monotonic()
             if hotspot:
                 screen = render_wifi(hotspot, theme, language)
+            elif showing_join:
+                screen = render_joined(joined.address, seconds, theme, language)
             elif music:
                 screen = render_music(track, theme, cover, filled)
             else:
@@ -270,7 +304,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             pixels = pack(screen, rotation)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.
-            full = (displayed_music != music or displayed_hotspot != hotspot
+            full = (displayed_music != music or displayed_hotspot != hotspot or displayed_join != showing_join
                     or needs_full_refresh(displayed_theme, theme, partial_count, advancing=advancing))
             if full:
                 if panel.init() != 0:
@@ -295,12 +329,15 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             displayed_theme = theme
             displayed_music = music
             displayed_hotspot = hotspot
+            displayed_join = showing_join
             last_content = content
+            if showing_join and join_until is None:
+                join_until = time.monotonic() + JOIN_CONFIRM_SECONDS
             if not hotspot and (server or network):
                 state.publish(theme, preview_png(screen, WIDTH, HEIGHT), track.url if track else None)
             mode = 'full' if full else 'partial'
             counts[mode] += 1
-            page = 'wifi setup' if hotspot else 'music' if music else 'weather'
+            page = 'wifi setup' if hotspot else 'connected' if showing_join else 'music' if music else 'weather'
             print(f'{now:%H:%M:%S} {detail} {page} {time.monotonic() - started:.3f}s', flush=True)
     finally:
         stop.set()

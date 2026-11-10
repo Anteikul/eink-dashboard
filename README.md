@@ -25,7 +25,7 @@ When the Pi has no saved Wi-Fi connection available for about 30 seconds, it sta
 
 1. On your phone, join the **EinkSetup** network shown on the display. Stay connected if the phone says the network has no internet.
 2. Open `http://10.42.0.1/` and enter the name and password of the 2.4 GHz network the Pi should join. Leave the password empty for an open network.
-3. The hotspot closes while the Pi tries the new network. If it connects, the Pi saves the network for future boots and returns to the dashboard. If it fails, reconnect to the same hotspot with the same password and try again.
+3. The hotspot closes while the Pi tries the new network. If it connects, the Pi saves the network for future boots and displays its new address with a 15-second countdown. If it fails, reconnect to the same hotspot with the same password and try again.
 
 While the setup hotspot is active, restart the Pi to give its saved networks another automatic try.
 

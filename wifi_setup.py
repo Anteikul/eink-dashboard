@@ -81,6 +81,7 @@ class NetworkSetup:
             if not re.fullmatch(r'[0-9]{8}', self.fixed_password):
                 raise ValueError('The fixed hotspot password must contain eight digits.')
         self.link = Link()
+        self.joined = None
         self.lock = Lock()
         self.pending = None
         self.status = 'ready'
@@ -110,26 +111,32 @@ class NetworkSetup:
         except OSError:
             status = 'failed'
         try:
-            self.refresh_link(now)
+            self.refresh_link(now, restore_hotspot=status == 'failed')
+            if status == 'connected' and self.link.address and not self.link.hotspot:
+                self.joined = self.link
         finally:
             with self.lock:
                 self.status = status
 
-    def refresh_link(self, now):
+    def refresh_link(self, now, *, restore_hotspot=False):
         connection, address = self.radio.link()
         if address and connection != AP_UUID:
+            if self.joined is not None and self.joined.address != address:
+                self.joined = None
             self.link = Link(address)
             self.disconnected_at = None
             self.hotspot = None
             return
         if address == AP_ADDRESS and self.hotspot:
             self.link = Link(address, self.hotspot)
+            self.disconnected_at = None
             return
 
         self.link = Link()
+        self.joined = None
         if self.disconnected_at is None:
             self.disconnected_at = now
-        if self.hotspot is None and connection != AP_UUID and now - self.disconnected_at < GRACE:
+        if not restore_hotspot and connection != AP_UUID and now - self.disconnected_at < GRACE:
             return
         if self.hotspot is None:
             suffix = ''.join(secrets.choice(AP_ALPHABET) for _ in range(4))
@@ -139,6 +146,7 @@ class NetworkSetup:
                 self.status = 'ready'
         self.radio.change('hotspot', self.hotspot.ssid, self.hotspot.password)
         self.link = Link(AP_ADDRESS, self.hotspot)
+        self.disconnected_at = None
 
     def poll(self, stop):
         while not stop.is_set():
@@ -163,6 +171,9 @@ def configure(operation, ssid, password):
                 or not re.fullmatch(r'(?:[A-Z0-9]{8}|[A-Z2-9]{10})', password)
                 or (address and active != AP_UUID)):
             raise ValueError('Invalid hotspot request')
+        state = nmcli('-g', 'GENERAL.STATE', 'device', 'show', INTERFACE).split(' ', 1)[0]
+        if state in ('40', '50', '60', '70', '80', '90'):
+            raise ValueError('NetworkManager is still connecting')
     elif operation != 'join' or (active, address) != (AP_UUID, AP_ADDRESS):
         raise ValueError('Wi-Fi setup is only available on the hotspot')
 

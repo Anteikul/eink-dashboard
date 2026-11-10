@@ -6,7 +6,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from control import PanelState, start_server
-from dashboard import HEIGHT, WIDTH, render_wifi
+from dashboard import HEIGHT, WIDTH, render_joined, render_wifi
 from device_settings import DeviceSettings
 from wifi_setup import AP_ADDRESS, AP_UUID, NetworkSetup, wifi_credentials
 
@@ -51,6 +51,12 @@ assert hotspot and len(hotspot.password) == 8
 frame = render_wifi(hotspot)
 assert len(frame) == WIDTH * HEIGHT and set(frame) == {0, 1}
 
+radio.connection = (None, None)
+network.step(61.1, stop)
+assert len(radio.started) == 1, 'Do not interrupt an external connection attempt'
+radio.connection = (AP_UUID, AP_ADDRESS)
+network.step(61.2, stop)
+
 for bad_ssid, bad_password in [('', ''), ('é' * 17, ''), ('Home', 'short'), ('Home', 'bad\npassword')]:
     try:
         wifi_credentials(bad_ssid, bad_password)
@@ -94,11 +100,20 @@ with TemporaryDirectory() as folder:
         assert request('/api/wifi', {'ssid': 'Other', 'password': ''})[0] == 409
         network.step(62, stop)
         assert network.link.hotspot == hotspot and radio.started == [(hotspot.ssid, hotspot.password)] * 2
+        assert network.joined is None
         assert json.loads(request('/api/wifi')[1])['status'] == 'failed'
         radio.succeed = True
         assert request('/api/wifi', {'ssid': 'Home', 'password': 'abc12345'})[0] == 202
         network.step(63, stop)
         assert network.link.address == '192.168.1.99' and network.link.hotspot is None
+        assert network.joined.address == '192.168.1.99'
+        joined = network.joined
+        network.step(64, stop)
+        assert network.joined is joined
+        first = render_joined(joined.address, 15, language='cs')
+        next_frame = render_joined(joined.address, 14, language='cs')
+        assert len(first) == WIDTH * HEIGHT
+        assert first[:90 * WIDTH] == next_frame[:90 * WIDTH] and first != next_frame
         assert request('/api/wifi', {'ssid': 'Other', 'password': ''})[0] == 409
     finally:
         server.shutdown()
