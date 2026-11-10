@@ -21,13 +21,13 @@ You can also open `http://eink.local/` on the same network. To stop publishing t
 
 ### Build your own screens
 
-Open the pencil in the dashboard header and enter the device setup code. The **Dashboard** and **Playback** tabs have separate layouts. Drag widgets from the palette onto the canvas, or click a widget in the palette to add it. Drag a widget to move it and pull a corner to resize it. The inspector also supports exact pixel positions and sizes, appearance, and layer order.
+Open the pencil in the dashboard header to visit the full-page editor and enter the device setup code. The **Dashboard** and **Playback** tabs have separate layouts. Drag an icon onto the canvas, or click it to add the widget. Drag a layer on the canvas to move it and pull a widget corner to resize it. Hold **Shift** while resizing to change width and height independently. **Snap** aligns layers with the screen center and edges or with nearby layers. The inspector also supports exact pixel positions and sizes.
 
 - Clocks include 12-hour and 24-hour formats, seconds, stacked digits, and an analog face. You can also add the date, your own text, or a divider.
 - Weather can show only the icon, only the temperature, or both side by side or stacked.
 - Playback can show album art, track and artist text, a progress indicator, or elapsed and remaining time.
 
-Use **Draw** to sketch freehand with a mouse, pen, or finger. The eraser removes strokes without disturbing the widgets. Drawings use the screen's foreground color and sit above the widgets. **Undo** and **Redo** work on both drawings and widget edits.
+Use **Draw** to sketch freehand with a mouse, pen, or finger. The eraser removes strokes without disturbing the widgets. Reorder widgets and the drawing by dragging them in the **Layers** panel. The top row is frontmost. Press **Delete** to remove the selected layer, or double-click a custom text widget to edit it directly on the canvas. **Undo** and **Redo** work on drawings, widget edits, and changes to layer order.
 
 The 250 × 122 canvas uses sample data and the same widget renderer as the display. Save each screen separately to apply it on the Pi. **Start blank** clears the current draft and **Reset to default** restores the built-in screen when saved.
 

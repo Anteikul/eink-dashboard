@@ -32,6 +32,10 @@ with TemporaryDirectory() as folder:
             return error.code, error.read()
 
     try:
+        status, page = request('/editor')
+        assert status == 200 and b'<main id="layout-editor">' in page
+        status, home = request('/')
+        assert status == 200 and b'href="/editor"' in home and b'id="layout-editor"' not in home
         assert request('/api/layouts', code='wrong')[0] == 403
         status, data = request('/api/layouts')
         assert status == 200
@@ -68,6 +72,25 @@ with TemporaryDirectory() as folder:
         assert request('/api/layouts', {'screen': 'dashboard', 'layout': [drawing]})[0] == 200
         assert DeviceSettings(root).layouts == {'dashboard': [drawing], 'playback': None}
         assert request('/api/layouts', {'screen': 'dashboard', 'layout': None})[0] == 200
+
+        # A drawing can sit above or below an opaque cover, including after a reload.
+        cover = next(item['template'] for item in schema['widgets']['playback'] if item['type'] == 'cover')
+        cover = {**cover, 'x': 0, 'y': 0}
+        corner_only = bytearray(stride * schema['height'])
+        corner_only[0] = 0x80
+        corner = {'type': 'drawing', 'bitmap': base64.b64encode(corner_only).decode()}
+        for stack, expected in (([corner, cover], 0), ([cover, corner], 255)):
+            status, data = request('/api/layouts', {'screen': 'playback', 'layout': stack})
+            assert status == 200 and json.loads(data)['layout'] == stack
+            assert DeviceSettings(root).layouts['playback'] == stack
+            # The cover corner is black. Use dark mode to make the overlaid stroke white.
+            state.set_theme('dark')
+            status, png = request('/api/layout-preview', {'screen': 'playback', 'layout': stack})
+            assert status == 200
+            with Image.open(io.BytesIO(png)) as preview:
+                assert preview.getpixel((0, 0)) == expected
+        state.set_theme('light')
+        assert request('/api/layouts', {'screen': 'playback', 'layout': None})[0] == 200
 
         layout = schema['defaults']['playback']
         status, png = request('/api/layout-preview', {'screen': 'playback', 'layout': layout, 'layers': True})

@@ -89,6 +89,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
     assets = Path(__file__).with_name('web')
     routes = {
         '/': ('index.html', 'text/html; charset=utf-8'),
+        '/editor': ('editor.html', 'text/html; charset=utf-8'),
         '/app.css': ('app.css', 'text/css; charset=utf-8'),
         '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
         '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),

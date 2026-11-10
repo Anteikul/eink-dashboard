@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eeece5">
+  <title>Edit layouts · E‑ink</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/locale.js" defer></script>
+  <script src="/editor.js" defer></script>
+</head>
+<body>
+  <main id="layout-editor">
+    <header class="editor-header">
+      <a class="editor-back" href="/" id="editor-back">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7"/></svg>
+        <span data-i18n>Back to display</span>
+      </a>
+      <h1 data-i18n>Edit layouts</h1>
+    </header>
+    <form id="editor-unlock" class="setup-form" hidden>
+      <label for="editor-code" data-i18n>Setup code</label>
+      <div class="setup-row">
+        <input id="editor-code" type="password" autocomplete="off" required>
+        <button type="submit" data-i18n>Unlock</button>
+      </div>
+    </form>
+    <p id="editor-access-status" class="editor-message" role="status"></p>
+    <div id="editor-content" hidden>
+      <div class="editor-tabs" role="tablist" aria-label="Layouts" data-i18n-attributes="aria-label">
+        <button id="editor-dashboard-tab" type="button" role="tab" aria-selected="true" aria-controls="editor-panel" data-screen="dashboard"><span data-i18n>Dashboard</span><span class="editor-tab-dirty" hidden aria-hidden="true">•</span></button>
+        <button id="editor-playback-tab" type="button" role="tab" aria-selected="false" aria-controls="editor-panel" data-screen="playback" tabindex="-1"><span data-i18n>Playback</span><span class="editor-tab-dirty" hidden aria-hidden="true">•</span></button>
+      </div>
+      <div id="editor-panel" role="tabpanel" aria-labelledby="editor-dashboard-tab">
+        <div class="editor-grid">
+          <section class="editor-preview" aria-labelledby="editor-preview-title">
+            <div class="section-line">
+              <h3 id="editor-preview-title" data-i18n>Display canvas</h3>
+              <span id="editor-resolution">250 × 122 px</span>
+            </div>
+            <div class="editor-toolbar">
+              <div id="editor-tools" class="editor-tools" role="group" aria-label="Canvas tools" data-i18n-attributes="aria-label">
+                <button type="button" data-tool="select" aria-pressed="true" data-i18n>Select</button>
+                <button type="button" data-tool="draw" aria-pressed="false" data-i18n>Draw</button>
+                <button type="button" data-tool="erase" aria-pressed="false" data-i18n>Eraser</button>
+                <button id="editor-snap" type="button" aria-pressed="true" data-i18n>Snap</button>
+              </div>
+              <div class="editor-history">
+                <button id="editor-undo" type="button" data-i18n>Undo</button>
+                <button id="editor-redo" type="button" data-i18n>Redo</button>
+              </div>
+            </div>
+            <div id="editor-brush-options" class="editor-brush-options" hidden>
+              <label><span data-i18n>Brush width</span>
+                <select id="editor-brush">
+                  <option value="1">1 px</option>
+                  <option value="3">3 px</option>
+                  <option value="5">5 px</option>
+                  <option value="9">9 px</option>
+                </select>
+              </label>
+              <button id="editor-clear-drawing" type="button" data-i18n>Clear drawing</button>
+            </div>
+            <div class="bezel">
+              <div id="editor-stage" data-tool="select" aria-label="Display canvas" data-i18n-attributes="aria-label" role="group" aria-describedby="editor-move-help">
+                <canvas id="editor-image" width="250" height="122" role="img" aria-label="Sample e-ink frame" data-i18n-attributes="aria-label"></canvas>
+                <div id="editor-selection" hidden aria-hidden="true">
+                  <span class="editor-handle" data-corner="nw"></span>
+                  <span class="editor-handle" data-corner="ne"></span>
+                  <span class="editor-handle" data-corner="sw"></span>
+                  <span class="editor-handle" data-corner="se"></span>
+                </div>
+                <div id="editor-drop-marker" hidden aria-hidden="true"></div>
+                <div id="editor-guide-x" class="editor-guide" hidden aria-hidden="true"></div>
+                <div id="editor-guide-y" class="editor-guide" hidden aria-hidden="true"></div>
+              <textarea id="editor-inline-text" aria-label="Edit text on canvas" data-i18n-attributes="aria-label" rows="2" hidden></textarea>
+              </div>
+            </div>
+          <p id="editor-move-help" class="editor-help" data-i18n>Drag a corner to resize. Hold Shift to stretch freely. Double-click text to type.</p>
+            <div class="editor-preview-status">
+              <p id="editor-preview-status" class="editor-message" role="status"></p>
+              <button id="editor-preview-retry" type="button" hidden data-i18n>Retry preview</button>
+            </div>
+          </section>
+          <aside class="editor-palette" aria-labelledby="editor-palette-title">
+            <h3 id="editor-palette-title" data-i18n>Add widgets</h3>
+            <div id="editor-palette" role="group" aria-labelledby="editor-palette-title"></div>
+          </aside>
+          <section class="editor-inspector" aria-labelledby="editor-inspector-title">
+            <div class="editor-widgets">
+              <h3 id="editor-widgets-title" data-i18n>Layers</h3>
+            <p id="editor-layer-help" class="editor-help" data-i18n>Drag to reorder. Press Delete to remove the selected layer.</p>
+              <ul id="editor-widgets" aria-labelledby="editor-widgets-title" aria-describedby="editor-layer-help"></ul>
+            </div>
+            <h3 id="editor-inspector-title" data-i18n>Widget settings</h3>
+            <p id="editor-no-selection" class="editor-help" data-i18n>Select a widget to edit its layout and style.</p>
+            <div id="editor-drawing-properties" class="setup-form" hidden>
+              <p class="editor-help" data-i18n>Drag the drawing on the canvas to move it.</p>
+              <button id="editor-remove-drawing" type="button" data-i18n>Clear drawing</button>
+            </div>
+            <div id="editor-properties" class="setup-form" hidden>
+              <p id="editor-selected-widget"></p>
+              <div class="editor-geometry">
+                <label data-i18n>X<input type="number" min="0" step="1" data-property="x"></label>
+                <label data-i18n>Y<input type="number" min="0" step="1" data-property="y"></label>
+                <label data-i18n>Width<input type="number" min="1" step="1" data-property="w"></label>
+                <label data-i18n>Height<input type="number" min="1" step="1" data-property="h"></label>
+              </div>
+              <label id="editor-variant-label" data-i18n>Variant<select data-property="variant"></select></label>
+              <div id="editor-text-style" class="editor-text-style">
+                <label data-i18n>Font<select data-property="font"><option value="regular" data-i18n>Regular</option><option value="bold" data-i18n>Bold</option><option value="mono" data-i18n>Monospace</option></select></label>
+                <label data-i18n>Font size<input type="number" min="8" max="60" step="1" data-property="size"></label>
+                <label data-i18n>Alignment<select data-property="align"><option value="left" data-i18n>Left</option><option value="center" data-i18n>Center</option><option value="right" data-i18n>Right</option></select></label>
+              </div>
+              <label id="editor-text-label" data-i18n>Custom text<textarea rows="3" maxlength="240" data-property="text"></textarea></label>
+              <div class="editor-order">
+                <button id="editor-move-up" type="button" data-i18n>Move up</button>
+                <button id="editor-move-down" type="button" data-i18n>Move down</button>
+                <button id="editor-remove" type="button" data-i18n>Remove</button>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div class="editor-footer">
+          <div class="editor-footer-status">
+            <p id="editor-dirty" class="editor-message" hidden data-i18n>Unsaved changes are kept here until you reload the page.</p>
+            <p id="editor-save-status" class="editor-message" role="status"></p>
+          </div>
+          <div class="editor-footer-buttons">
+            <button id="editor-blank" type="button" data-i18n>Start blank</button>
+            <button id="editor-reset" type="button" data-i18n>Reset to default</button>
+            <button id="editor-save" type="button" data-i18n>Save layout</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

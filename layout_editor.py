@@ -105,12 +105,12 @@ def validate_layout(screen, layout):
 
     widgets = WIDGETS[screen]
     normalized = []
-    drawing = None
+    drawing_seen = False
     for supplied in layout:
         if not isinstance(supplied, dict) or not isinstance(supplied.get('type'), str):
             raise ValueError('Choose a widget type.')
         if supplied['type'] == 'drawing':
-            if drawing is not None:
+            if drawing_seen:
                 raise ValueError('Use one drawing layer per screen.')
             bitmap = supplied.get('bitmap')
             if not isinstance(bitmap, str) or len(bitmap) != DRAWING_LENGTH:
@@ -121,7 +121,8 @@ def validate_layout(screen, layout):
                 raise ValueError('The drawing is invalid.') from error
             if len(pixels) != DRAWING_BYTES:
                 raise ValueError('The drawing is invalid.')
-            drawing = {'type': 'drawing', 'bitmap': b64encode(pixels).decode()}
+            normalized.append({'type': 'drawing', 'bitmap': b64encode(pixels).decode()})
+            drawing_seen = True
             continue
         definition = widgets.get(supplied['type'])
         if definition is None:
@@ -143,10 +144,8 @@ def validate_layout(screen, layout):
         except UnicodeEncodeError as error:
             raise ValueError('Use valid Unicode text.') from error
         normalized.append(widget)
-    if len(normalized) > MAX_WIDGETS:
+    if len(normalized) - drawing_seen > MAX_WIDGETS:
         raise ValueError(f'Use up to {MAX_WIDGETS} widgets per layout.')
-    if drawing is not None:
-        normalized.append(drawing)
     return normalized
 
 
