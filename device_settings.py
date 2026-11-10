@@ -18,8 +18,9 @@ from spotify_playback import TOKEN_URL
 
 DEFAULTS = {
     'location': 'Prague', 'latitude': 50.0755, 'longitude': 14.4378,
-    'timezone': 'Europe/Prague', 'units': 'celsius', 'rotation': 180,
+    'timezone': 'Europe/Prague', 'units': 'celsius', 'rotation': 180, 'language': 'en',
 }
+LANGUAGES = ('en', 'cs')
 REDIRECT_URI = 'http://127.0.0.1:8765/callback'
 SPOTIFY_SCOPE = 'user-read-currently-playing user-read-playback-state'
 
@@ -53,6 +54,8 @@ def validate_settings(payload):
     if (result['units'] not in ('celsius', 'fahrenheit')
             or type(result['rotation']) is not int or result['rotation'] not in (0, 180)):
         raise ValueError('Check the temperature units and rotation.')
+    if result['language'] not in LANGUAGES:
+        raise ValueError('Choose English or Czech.')
     return result
 
 
@@ -71,15 +74,34 @@ class DeviceSettings:
     def authorized(self, code):
         return hmac.compare_digest(self.code.encode(), code.encode())
 
+    def change_code(self, current, new_code):
+        if not isinstance(new_code, str) or not re.fullmatch(r'[!-~]{8,64}', new_code):
+            raise ValueError('Use 8–64 letters, numbers, or symbols without spaces.')
+        with self.lock:
+            if not self.authorized(current):
+                return False
+            write_private(self.code_path, new_code + '\n')
+            self.code = new_code
+            return True
+
     def status(self):
         return {'settings': self.values, 'spotifyConnected': self.credentials.is_file(),
                 'redirectUri': REDIRECT_URI}
 
     def save(self, payload):
-        values = validate_settings(payload)
         with self.lock:
-            write_private(self.path, json.dumps(values, ensure_ascii=False) + '\n')
-            self.values = values
+            self.write_values(validate_settings({**payload, 'language': self.values['language']}))
+
+    def set_language(self, language):
+        if language not in LANGUAGES:
+            raise ValueError('Choose English or Czech.')
+        with self.lock:
+            if self.values['language'] != language:
+                self.write_values({**self.values, 'language': language})
+
+    def write_values(self, values):
+        write_private(self.path, json.dumps(values, ensure_ascii=False) + '\n')
+        self.values = values
 
     def authorize(self, client_id):
         if not re.fullmatch(r'[a-fA-F0-9]{32}', client_id):
@@ -131,10 +153,10 @@ class DeviceSettings:
             self.credentials.unlink(missing_ok=True)
 
 
-def find_places(name):
+def find_places(name, language='en'):
     if not isinstance(name, str) or not 2 <= len(name.strip()) <= 80:
         raise ValueError('Enter at least two characters of the location name.')
-    query = urlencode({'name': name.strip(), 'count': 8, 'language': 'en'})
+    query = urlencode({'name': name.strip(), 'count': 8, 'language': language})
     with urlopen('https://geocoding-api.open-meteo.com/v1/search?' + query, timeout=6) as response:
         matches = json.load(response).get('results', [])
     return [{

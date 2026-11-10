@@ -90,19 +90,24 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
         '/app.css': ('app.css', 'text/css; charset=utf-8'),
         '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
         '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),
+        '/locale.js': ('locale.js', 'text/javascript; charset=utf-8'),
     }
     if wifi is not None:
         routes = {
             '/': ('wifi.html', 'text/html; charset=utf-8'),
             '/app.css': ('app.css', 'text/css; charset=utf-8'),
             '/wifi.js': ('wifi.js', 'text/javascript; charset=utf-8'),
+            '/locale.js': ('locale.js', 'text/javascript; charset=utf-8'),
         }
     subnet = ipaddress.IPv4Network(f'{host}/24', strict=False) if wifi is not None else None
     site = {url: (kind, (assets / filename).read_bytes())
             for url, (filename, kind) in routes.items()}
-    admin_routes = {'/api/settings', '/api/places', '/api/spotify/start',
+    admin_routes = {'/api/settings', '/api/setup-code', '/api/places', '/api/spotify/start',
                     '/api/spotify/finish', '/api/spotify/disconnect'}
-    allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {'/api/theme'}
+    allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {'/api/theme', '/api/language'}
+
+    def panel_status():
+        return {**state.status(), 'language': settings.values['language']}
 
     class Handler(BaseHTTPRequestHandler):
         def setup(self):
@@ -129,7 +134,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
         def setup_access(self):
             if settings.authorized(self.headers.get('X-Setup-Code', '')):
                 return True
-            self.json(403, {'error': 'Check the setup code printed by the installer.'})
+            self.json(403, {'error': 'Check the device setup code.'})
             return False
 
         def do_GET(self):
@@ -144,11 +149,11 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
                 self.reply(200, *site[path])
             elif wifi is not None:
                 if path == '/api/wifi':
-                    self.json(200, {'status': wifi.status})
+                    self.json(200, {'status': wifi.status, 'language': settings.values['language']})
                 else:
                     self.send_error(404)
             elif path == '/api/state':
-                self.json(200, state.status())
+                self.json(200, panel_status())
             elif path == '/api/settings':
                 if self.setup_access():
                     self.json(200, settings.status())
@@ -185,10 +190,20 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None):
                     if payload.get('theme') not in THEMES:
                         raise ValueError('Invalid theme.')
                     state.set_theme(payload['theme'])
-                    self.json(200, state.status())
+                    self.json(200, panel_status())
+                    return
+                if self.path == '/api/language':
+                    settings.set_language(payload['language'])
+                    self.json(200, panel_status())
+                    return
+                if self.path == '/api/setup-code':
+                    if settings.change_code(self.headers.get('X-Setup-Code', ''), payload['newCode']):
+                        self.json(200, {})
+                    else:
+                        self.json(403, {'error': 'Check the device setup code.'})
                     return
                 if self.path == '/api/places':
-                    self.json(200, {'places': find_places(payload['name'])})
+                    self.json(200, {'places': find_places(payload['name'], settings.values['language'])})
                     return
                 if self.path == '/api/spotify/start':
                     self.json(200, {'url': settings.authorize(payload['clientId'])})

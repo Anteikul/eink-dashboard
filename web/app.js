@@ -1,7 +1,6 @@
 const controls = document.querySelector('fieldset');
 const buttons = [...controls.querySelectorAll('button')];
 const status = document.querySelector('#status');
-const themeStatus = document.querySelector('#theme-status');
 const image = document.querySelector('#preview');
 const placeholder = document.querySelector('#placeholder');
 const trackLink = document.querySelector('#track-link');
@@ -9,17 +8,13 @@ let revision = null;
 let saving = false;
 let saveError = '';
 
-function showStatus(message) {
-  status.textContent = message;
-  themeStatus.textContent = message;
-}
-
 image.addEventListener('load', () => {
   placeholder.hidden = true;
   image.hidden = false;
 });
 
 function show(data) {
+  applyLanguage(data.language);
   const applied = data.appliedTheme === data.theme;
   trackLink.hidden = !data.trackUrl;
   if (data.trackUrl) trackLink.querySelector('a').href = data.trackUrl;
@@ -32,7 +27,7 @@ function show(data) {
     image.src = '/screen.png?frame=' + revision;
   }
   controls.disabled = false;
-  showStatus(saveError || (applied ? 'Shown on the display.' : 'Refreshing the display…'));
+  setText(status, saveError || (applied ? 'Shown on the display.' : 'Refreshing the display…'));
 }
 
 async function read() {
@@ -43,7 +38,7 @@ async function read() {
     const data = await response.json();
     if (!saving) show(data);
   } catch {
-    showStatus('Connection to the Pi lost. Reconnecting…');
+    setText(status, 'Connection to the Pi lost. Reconnecting…');
     controls.disabled = true;
   }
 }
@@ -53,7 +48,7 @@ for (const button of buttons) {
     if (saving || button.getAttribute('aria-pressed') === 'true') return;
     saving = true;
     saveError = '';
-    showStatus('Saving theme…');
+    setText(status, 'Saving theme…');
     try {
       const response = await fetch('/api/theme', {
         method: 'POST',
@@ -65,7 +60,7 @@ for (const button of buttons) {
       show(data);
     } catch (error) {
       saveError = error instanceof TypeError ? 'The Pi did not respond.' : error.message;
-      showStatus(saveError);
+      setText(status, saveError);
     } finally {
       saving = false;
     }

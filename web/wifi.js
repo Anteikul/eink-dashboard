@@ -7,12 +7,13 @@ async function refresh() {
     const response = await fetch('/api/wifi');
     if (!response.ok) return;
     const data = await response.json();
+    applyLanguage(data.language);
     if (data.status === 'failed') {
       submit.disabled = false;
-      message.textContent = 'Could not join that network. Check its name and password, then try again.';
+      setText(message, 'Could not join that network. Check its name and password, then try again.');
     } else if (data.status === 'joining') {
       submit.disabled = true;
-      message.textContent = 'The Pi is trying to connect. If this hotspot disappears and comes back, reconnect to it and reopen this page.';
+      setText(message, 'The Pi is trying to connect. If this hotspot disappears and comes back, reconnect to it and reopen this page.');
     }
   } catch {
     // The hotspot is temporarily unavailable while the Pi tries the new network.
@@ -22,7 +23,7 @@ async function refresh() {
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   submit.disabled = true;
-  message.textContent = 'Sending network details…';
+  setText(message, 'Sending network details…');
   try {
     const response = await fetch('/api/wifi', {
       method: 'POST',
@@ -32,9 +33,9 @@ form.addEventListener('submit', async (event) => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);
     form.elements.password.value = '';
-    message.textContent = 'The Pi will now try to connect. If it succeeds, this hotspot closes and the dashboard returns to the e-paper display. If the hotspot comes back, reconnect to it and reopen this page.';
+    setText(message, 'The Pi will now try to connect. If it succeeds, this hotspot closes and the dashboard returns to the e-paper display. If the hotspot comes back, reconnect to it and reopen this page.');
   } catch (error) {
-    message.textContent = error.message;
+    setText(message, error.message);
     submit.disabled = false;
   }
 });

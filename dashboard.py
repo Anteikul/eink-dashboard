@@ -23,6 +23,7 @@ from wifi_setup import AP_ADDRESS, Link, NetworkSetup
 WIDTH, HEIGHT = 250, 122
 ROW_BYTES = (HEIGHT + 7) // 8
 WEEKDAYS = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
+WEEKDAYS_CS = ('Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne')
 MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
 FOLDER = Path(__file__).resolve().parent
 ATLAS = json.loads((FOLDER / 'atlas.json').read_text(encoding='utf-8'))
@@ -54,8 +55,11 @@ def label(image, x, baseline, text, style, *, centered=False):
         x += advance
 
 
-def screen_content(now, weather, units='celsius'):
-    day = f'{WEEKDAYS[now.weekday()]} {now.day} {MONTHS[now.month - 1]} {now.year}'
+def screen_content(now, weather, units='celsius', language='en'):
+    if language == 'cs':
+        day = f'{WEEKDAYS_CS[now.weekday()]} {now.day}. {now.month}. {now.year}'
+    else:
+        day = f'{WEEKDAYS[now.weekday()]} {now.day} {MONTHS[now.month - 1]} {now.year}'
     if weather is None:
         temperature, icon = '—', None
     else:
@@ -66,8 +70,8 @@ def screen_content(now, weather, units='celsius'):
     return now.strftime('%H:%M'), day, temperature, icon
 
 
-def render(now, weather, theme='light', units='celsius'):
-    clock, day, temperature, icon = screen_content(now, weather, units)
+def render(now, weather, theme='light', units='celsius', language='en'):
+    clock, day, temperature, icon = screen_content(now, weather, units, language)
     image = bytearray(b'\x01' * (WIDTH * HEIGHT))
     for y in range(30, 95):
         image[y * WIDTH + 161] = 0
@@ -80,21 +84,22 @@ def render(now, weather, theme='light', units='celsius'):
     return bytearray(1 - pixel for pixel in image) if theme == 'dark' else image
 
 
-def render_wifi(hotspot, theme='light'):
+def render_wifi(hotspot, theme='light', language='en'):
     from PIL import Image, ImageDraw
     from music_screen import font
 
     image = Image.new('1', (WIDTH, HEIGHT), theme == 'light')
     draw = ImageDraw.Draw(image)
     ink = int(theme == 'dark')
-    draw.text((12, 7), 'Wi-Fi setup', font=font(22, bold=True), fill=ink)
+    title, password = ('Nastavení Wi-Fi', 'Heslo') if language == 'cs' else ('Wi-Fi setup', 'Password')
+    draw.text((12, 7), title, font=font(21, bold=True), fill=ink)
     for radius in (8, 15, 22):
         draw.arc((217 - radius, 31 - radius, 217 + radius, 31 + radius),
                  224, 316, fill=ink, width=2)
     draw.ellipse((215, 29, 219, 33), fill=ink)
     draw.line((12, 40, 238, 40), fill=ink)
     for y, text in ((47, f'Wi-Fi: {hotspot.ssid}'),
-                    (71, f'Password: {hotspot.password}'),
+                    (71, f'{password}: {hotspot.password}'),
                     (95, f'http://{AP_ADDRESS}')):
         draw.text((12, y), text, font=font(17), fill=ink)
     return bytearray(image.getdata())
@@ -209,7 +214,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     partial_count = 0
     previous = None
     state = PanelState(FOLDER / 'theme.txt')
-    network = NetworkSetup() if wifi_setup else None
+    network = NetworkSetup(password_file=FOLDER / '.hotspot-password') if wifi_setup else None
     if network:
         threading.Thread(target=network.poll, args=(stop,), daemon=True).start()
     active_link = Link(listen)
@@ -229,13 +234,14 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 active_link = link
             now = datetime.now(timezone)
             theme = state.theme
+            language = settings.values['language']
             current_weather = weather.current
             prepared = spotify.current if spotify else None
             music = prepared is not None and hotspot is None
             advancing = False
             if hotspot:
                 track = None
-                content = (theme, hotspot)
+                content = (theme, hotspot, language)
             elif music:
                 playback, cover = prepared
                 track = playback.track
@@ -250,17 +256,17 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 content = (*music_view, filled)
             else:
                 track = None
-                content = (theme, *screen_content(now, current_weather, units))
+                content = (theme, *screen_content(now, current_weather, units, language))
             if content == last_content:
                 stop.wait(min(1 - now.microsecond / 1_000_000, deadline - time.monotonic()))
                 continue
             started = time.monotonic()
             if hotspot:
-                screen = render_wifi(hotspot, theme)
+                screen = render_wifi(hotspot, theme, language)
             elif music:
                 screen = render_music(track, theme, cover, filled)
             else:
-                screen = render(now, current_weather, theme, units)
+                screen = render(now, current_weather, theme, units, language)
             pixels = pack(screen, rotation)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.

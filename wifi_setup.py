@@ -16,7 +16,7 @@ from threading import Lock
 INTERFACE = 'wlan0'
 AP_ADDRESS = '10.42.0.1'
 AP_UUID = 'de988050-9b54-49e2-8a76-6989fdfb8d27'
-AP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+AP_ALPHABET = '34679ACDEFHJKMNPRTUVWXY'
 WIFI_SOCKET = '/run/eink-wifi.sock'
 NMCLI = '/usr/bin/nmcli'
 GRACE = 30
@@ -73,8 +73,13 @@ class Link:
 
 
 class NetworkSetup:
-    def __init__(self, radio=None):
+    def __init__(self, radio=None, password_file=None):
         self.radio = radio if radio is not None else NetworkManagerRadio()
+        self.fixed_password = None
+        if password_file is not None and password_file.is_file():
+            self.fixed_password = password_file.read_text().strip()
+            if not re.fullmatch(r'[0-9]{8}', self.fixed_password):
+                raise ValueError('The fixed hotspot password must contain eight digits.')
         self.link = Link()
         self.lock = Lock()
         self.pending = None
@@ -128,7 +133,7 @@ class NetworkSetup:
             return
         if self.hotspot is None:
             suffix = ''.join(secrets.choice(AP_ALPHABET) for _ in range(4))
-            password = ''.join(secrets.choice(AP_ALPHABET) for _ in range(10))
+            password = self.fixed_password or ''.join(secrets.choice(AP_ALPHABET) for _ in range(8))
             self.hotspot = Hotspot(f'EinkSetup-{suffix}', password)
             with self.lock:
                 self.status = 'ready'
@@ -155,7 +160,8 @@ def configure(operation, ssid, password):
     hotspot = operation == 'hotspot'
     if hotspot:
         if (not re.fullmatch(r'EinkSetup-[A-Z2-9]{4}', ssid)
-                or not re.fullmatch(r'[A-Z2-9]{10}', password) or (address and active != AP_UUID)):
+                or not re.fullmatch(r'(?:[A-Z0-9]{8}|[A-Z2-9]{10})', password)
+                or (address and active != AP_UUID)):
             raise ValueError('Invalid hotspot request')
     elif operation != 'join' or (active, address) != (AP_UUID, AP_ADDRESS):
         raise ValueError('Wi-Fi setup is only available on the hotspot')

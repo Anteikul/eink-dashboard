@@ -4,23 +4,24 @@ A clock, weather, and the currently playing track on a black-and-white Waveshare
 
 ## Install on a Raspberry Pi
 
-Use Raspberry Pi OS (tested on Trixie), a network connection, and a connected e-paper display. Choose **Code → Download ZIP** on GitHub, copy the ZIP to the Pi, and run these commands on the Pi.
+Connect the e-paper display and boot Raspberry Pi OS with Wi-Fi and SSH configured in Imager. Sign in to the Pi over SSH, then paste this block into the Pi terminal from your regular user account.
 
 ```sh
-python3 -m zipfile -e eink-dashboard-main.zip .
-cd eink-dashboard-main
-sh install.sh
+cd "$HOME" &&
+  wget -O eink-dashboard-main.zip https://github.com/Anteikul/eink-dashboard/archive/refs/heads/main.zip &&
+  python3 -m zipfile -e eink-dashboard-main.zip . &&
+  sh eink-dashboard-main/install.sh
 ```
 
-You can also clone the repository and run `./install.sh` from the checkout. The installer uses `sudo` to install missing packages, grant your account access to HTTP port 80 with `authbind`, and enable automatic startup when the Pi connects to the network. Leave the installation directory in place.
+The installer uses `sudo` for missing packages and enables startup on boot. Leave the installation folder in place. To update a ZIP installation, rerun the same block in the same account and restart the Pi. If you cloned the repository, update and run `sh install.sh` in that checkout.
 
-Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Select the gear in the upper-right corner to open **Settings** and switch between light and dark themes. Under **Device setup**, enter the setup code printed by the installer to change location, time zone, temperature units, rotation, or Spotify access. To recover the code, run `cat .setup-code` from the installation directory on the Pi.
+Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Light and dark themes are below the preview. Use the gear to choose English or Czech. Unlock **Device setup** with the code printed by the installer to change location, time zone, temperature units, rotation, Spotify access, or the setup code itself. To recover the current code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
 
 ### Join a new Wi-Fi network
 
 Run `sh install.sh --wifi-setup` to enable or update the optional Wi-Fi setup feature. This installs a system service that can configure the Pi's built-in `wlan0` interface. The dashboard account can request the two supported Wi-Fi operations through a private local socket.
 
-When the Pi has no saved Wi-Fi connection available for about 30 seconds, it starts a temporary hotspot. The e-paper screen shows a Wi-Fi icon, the hotspot name, a randomly generated password, and the address `http://10.42.0.1/`.
+When the Pi has no saved Wi-Fi connection available for about 30 seconds, it starts a temporary hotspot. The e-paper screen shows a Wi-Fi icon, the hotspot name, an eight-character password, and the address `http://10.42.0.1/`. To use the same password each time, store your own eight digits in `.hotspot-password` in the installation directory, set the file permissions to `600`, and restart the Pi.
 
 1. On your phone, join the **EinkSetup** network shown on the display. Stay connected if the phone says the network has no internet.
 2. Open `http://10.42.0.1/` and enter the name and password of the 2.4 GHz network the Pi should join. Leave the password empty for an open network.

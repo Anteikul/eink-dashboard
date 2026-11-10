@@ -47,7 +47,7 @@ network.step(31, stop)
 network.step(61, stop)
 assert network.link.address == AP_ADDRESS
 hotspot = network.link.hotspot
-assert hotspot and len(hotspot.password) == 10
+assert hotspot and len(hotspot.password) == 8
 frame = render_wifi(hotspot)
 assert len(frame) == WIDTH * HEIGHT and set(frame) == {0, 1}
 
@@ -63,6 +63,13 @@ assert wifi_credentials('Open', '') == ('Open', '')
 
 with TemporaryDirectory() as folder:
     root = Path(folder)
+    password_file = root / '.hotspot-password'
+    password_file.write_text('12345678\n')
+    fixed_radio = Radio()
+    fixed_network = NetworkSetup(fixed_radio, password_file=password_file)
+    fixed_network.step(0, stop)
+    fixed_network.step(30, stop)
+    assert fixed_network.link.hotspot.password == '12345678'
     settings = DeviceSettings(root)
     state = PanelState(root / 'theme.txt')
     server = start_server('127.0.0.1', 0, state, settings, lambda: None, wifi=network)

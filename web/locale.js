@@ -1,0 +1,141 @@
+const czech = new Map(Object.entries({
+  'Display · E‑ink': 'Displej · E‑ink',
+  'Set up Wi-Fi · E‑ink': 'Nastavení Wi-Fi · E‑ink',
+  'E‑INK / NETWORK': 'E‑INK / SÍŤ',
+  'Display': 'Displej',
+  'Live display preview': 'Živý náhled displeje',
+  'Screen': 'Obrazovka',
+  'Waiting for the first frame…': 'Čekám na první snímek…',
+  'Last frame sent to the display': 'Poslední snímek odeslaný na displej',
+  'Open track in Spotify': 'Otevřít skladbu ve Spotify',
+  'Display theme': 'Režim displeje',
+  'The Raspberry Pi saves your selection.': 'Volba se uloží do Raspberry Pi.',
+  'Light': 'Světlý',
+  'Dark': 'Tmavý',
+  'Connecting to the display…': 'Připojuji se k displeji…',
+  'Weather': 'Počasí',
+  'Settings': 'Nastavení',
+  'Close': 'Zavřít',
+  'Language': 'Jazyk',
+  'Device setup': 'Nastavení zařízení',
+  'Setup code': 'Kód nastavení',
+  'Unlock': 'Odemknout',
+  'Location and display': 'Poloha a displej',
+  'City': 'Město',
+  'Search': 'Vyhledat',
+  'Search results': 'Výsledky hledání',
+  'Latitude': 'Zeměpisná šířka',
+  'Longitude': 'Zeměpisná délka',
+  'Time zone': 'Časové pásmo',
+  'Temperature units': 'Jednotky teploty',
+  'Rotation': 'Otočení',
+  'Save settings': 'Uložit nastavení',
+  'In the': 'V',
+  'select Web API and add this address to Redirect URIs.': 'vyber Web API a přidej tuto adresu do Redirect URIs.',
+  'Prepare sign-in': 'Připravit přihlášení',
+  'Open Spotify and authorize access': 'Otevřít Spotify a povolit přístup',
+  'After approving access, copy the full address from the new tab and paste it here. The browser may show a connection error at 127.0.0.1. The address bar still contains the information needed to finish setup.':
+    'Po schválení přístupu zkopíruj celou adresu z nové karty sem. Prohlížeč může na 127.0.0.1 zobrazit chybu připojení. Adresní řádek přesto obsahuje údaje k dokončení.',
+  'Redirect URL': 'Adresa po přesměrování',
+  'Finish connecting': 'Dokončit připojení',
+  'Disconnect Spotify': 'Odpojit Spotify',
+  'Shown on the display.': 'Zobrazeno na displeji.',
+  'Refreshing the display…': 'Displej se překresluje…',
+  'Connection to the Pi lost. Reconnecting…': 'Spojení s Pi se přerušilo. Připojuji se znovu…',
+  'Saving theme…': 'Ukládám režim…',
+  'The Pi did not respond.': 'Pi neodpovědělo.',
+  'Could not load settings.': 'Nastavení se nepodařilo načíst.',
+  'Check the device setup code.': 'Zkontroluj kód nastavení zařízení.',
+  'Change setup code': 'Změnit kód nastavení',
+  'Use 8–64 letters, numbers, or symbols without spaces.': 'Použij 8–64 znaků bez mezer a diakritiky.',
+  'New setup code': 'Nový kód nastavení',
+  'Confirm new code': 'Zopakuj nový kód',
+  'Save new code': 'Uložit nový kód',
+  'The new codes do not match.': 'Nové kódy se neshodují.',
+  'Setup code changed.': 'Kód nastavení byl změněn.',
+  'Open the dashboard directly on the Pi.': 'Otevři dashboard přímo na adrese Pi.',
+  'Invalid request.': 'Neplatný požadavek.',
+  'Invalid theme.': 'Neplatný režim.',
+  'Choose English or Czech.': 'Vyber angličtinu nebo češtinu.',
+  'Check the values you entered.': 'Zkontroluj zadané údaje.',
+  'Could not apply the change. Try again.': 'Změnu se nepodařilo provést. Zkus to znovu.',
+  'Enter a location name.': 'Zadej název místa.',
+  'Check the latitude and longitude.': 'Zkontroluj zeměpisnou šířku a délku.',
+  'Enter a valid time zone such as Europe/Prague.': 'Zadej platné časové pásmo, například Europe/Prague.',
+  'Check the temperature units and rotation.': 'Zkontroluj jednotky teploty a otočení.',
+  'Enter the Client ID from your Spotify app.': 'Zadej Client ID své aplikace Spotify.',
+  'Paste the address Spotify redirected you to.': 'Vlož adresu, na kterou tě Spotify přesměrovalo.',
+  'Paste the full address starting with http://127.0.0.1:8765/callback.': 'Vlož celou adresu začínající http://127.0.0.1:8765/callback.',
+  'The sign-in attempt expired. Start again.': 'Platnost přihlášení vypršela. Začni znovu.',
+  'This redirect URL does not match the current sign-in attempt.': 'Tato adresa neodpovídá aktuálnímu pokusu o přihlášení.',
+  'Spotify did not grant access. Start again.': 'Spotify nepovolilo přístup. Začni znovu.',
+  'Spotify did not grant access to playback and the queue.': 'Spotify nepovolilo přístup k přehrávání a frontě.',
+  'Enter at least two characters of the location name.': 'Zadej alespoň dva znaky názvu místa.',
+  'Your account is connected.': 'Účet je připojený.',
+  'Connect your Spotify account to show music.': 'Připoj účet Spotify pro zobrazení hudby.',
+  'Select a location': 'Vyber místo',
+  'Select a location from the list.': 'Vyber místo ze seznamu.',
+  'No matching locations found.': 'Žádné odpovídající místo se nenašlo.',
+  'Settings saved. The display will refresh shortly.': 'Nastavení je uložené. Displej se za chvíli obnoví.',
+  'Spotify connected. The display will refresh shortly.': 'Spotify je připojené. Displej se za chvíli obnoví.',
+  'Spotify disconnected.': 'Spotify je odpojené.',
+  'Set up Wi-Fi': 'Nastavení Wi-Fi',
+  'Choose the 2.4 GHz network the Raspberry Pi should join.': 'Vyber síť v pásmu 2,4 GHz, ke které se má Raspberry Pi připojit.',
+  'Network details': 'Údaje o síti',
+  'Network name (SSID)': 'Název sítě (SSID)',
+  'Network password': 'Heslo k síti',
+  'For an open network, leave the password empty.': 'U otevřené sítě nech heslo prázdné.',
+  'Connect Raspberry Pi': 'Připojit Raspberry Pi',
+  'Could not join that network. Check its name and password, then try again.': 'K síti se nepodařilo připojit. Zkontroluj název a heslo a zkus to znovu.',
+  'The Pi is trying to connect. If this hotspot disappears and comes back, reconnect to it and reopen this page.':
+    'Pi se pokouší připojit. Pokud hotspot zmizí a znovu se objeví, připoj se k němu a otevři tuto stránku znovu.',
+  'Sending network details…': 'Odesílám údaje o síti…',
+  'The Pi will now try to connect. If it succeeds, this hotspot closes and the dashboard returns to the e-paper display. If the hotspot comes back, reconnect to it and reopen this page.':
+    'Pi se teď pokusí připojit. Když uspěje, hotspot se vypne a na e‑inku se vrátí dashboard. Pokud se hotspot znovu objeví, připoj se k němu a otevři tuto stránku znovu.',
+  'Wi-Fi setup is busy or the hotspot has already closed.': 'Nastavení Wi-Fi právě probíhá nebo se hotspot už vypnul.',
+  'Enter a Wi-Fi network name of up to 32 bytes.': 'Zadej název Wi-Fi sítě dlouhý nejvýš 32 bajtů.',
+  'Enter a password of 8–63 characters or leave it empty for an open network.': 'Zadej heslo o délce 8–63 znaků nebo jej u otevřené sítě nech prázdné.',
+  'Failed to fetch': 'Pi neodpovědělo.',
+}));
+
+const pageTitle = document.title;
+const staticText = [...document.querySelectorAll('[data-i18n]')].flatMap(element =>
+  [...element.childNodes]
+    .filter(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim())
+    .map(node => [node, node.textContent]),
+);
+const staticAttributes = [...document.querySelectorAll('[data-i18n-attributes]')].flatMap(element =>
+  element.dataset.i18nAttributes.split(' ').map(name => [element, name, element.getAttribute(name)]),
+);
+const dynamicText = new Map();
+const languageSelect = document.querySelector('#language');
+
+function translate(message) {
+  return (document.documentElement.lang === 'cs' && czech.get(message)) || message;
+}
+
+function setText(element, message) {
+  dynamicText.set(element, message);
+  element.textContent = translate(message);
+}
+
+function applyLanguage(language) {
+  if (language !== 'en' && language !== 'cs') return;
+  if (languageSelect && !languageSelect.dataset.saving) {
+    languageSelect.disabled = false;
+    languageSelect.value = language;
+  }
+  if (document.documentElement.lang === language) return;
+  document.documentElement.lang = language;
+  document.title = translate(pageTitle);
+  for (const [node, original] of staticText) {
+    if (!dynamicText.has(node.parentElement)) {
+      const key = original.trim();
+      node.textContent = original.replace(key, translate(key));
+    }
+  }
+  for (const [element, name, original] of staticAttributes) {
+    element.setAttribute(name, translate(original));
+  }
+  for (const [element, message] of dynamicText) element.textContent = translate(message);
+}

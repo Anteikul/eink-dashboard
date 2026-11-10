@@ -31,6 +31,9 @@ if ! command -v apt-get >/dev/null || [ ! -e /dev/gpiochip0 ]; then
     printf '%s\n' 'The installer requires Raspberry Pi OS and a GPIO device.' >&2
     exit 1
 fi
+if systemctl is-enabled --quiet eink-wifi.socket; then
+    wifi_setup=1
+fi
 
 if ! check_dependencies >/dev/null 2>&1 || [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]; then
     sudo apt-get update

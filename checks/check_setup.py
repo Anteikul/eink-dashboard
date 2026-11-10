@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 from unittest.mock import patch
 
 from control import PanelState, start_server
-from dashboard import Weather, render
+from dashboard import Weather, render, screen_content
 from datetime import datetime
 from device_settings import DEFAULTS, DeviceSettings, REDIRECT_URI, SPOTIFY_SCOPE
 
@@ -35,6 +35,9 @@ with TemporaryDirectory() as folder:
             return error.code, json.load(error)
 
     try:
+        with urlopen(base) as response:
+            html = response.read().decode()
+        assert html.index('data-theme="light"') < html.index('<dialog')
         assert get('/api/settings', code='wrong')[0] == 403
         assert get('/api/settings', DEFAULTS, origin='http://other.example')[0] == 403
         status, data = get('/api/settings')
@@ -46,6 +49,14 @@ with TemporaryDirectory() as folder:
         assert get('/api/settings', {**selected, 'latitude': 91})[0] == 400
         assert get('/api/settings', selected)[0] == 200
         assert DeviceSettings(root).values == selected
+        assert get('/api/language', {'language': 'invalid'}, code='')[0] == 400
+        assert get('/api/language', {'language': 'cs'}, code='')[1]['language'] == 'cs'
+        assert get('/api/state', code='')[1]['language'] == 'cs'
+        legacy_settings = {key: value for key, value in selected.items() if key != 'language'}
+        assert get('/api/settings', legacy_settings)[0] == 200
+        assert DeviceSettings(root).values == {**selected, 'language': 'cs'}
+        assert screen_content(datetime(2026, 11, 10), None, language='cs')[1] == 'Út 10. 11. 2026'
+        assert screen_content(datetime(2026, 11, 10), None, language='en')[1] == 'Tue 10 Nov 2026'
         assert 'temperature_unit=fahrenheit' in Weather(selected).url
         assert len(render(datetime(2026, 11, 9), (45, 0, False), units='fahrenheit')) == 250 * 122
 
@@ -71,7 +82,15 @@ with TemporaryDirectory() as folder:
         assert get('/api/spotify/finish', {'callback': callback})[0] == 400
         assert get('/api/spotify/disconnect', {})[1]['spotifyConnected'] is False
         assert not settings.credentials.exists()
-        assert len(calls) == 3
+        assert len(calls) == 4
+        original_code = settings.code
+        assert get('/api/setup-code', {'newCode': 'short'})[0] == 400
+        assert get('/api/setup-code', {'newCode': 'new-setup-code'}, code='wrong')[0] == 403
+        assert get('/api/setup-code', {'newCode': 'new-setup-code'}) == (200, {})
+        assert get('/api/settings', code=original_code)[0] == 403
+        assert get('/api/settings', code='new-setup-code')[0] == 200
+        assert DeviceSettings(root).code == 'new-setup-code'
+        assert settings.code_path.stat().st_mode & 0o777 == 0o600
     finally:
         server.shutdown()
         server.server_close()

@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#eeece5">
   <title>Display · E‑ink</title>
   <link rel="stylesheet" href="/app.css">
+  <script src="/locale.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/setup.js" defer></script>
 </head>
@@ -13,101 +14,116 @@
   <main>
     <header>
       <div class="header-line">
-        <p class="device"><span class="mark" aria-hidden="true"></span> E‑INK / 2.13″</p>
-        <button id="open-settings" type="button" aria-label="Settings" aria-haspopup="dialog" aria-controls="settings-dialog">
+        <p class="device" data-i18n><span class="mark" aria-hidden="true"></span> E‑INK / 2.13″</p>
+        <button id="open-settings" type="button" aria-label="Settings" data-i18n-attributes="aria-label" aria-haspopup="dialog" aria-controls="settings-dialog" data-i18n>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M10 3h4l.5 2.5 1.3.7 2.4-.8 2 3.5-1.9 1.7v1.5l1.9 1.7-2 3.5-2.4-.8-1.3.7L14 20h-4l-.5-2.8-1.3-.7-2.4.8-2-3.5 1.9-1.7v-1.5L3.8 8.9l2-3.5 2.4.8 1.3-.7z"/>
             <circle cx="12" cy="11.5" r="3"/>
           </svg>
         </button>
       </div>
-      <h1>Display</h1>
-      <p class="intro">Live display preview</p>
+      <h1 data-i18n>Display</h1>
+      <p class="intro" data-i18n>Live display preview</p>
     </header>
     <section aria-labelledby="preview-heading">
       <div class="section-line">
-        <h2 id="preview-heading">Screen</h2>
+        <h2 id="preview-heading" data-i18n>Screen</h2>
         <span>250 × 122 px</span>
       </div>
       <div class="bezel">
         <div class="screen">
-          <p id="placeholder">Waiting for the first frame…</p>
-          <img id="preview" width="250" height="122" alt="Last frame sent to the display" hidden>
+          <p id="placeholder" data-i18n>Waiting for the first frame…</p>
+          <img id="preview" width="250" height="122" alt="Last frame sent to the display" data-i18n-attributes="alt" hidden>
         </div>
       </div>
-      <p class="track-link" id="track-link" hidden><a rel="noreferrer">Open track in Spotify</a></p>
+      <p class="track-link" id="track-link" hidden data-i18n><a rel="noreferrer" data-i18n>Open track in Spotify</a></p>
     </section>
-    <p id="status" role="status">Connecting to the display…</p>
-    <footer>Weather <a href="https://open-meteo.com/">Open‑Meteo</a></footer>
+    <section class="settings" aria-labelledby="settings-heading">
+      <div class="setting-label">
+        <h2 id="settings-heading" data-i18n>Display theme</h2>
+        <p data-i18n>The Raspberry Pi saves your selection.</p>
+      </div>
+      <fieldset aria-labelledby="settings-heading" disabled>
+        <button type="button" data-theme="light" aria-pressed="false" data-i18n>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>
+          Light
+        </button>
+        <button type="button" data-theme="dark" aria-pressed="false" data-i18n>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 14.1A8.9 8.9 0 0 1 9.9 3.2 9 9 0 1 0 20.8 14.1Z"/></svg>
+          Dark
+        </button>
+      </fieldset>
+    </section>
+    <p id="status" role="status" data-i18n>Connecting to the display…</p>
+    <footer data-i18n>Weather <a href="https://open-meteo.com/">Open‑Meteo</a></footer>
     <dialog id="settings-dialog" aria-labelledby="dialog-title">
       <div class="dialog-heading">
-        <h2 id="dialog-title">Settings</h2>
+        <h2 id="dialog-title" data-i18n>Settings</h2>
         <form method="dialog">
-          <button type="submit" autofocus>Close</button>
+          <button type="submit" autofocus data-i18n>Close</button>
         </form>
       </div>
-      <section class="settings" aria-labelledby="settings-heading">
-        <div class="setting-label">
-          <h2 id="settings-heading">Display theme</h2>
-          <p>The Raspberry Pi saves your selection.</p>
-        </div>
-        <fieldset aria-labelledby="settings-heading" disabled>
-          <button type="button" data-theme="light" aria-pressed="false">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>
-            Light
-          </button>
-          <button type="button" data-theme="dark" aria-pressed="false">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 14.1A8.9 8.9 0 0 1 9.9 3.2 9 9 0 1 0 20.8 14.1Z"/></svg>
-            Dark
-          </button>
-        </fieldset>
-      </section>
-      <p id="theme-status" role="status">Connecting to the display…</p>
+      <div class="language-setting">
+        <label for="language" data-i18n>Language</label>
+        <select id="language" disabled>
+          <option value="en" lang="en">English</option>
+          <option value="cs" lang="cs">Čeština</option>
+        </select>
+        <p id="language-status" role="status" data-i18n></p>
+      </div>
       <section class="setup" aria-labelledby="setup-title">
-        <h2 id="setup-title">Device setup</h2>
+        <h2 id="setup-title" data-i18n>Device setup</h2>
         <form id="unlock-form" class="setup-form">
-          <label for="setup-code">Setup code from the installer</label>
+          <label for="setup-code" data-i18n>Setup code</label>
           <div class="setup-row">
             <input id="setup-code" type="password" autocomplete="off" required>
-            <button type="submit">Unlock</button>
+            <button type="submit" data-i18n>Unlock</button>
           </div>
         </form>
-        <p id="setup-status" role="status"></p>
+        <p id="setup-status" role="status" data-i18n></p>
         <div id="setup-fields" hidden>
           <form id="device-form" class="setup-form">
-            <h3>Location and display</h3>
-            <label for="city">City</label>
+            <h3 data-i18n>Location and display</h3>
+            <label for="city" data-i18n>City</label>
             <div class="setup-row">
               <input id="city" name="location" required maxlength="120">
-              <button id="find-city" type="button">Search</button>
+              <button id="find-city" type="button" data-i18n>Search</button>
             </div>
-            <select id="places" aria-label="Search results" hidden></select>
+            <select id="places" aria-label="Search results" data-i18n-attributes="aria-label" hidden></select>
             <div class="setup-grid">
-              <label>Latitude<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
-              <label>Longitude<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
-              <label>Time zone<input name="timezone" placeholder="Europe/Prague" required></label>
-              <label>Temperature units<select name="units"><option value="celsius">°C</option><option value="fahrenheit">°F</option></select></label>
-              <label>Rotation<select name="rotation"><option value="0">0°</option><option value="180">180°</option></select></label>
+              <label data-i18n>Latitude<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
+              <label data-i18n>Longitude<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
+              <label data-i18n>Time zone<input name="timezone" placeholder="Europe/Prague" required></label>
+              <label data-i18n>Temperature units<select name="units"><option value="celsius">°C</option><option value="fahrenheit">°F</option></select></label>
+              <label data-i18n>Rotation<select name="rotation"><option value="0">0°</option><option value="180">180°</option></select></label>
             </div>
-            <button type="submit">Save settings</button>
+            <button type="submit" data-i18n>Save settings</button>
           </form>
           <section class="setup-form spotify-setup" aria-labelledby="spotify-title">
-            <h3 id="spotify-title">Spotify</h3>
-            <p id="spotify-status"></p>
+            <h3 id="spotify-title" data-i18n>Spotify</h3>
+            <p id="spotify-status" data-i18n></p>
             <form id="spotify-form" class="setup-form">
-              <p>In the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify Developer Dashboard</a> select Web API and add this address to Redirect URIs.</p>
+              <p data-i18n>In the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify Developer Dashboard</a> select Web API and add this address to Redirect URIs.</p>
               <code id="redirect-uri"></code>
-              <label>Client ID<input name="clientId" pattern="[a-fA-F0-9]{32}" autocomplete="off" required></label>
-              <button type="submit">Prepare sign-in</button>
+              <label data-i18n>Client ID<input name="clientId" pattern="[a-fA-F0-9]{32}" autocomplete="off" required></label>
+              <button type="submit" data-i18n>Prepare sign-in</button>
             </form>
             <form id="spotify-finish" class="setup-form" hidden>
-              <a id="spotify-auth" class="setup-link" target="_blank" rel="noopener noreferrer">Open Spotify and authorize access</a>
-              <p>After approving access, copy the full address from the new tab and paste it here. The browser may show a connection error at 127.0.0.1. The address bar still contains the information needed to finish setup.</p>
-              <label>Redirect URL<textarea name="callback" rows="3" autocomplete="off" required></textarea></label>
-              <button type="submit">Finish connecting</button>
+              <a id="spotify-auth" class="setup-link" data-i18n target="_blank" rel="noopener noreferrer">Open Spotify and authorize access</a>
+              <p data-i18n>After approving access, copy the full address from the new tab and paste it here. The browser may show a connection error at 127.0.0.1. The address bar still contains the information needed to finish setup.</p>
+              <label data-i18n>Redirect URL<textarea name="callback" rows="3" autocomplete="off" required></textarea></label>
+              <button type="submit" data-i18n>Finish connecting</button>
             </form>
-            <button id="spotify-disconnect" type="button" hidden>Disconnect Spotify</button>
+            <button id="spotify-disconnect" type="button" hidden data-i18n>Disconnect Spotify</button>
           </section>
+          <form id="setup-code-form" class="setup-form">
+            <h3 data-i18n>Change setup code</h3>
+            <p id="setup-code-help" data-i18n>Use 8–64 letters, numbers, or symbols without spaces.</p>
+            <label data-i18n>New setup code<input type="password" name="newCode" pattern="[!-~]{8,64}" required autocomplete="new-password" aria-describedby="setup-code-help"></label>
+            <label data-i18n>Confirm new code<input type="password" name="confirmCode" required autocomplete="new-password"></label>
+            <button type="submit" data-i18n>Save new code</button>
+            <p id="setup-code-status" role="status"></p>
+          </form>
         </div>
       </section>
     </dialog>

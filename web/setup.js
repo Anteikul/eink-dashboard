@@ -8,11 +8,29 @@ const setupFields = document.querySelector('#setup-fields');
 const setupStatus = document.querySelector('#setup-status');
 const places = document.querySelector('#places');
 const disconnect = document.querySelector('#spotify-disconnect');
+const setupCodeForm = document.querySelector('#setup-code-form');
+const setupCodeStatus = document.querySelector('#setup-code-status');
 let setupCode = '';
 let foundPlaces = [];
 
 openSettings.addEventListener('click', () => settingsDialog.showModal());
 settingsDialog.addEventListener('close', () => openSettings.focus());
+
+languageSelect.addEventListener('change', async () => {
+  const status = document.querySelector('#language-status');
+  languageSelect.dataset.saving = 'true';
+  languageSelect.disabled = true;
+  setText(status, '');
+  try {
+    const data = await api('/api/language', {language: languageSelect.value});
+    applyLanguage(data.language);
+  } catch (error) {
+    setText(status, error.message);
+  } finally {
+    delete languageSelect.dataset.saving;
+    applyLanguage(document.documentElement.lang);
+  }
+});
 
 async function api(path, payload) {
   const headers = {'X-Setup-Code': setupCode};
@@ -29,11 +47,11 @@ async function api(path, payload) {
 }
 
 async function action(work) {
-  setupStatus.textContent = '';
+  setText(setupStatus, '');
   try {
     await work();
   } catch (error) {
-    setupStatus.textContent = error.message;
+    setText(setupStatus, error.message);
   }
 }
 
@@ -47,8 +65,8 @@ function fillDevice(settings) {
 function showSettings(data) {
   fillDevice(data.settings);
   document.querySelector('#redirect-uri').textContent = data.redirectUri;
-  document.querySelector('#spotify-status').textContent = data.spotifyConnected
-    ? 'Your account is connected.' : 'Connect your Spotify account to show music.';
+  setText(document.querySelector('#spotify-status'), data.spotifyConnected
+    ? 'Your account is connected.' : 'Connect your Spotify account to show music.');
   spotifyForm.hidden = data.spotifyConnected;
   if (data.spotifyConnected) finishForm.hidden = true;
   disconnect.hidden = !data.spotifyConnected;
@@ -69,10 +87,13 @@ unlockForm.addEventListener('submit', (event) => {
 document.querySelector('#find-city').addEventListener('click', () => action(async () => {
   const data = await api('/api/places', {name: deviceForm.elements.location.value});
   foundPlaces = data.places;
-  places.replaceChildren(new Option('Select a location', ''));
+  if (places.options.length) dynamicText.delete(places.options[0]);
+  const placeholder = new Option('', '');
+  setText(placeholder, 'Select a location');
+  places.replaceChildren(placeholder);
   for (const [index, place] of foundPlaces.entries()) places.add(new Option(place.label, index));
   places.hidden = !foundPlaces.length;
-  setupStatus.textContent = foundPlaces.length ? 'Select a location from the list.' : 'No matching locations found.';
+  setText(setupStatus, foundPlaces.length ? 'Select a location from the list.' : 'No matching locations found.');
 }));
 
 places.addEventListener('change', () => {
@@ -85,7 +106,7 @@ deviceForm.addEventListener('submit', (event) => {
     const form = Object.fromEntries(new FormData(deviceForm));
     for (const key of ['latitude', 'longitude', 'rotation']) form[key] = Number(form[key]);
     showSettings(await api('/api/settings', form));
-    setupStatus.textContent = 'Settings saved. The display will refresh shortly.';
+    setText(setupStatus, 'Settings saved. The display will refresh shortly.');
   });
 });
 
@@ -105,7 +126,7 @@ finishForm.addEventListener('submit', (event) => {
     showSettings(await api('/api/spotify/finish', {callback: finishForm.elements.callback.value}));
     finishForm.reset();
     disconnect.focus();
-    setupStatus.textContent = 'Spotify connected. The display will refresh shortly.';
+    setText(setupStatus, 'Spotify connected. The display will refresh shortly.');
   });
 });
 
@@ -114,5 +135,27 @@ disconnect.addEventListener('click', () => action(async () => {
   finishForm.reset();
   finishForm.hidden = true;
   spotifyForm.elements.clientId.focus();
-  setupStatus.textContent = 'Spotify disconnected.';
+  setText(setupStatus, 'Spotify disconnected.');
 }));
+
+setupCodeForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const newCode = setupCodeForm.elements.newCode.value;
+  if (newCode !== setupCodeForm.elements.confirmCode.value) {
+    setText(setupCodeStatus, 'The new codes do not match.');
+    return;
+  }
+  const button = setupCodeForm.querySelector('button');
+  button.disabled = true;
+  setText(setupCodeStatus, '');
+  try {
+    await api('/api/setup-code', {newCode});
+    setupCode = newCode;
+    setupCodeForm.reset();
+    setText(setupCodeStatus, 'Setup code changed.');
+  } catch (error) {
+    setText(setupCodeStatus, error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
