@@ -31,7 +31,7 @@ Use **Draw** to sketch freehand with a mouse, pen, or finger. Each pen stroke cr
 
 The 250 × 122 canvas uses sample data and the same widget renderer as the display. Use the save icon to apply the current screen on the Pi. **Start blank** clears the current draft and **Reset to default** restores the built-in screen when applied.
 
-The folder icon opens the layout library for the current screen. Save the canvas under a name to keep a reusable copy on the Pi. The locked **Default layout** entry restores the built-in screen. Opening a layout loads it into the editor. Use **Apply to display** to put it on the e-paper screen.
+The folder icon opens the layout library for the current screen. Save the canvas under a name to keep a reusable copy on the Pi. The list shows a thumbnail and the save date for each design. Click a design to see it on the canvas. The locked **Default layout** entry restores the built-in screen. Use **Apply to display** to put the current layout on the e-paper screen.
 
 ### Join a new Wi-Fi network
 

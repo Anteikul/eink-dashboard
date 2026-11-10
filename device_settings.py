@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unicodedata
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -35,6 +36,26 @@ def layout_name(value):
     if not 1 <= len(name) <= 64 or not name.isprintable():
         raise ValueError('Enter a layout name with 1–64 characters.')
     return name
+
+
+def library_entry(value):
+    if not isinstance(value, dict):
+        return value, None
+    saved_at = value.get('savedAt')
+    return value['layout'], saved_at if isinstance(saved_at, str) else None
+
+
+def library_listing(entries, *, details=False):
+    names = sorted(entries, key=str.casefold)
+    result = {'names': names}
+    if details:
+        records = []
+        for name in names:
+            layout, saved_at = library_entry(entries[name])
+            records.append({'name': name, 'savedAt': saved_at,
+                            'layers': len(layout) if isinstance(layout, list) else None})
+        result['entries'] = sorted(records, key=lambda record: record['savedAt'] or '', reverse=True)
+    return result
 
 
 def write_private(path, value):
@@ -121,13 +142,14 @@ class DeviceSettings:
         except ValueError as error:
             raise OSError('Could not read the layout library.') from error
 
-    def get_layout_library(self, screen, name=None):
+    def get_layout_library(self, screen, name=None, *, details=False):
         if screen not in LAYOUT_SCREENS:
             raise ValueError('Choose Dashboard or Playback.')
         entries = self.read_library()[screen]
         if name is None:
-            return {'names': sorted(entries, key=str.casefold)}
-        return {'layout': validate_layout(screen, entries[layout_name(name)])}
+            return library_listing(entries, details=details)
+        layout, _ = library_entry(entries[layout_name(name)])
+        return {'layout': validate_layout(screen, layout)}
 
     def edit_layout_library(self, screen, name, layout, *, delete=False):
         if screen not in LAYOUT_SCREENS:
@@ -145,9 +167,9 @@ class DeviceSettings:
                     raise ValueError('A saved layout already has that name.')
                 if len(entries) >= MAX_SAVED_LAYOUTS:
                     raise ValueError(f'This screen already has {MAX_SAVED_LAYOUTS} saved layouts.')
-                entries[name] = layout
+                entries[name] = {'layout': layout, 'savedAt': datetime.now(timezone.utc).isoformat()}
             write_private(self.library_path, json.dumps(library, ensure_ascii=False) + '\n')
-            return {'names': sorted(entries, key=str.casefold)}
+            return library_listing(entries, details=True)
 
     def authorized(self, code):
         return hmac.compare_digest(self.code.encode(), code.encode())

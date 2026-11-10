@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
@@ -147,18 +148,32 @@ with TemporaryDirectory() as folder:
         assert request(listing) == (200, b'{"names": []}')
         assert request(library, {**draft, 'name': ' '})[0] == 400
         assert request(library, {**draft, 'layout': [{**text, 'x': 250}]})[0] == 400
-        assert request(library, draft)[0] == 200
+        status, payload = request(library, draft)
+        assert status == 200
+        metadata = json.loads(payload)['entries'][0]
+        assert metadata['name'] == 'Moje plocha' and metadata['layers'] == 2
+        assert 0 <= (datetime.now(timezone.utc) - datetime.fromisoformat(metadata['savedAt'])).total_seconds() < 10
         assert request(library, {**draft, 'layout': []})[0] == 400
         assert json.loads(request(entry)[1])['layout'] == draft['layout']
         assert json.loads(request(listing)[1])['names'] == ['Moje plocha']
         assert json.loads(request(library + '?screen=playback')[1])['names'] == []
-        assert DeviceSettings(root).read_library()['dashboard']['Moje plocha'] == draft['layout']
+        assert DeviceSettings(root).get_layout_library('dashboard', 'Moje plocha')['layout'] == draft['layout']
+        assert json.loads(request(listing + '&details=1')[1])['entries'] == [metadata]
+        assert request(entry + '&thumbnail=1', code='wrong')[0] == 403
+        assert request(entry + '&thumbnail=1') == request(
+            '/api/layout-preview', {'screen': 'dashboard', 'layout': draft['layout']})
+        assert request(listing + '&name=&thumbnail=1') == request(
+            '/api/layout-preview', {'screen': 'dashboard', 'layout': schema['defaults']['dashboard']})
         assert (root / '.layout-library.json').stat().st_mode & 0o777 == 0o600
         assert settings.layouts == {'dashboard': None, 'playback': []}
         delete = {'screen': 'dashboard', 'name': 'Moje plocha', 'delete': True}
         assert request(library, delete)[0] == 200
         assert request(entry)[0] == 404
         assert request(listing) == (200, b'{"names": []}')
+        settings.library_path.write_text(json.dumps({'dashboard': {'Starší': custom}, 'playback': {}}))
+        assert json.loads(request(listing + '&details=1')[1])['entries'] == [
+            {'name': 'Starší', 'savedAt': None, 'layers': 1}]
+        assert settings.get_layout_library('dashboard', 'Starší')['layout'] == custom
     finally:
         server.shutdown()
         server.server_close()

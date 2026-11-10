@@ -46,8 +46,6 @@
   const libraryName = element('editor-library-name');
   const librarySave = element('editor-library-save');
   const libraryList = element('editor-library-list');
-  const libraryOpen = element('editor-library-open');
-  const libraryDelete = element('editor-library-delete');
   const libraryStatus = element('editor-library-status');
   const drafts = Object.fromEntries(tabs.map(tab => [
     tab.dataset.screen, {saved: null, librarySaved: null, layout: null, selection: -1, message: '', undo: [], redo: []},
@@ -68,6 +66,7 @@
     'playback-time': 'M4 4h16v16H4Zm5 5 6 3-6 3Z',
     drawing: 'm4 15 10-10 4 4L8 19l-5 1 1-5Zm10-10 2-2a1.5 1.5 0 0 1 2 0l3 3a1.5 1.5 0 0 1 0 2l-2 2M13 21h8',
     grip: 'M8 5h.01m8 0h.01M8 12h.01m8 0h.01M8 19h.01m8 0h.01',
+    trash: 'M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7',
   };
   const badCode = 'Check the device setup code.';
 
@@ -89,6 +88,10 @@
   const inkTiles = new Map();
   let savingScreen;
   let libraryOperation;
+  let librarySelection;
+  let libraryThumbnails;
+  let libraryEntries = [];
+  let librarySelected = null;
 
   const current = () => drafts[screen];
   const layers = (layout = current().layout) => layout ?? schema.defaults[screen];
@@ -140,7 +143,7 @@
     clearDrawing.disabled = drawings().length === 0;
     undo.disabled = current().undo.length === 0;
     redo.disabled = current().redo.length === 0;
-    save.disabled = Boolean(savingScreen) || !hasChanges(current());
+    save.disabled = Boolean(savingScreen || librarySelection) || !hasChanges(current());
     setText(saveStatus, current().message);
   }
 
@@ -273,11 +276,11 @@
     updateSelection();
   }
 
-  function clearPreview() {
+  function clearPreview(keepFrame = false) {
     atlas?.close();
     atlas = undefined;
     tiles.clear();
-    frame.clearRect(0, 0, preview.width, preview.height);
+    if (!keepFrame) frame.clearRect(0, 0, preview.width, preview.height);
   }
 
   function compose() {
@@ -490,27 +493,180 @@
 
   function updateLibraryControls() {
     const busy = Boolean(libraryOperation);
-    librarySave.disabled = busy || !libraryName.value.trim();
-    libraryList.disabled = busy;
-    libraryOpen.disabled = busy;
-    libraryDelete.disabled = busy || !libraryList.value;
+    librarySave.disabled = busy || Boolean(librarySelection) || !libraryName.value.trim();
+    for (const button of libraryList.querySelectorAll('button')) {
+      button.disabled = busy || (button.hasAttribute('data-delete') && Boolean(librarySelection));
+      if (button.hasAttribute('data-name')) {
+        button.setAttribute('aria-pressed', String(button.dataset.name === librarySelected));
+      }
+    }
   }
 
-  function showLibraryNames(names, selected = '') {
-    libraryList.replaceChildren(new Option('🔒 ' + translate('Default layout'), ''),
-      ...names.map(name => new Option(name, name)));
-    if (names.includes(selected)) libraryList.value = selected;
+  function libraryPath(params) {
+    return '/api/layout-library?' + new URLSearchParams({screen, ...params});
+  }
+
+  function stopLibraryThumbnails() {
+    if (!libraryThumbnails) return;
+    libraryThumbnails.controller.abort();
+    libraryThumbnails.observer.disconnect();
+    for (const url of libraryThumbnails.urls) URL.revokeObjectURL(url);
+    libraryThumbnails = undefined;
+  }
+
+  function loadLibraryThumbnails(images) {
+    stopLibraryThumbnails();
+    const controller = new AbortController();
+    const urls = [];
+    const queue = [];
+    let loading = false;
+    async function nextThumbnail() {
+      if (loading) return;
+      loading = true;
+      while (queue.length && !controller.signal.aborted) {
+        const img = queue.shift();
+        try {
+          const response = await request(libraryPath({name: img.dataset.name, thumbnail: '1'}),
+            {signal: controller.signal});
+          const blob = await response.blob();
+          if (controller.signal.aborted || blob.type !== 'image/png') continue;
+          const url = URL.createObjectURL(blob);
+          urls.push(url);
+          img.src = url;
+          img.hidden = false;
+        } catch {
+          // The card still opens normally if its thumbnail cannot be rendered.
+        }
+      }
+      loading = false;
+    }
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        observer.unobserve(entry.target);
+        queue.push(entry.target.querySelector('img'));
+      }
+      nextThumbnail();
+    }, {root: libraryList, rootMargin: '45px'});
+    libraryThumbnails = {controller, observer, urls};
+    for (const img of images) observer.observe(img.parentElement);
+  }
+
+  function showLibraryEntries(entries, selected = null) {
+    libraryEntries = entries;
+    librarySelected = selected;
+    const dateFormat = new Intl.DateTimeFormat(document.documentElement.lang, {
+      dateStyle: 'medium', timeStyle: 'short',
+    });
+    const images = [];
+    const items = [{name: '', layers: schema.defaults[screen].length}, ...entries].map(entry => {
+      const {name, savedAt, layers} = entry;
+      const row = document.createElement('li');
+      row.className = 'editor-library-item';
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'editor-library-card';
+      card.dataset.name = name;
+      const thumb = document.createElement('span');
+      thumb.className = 'editor-library-thumb';
+      const img = document.createElement('img');
+      img.alt = '';
+      img.hidden = true;
+      img.dataset.name = name;
+      thumb.append(img);
+      images.push(img);
+      const details = document.createElement('span');
+      details.className = 'editor-library-details';
+      const title = document.createElement('strong');
+      title.textContent = name || '🔒 ' + translate('Default layout');
+      const date = document.createElement('small');
+      if (!name) {
+        date.textContent = translate('Built-in layout');
+      } else if (savedAt && Number.isFinite(Date.parse(savedAt))) {
+        const time = document.createElement('time');
+        time.dateTime = savedAt;
+        time.textContent = dateFormat.format(new Date(savedAt));
+        date.append(time);
+      } else {
+        date.textContent = translate('Save date unknown');
+      }
+      details.append(title, date);
+      if (layers !== null) {
+        const count = document.createElement('small');
+        count.className = 'editor-library-layer-count';
+        count.textContent = translate('Layers') + ' · ' + layers;
+        details.append(count);
+      }
+      card.append(thumb, details);
+      row.append(card);
+      if (name) {
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'editor-icon';
+        deleteButton.dataset.delete = name;
+        deleteButton.setAttribute('aria-label', translate('Delete saved layout'));
+        deleteButton.append(icon('trash'));
+        row.append(deleteButton);
+      }
+      return row;
+    });
+    libraryList.replaceChildren(...items);
     updateLibraryControls();
+    loadLibraryThumbnails(images);
   }
 
-  async function requestLibrary({name, payload, onSuccess}) {
+  function reportLibraryError(error) {
+    const message = error instanceof TypeError ? 'The Pi did not respond.' : error.message;
+    if (message === badCode) askForCode(message);
+    else setText(libraryStatus, message);
+  }
+
+  async function chooseLibraryLayout(card) {
+    if (drag || layerDrag || paletteDrag || libraryOperation) return;
+    librarySelection?.abort();
+    const controller = new AbortController();
+    librarySelection = controller;
+    const signal = controller.signal;
+    const name = card.dataset.name;
+    setText(libraryStatus, '');
+    updateLibraryControls();
+    updateStatus();
+    try {
+      let layout = null;
+      if (name) {
+        const response = await request(libraryPath({name}), {
+          signal, fallback: 'Could not open the layout library.',
+        });
+        ({layout} = await response.json());
+      }
+      if (signal.aborted) return;
+      layout = editableLayout(layout);
+      // Reuse the finished thumbnail while the editable layer preview arrives.
+      clearPreview(true);
+      const img = card.querySelector('img');
+      if (img.complete && img.naturalWidth) frame.drawImage(img, 0, 0, schema.width, schema.height);
+      const draft = current();
+      draft.selection = -1;
+      setDraft(layout, true);
+      draft.librarySaved = {name, layout};
+      librarySelected = name;
+    } catch (error) {
+      if (!signal.aborted) reportLibraryError(error);
+    } finally {
+      if (librarySelection === controller) {
+        librarySelection = undefined;
+        updateLibraryControls();
+        updateStatus();
+      }
+    }
+  }
+
+  async function requestLibrary({payload, onSuccess}) {
     if (libraryOperation) return;
     const controller = new AbortController();
     libraryOperation = controller;
     const signal = controller.signal;
-    const params = new URLSearchParams({screen});
-    if (name !== undefined) params.set('name', name);
-    const path = '/api/layout-library' + (payload ? '' : '?' + params);
+    const path = payload ? '/api/layout-library' : libraryPath({details: '1'});
     setText(libraryStatus, '');
     updateLibraryControls();
     try {
@@ -522,10 +678,7 @@
       const data = await response.json();
       if (!signal.aborted) onSuccess(data);
     } catch (error) {
-      if (signal.aborted) return;
-      const message = error instanceof TypeError ? 'The Pi did not respond.' : error.message;
-      if (message === badCode) askForCode(message);
-      else setText(libraryStatus, message);
+      if (!signal.aborted) reportLibraryError(error);
     } finally {
       if (libraryOperation === controller) {
         libraryOperation = undefined;
@@ -535,11 +688,19 @@
   }
 
   function loadLibrary() {
+    stopLibraryRequests();
+    libraryForm.reset();
+    showLibraryEntries([]);
+    requestLibrary({onSuccess: ({entries}) => showLibraryEntries(entries, current().librarySaved?.name)});
+  }
+
+  function stopLibraryRequests() {
     libraryOperation?.abort();
     libraryOperation = undefined;
-    libraryForm.reset();
-    showLibraryNames([]);
-    requestLibrary({onSuccess: data => showLibraryNames(data.names)});
+    librarySelection?.abort();
+    librarySelection = undefined;
+    stopLibraryThumbnails();
+    if (schema) updateStatus();
   }
 
   function setLibraryVisible(visible) {
@@ -550,8 +711,7 @@
     if (visible) {
       loadLibrary();
     } else {
-      libraryOperation?.abort();
-      libraryOperation = undefined;
+      stopLibraryRequests();
     }
   }
 
@@ -1259,7 +1419,6 @@
 
   libraryToggle.addEventListener('click', () => setLibraryVisible(library.hidden));
   libraryName.addEventListener('input', updateLibraryControls);
-  libraryList.addEventListener('change', updateLibraryControls);
   libraryForm.addEventListener('submit', (event) => {
     event.preventDefault();
     if (drag || layerDrag || paletteDrag) return;
@@ -1272,36 +1431,27 @@
     const snapshot = draft.layout;
     requestLibrary({
       payload: {name, layout: layers()},
-      onSuccess: ({names}) => {
+      onSuccess: ({entries}) => {
         draft.librarySaved = {name, layout: snapshot};
         libraryForm.reset();
-        showLibraryNames(names, name);
+        showLibraryEntries(entries, name);
         setText(libraryStatus, 'Layout saved to the library.');
       },
     });
   });
-  libraryOpen.addEventListener('click', () => {
-    if (drag || layerDrag || paletteDrag) return;
-    const name = libraryList.value;
-    const openLayout = ({layout}) => {
-      layout = editableLayout(layout);
-      current().selection = -1;
-      setDraft(layout, true);
-      current().librarySaved = {name, layout};
-      setLibraryVisible(false);
-      libraryToggle.focus();
-    };
-    if (name) requestLibrary({name, onSuccess: openLayout});
-    else openLayout({layout: null});
-  });
-  libraryDelete.addEventListener('click', () => {
-    const name = libraryList.value;
-    if (!name || !window.confirm(translate('Delete this saved layout?'))) return;
+  libraryList.addEventListener('click', (event) => {
+    const card = event.target.closest('.editor-library-card');
+    if (card) {
+      chooseLibraryLayout(card);
+      return;
+    }
+    const name = event.target.closest('button[data-delete]')?.dataset.delete;
+    if (!name || librarySelection || !window.confirm(translate('Delete this saved layout?'))) return;
     requestLibrary({
       payload: {name, delete: true},
-      onSuccess: ({names}) => {
+      onSuccess: ({entries}) => {
         if (current().librarySaved?.name === name) current().librarySaved = null;
-        showLibraryNames(names);
+        showLibraryEntries(entries, librarySelected === name ? null : librarySelected);
       },
     });
   });
@@ -1309,7 +1459,7 @@
   save.addEventListener('click', async () => {
     finishText(true);
     const draft = current();
-    if (!hasChanges(draft) || savingScreen || drag || paletteDrag || layerDrag) return;
+    if (!hasChanges(draft) || savingScreen || librarySelection || drag || paletteDrag || layerDrag) return;
     const payload = {screen, layout: draft.layout};
     const code = setupCode;
     savingScreen = screen;
@@ -1342,7 +1492,7 @@
         widgetButtons[index].querySelector('span').textContent = layerName(widget);
       }
       renderPalette();
-      if (libraryList.options.length) libraryList.options[0].text = '🔒 ' + translate('Default layout');
+      if (!library.hidden) showLibraryEntries(libraryEntries, librarySelected);
       updateInspector();
       updateStatus();
     } else if (!records.some(record => record.oldValue !== root.getAttribute('data-theme'))) {

@@ -131,8 +131,11 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Content-Security-Policy',
                              "default-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.end_headers()
+                self.wfile.write(body)
+            except ConnectionError:
+                self.close_connection = True
 
         def json(self, status, body):
             self.reply(status, 'application/json', json.dumps(body).encode())
@@ -142,6 +145,16 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 return True
             self.json(403, {'error': 'Check the device setup code.'})
             return False
+
+        def layout_png(self, screen, layout, *, layers=False):
+            if layout_preview is None:
+                from dashboard import render_layout_preview
+            else:
+                render_layout_preview = layout_preview
+            preferences = settings.values
+            options = {'layers': True} if layers else {}
+            return render_layout_preview(screen, layout, state.theme, preferences['language'],
+                                         preferences['units'], **options)
 
         def request_authority(self):
             request_host = self.headers.get('Host', '').lower()
@@ -180,7 +193,16 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     screen = params.get('screen', [''])[0]
                     name = params.get('name', [None])[0]
                     try:
-                        self.json(200, settings.get_layout_library(screen, name))
+                        if params.get('thumbnail') == ['1']:
+                            if screen not in ('dashboard', 'playback') or name is None:
+                                raise ValueError('Invalid preview.')
+                            layout = settings.get_layout_library(screen, name)['layout'] if name else None
+                            if layout is None:
+                                layout = editor_schema()['defaults'][screen]
+                            self.reply(200, 'image/png', self.layout_png(screen, layout))
+                        else:
+                            self.json(200, settings.get_layout_library(
+                                screen, name, details=params.get('details') == ['1']))
                     except KeyError:
                         self.json(404, {'error': 'That saved layout no longer exists.'})
                     except ValueError as error:
@@ -260,15 +282,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     layers = payload.get('layers', False)
                     if type(layers) is not bool or (layers and layout is None):
                         raise ValueError('Invalid preview.')
-                    if layout_preview is None:
-                        from dashboard import render_layout_preview
-                    else:
-                        render_layout_preview = layout_preview
-                    preferences = settings.values
-                    options = {'layers': True} if layers else {}
-                    png = render_layout_preview(screen, layout, state.theme, preferences['language'],
-                                                preferences['units'], **options)
-                    self.reply(200, 'image/png', png)
+                    self.reply(200, 'image/png', self.layout_png(screen, layout, layers=layers))
                     return
                 if self.path == '/api/places':
                     self.json(200, {'places': find_places(payload['name'], settings.values['language'])})
