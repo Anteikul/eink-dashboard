@@ -10,8 +10,8 @@ from music_screen import fit_lines, font
 
 WIDTH, HEIGHT = 250, 122
 MAX_WIDGETS = 18
-DRAWING_BYTES = ((WIDTH + 7) // 8) * HEIGHT
-DRAWING_LENGTH = 4 * ((DRAWING_BYTES + 2) // 3)
+MAX_DRAWINGS = 96
+BOX_KEYS = ('x', 'y', 'w', 'h')
 FONTS = ('regular', 'bold', 'mono')
 ALIGNMENTS = ('left', 'center', 'right')
 WRAPPING = (('wrapped', 'Wrapped'), ('single', 'Single line'))
@@ -83,6 +83,7 @@ def editor_schema():
         'width': WIDTH,
         'height': HEIGHT,
         'maxWidgets': MAX_WIDGETS,
+        'maxDrawings': MAX_DRAWINGS,
         'defaults': {
             'dashboard': [dashboard['clock']['template'].copy(), dashboard['date']['template'].copy(),
                           {**dashboard['divider']['template'], 'variant': 'vertical',
@@ -94,44 +95,58 @@ def editor_schema():
     })
 
 
+def _validate_box(x, y, w, h):
+    if (any(type(value) is not int for value in (x, y, w, h))
+            or not (0 <= x and 0 <= y and 1 <= w <= WIDTH - x and 1 <= h <= HEIGHT - y)):
+        raise ValueError('Keep each widget inside the display.')
+
+
+def _validate_drawing(supplied):
+    box = {}
+    w, h = WIDTH, HEIGHT
+    if any(key in supplied for key in BOX_KEYS):
+        box = {key: supplied.get(key) for key in BOX_KEYS}
+        _validate_box(**box)
+        w, h = box['w'], box['h']
+    size = ((w + 7) // 8) * h
+    bitmap = supplied.get('bitmap')
+    if not isinstance(bitmap, str) or len(bitmap) != 4 * ((size + 2) // 3):
+        raise ValueError('The drawing is invalid.')
+    try:
+        pixels = b64decode(bitmap, validate=True)
+    except ValueError as error:
+        raise ValueError('The drawing is invalid.') from error
+    if len(pixels) != size:
+        raise ValueError('The drawing is invalid.')
+    return {'type': 'drawing', **box, 'bitmap': b64encode(pixels).decode()}
+
+
 def validate_layout(screen, layout):
     """Return normalized widget dictionaries, or None to select the original screen."""
     if screen not in ('dashboard', 'playback'):
         raise ValueError('Choose Dashboard or Playback.')
     if layout is None:
         return None
-    if not isinstance(layout, list) or len(layout) > MAX_WIDGETS + 1:
-        raise ValueError(f'Use up to {MAX_WIDGETS} widgets per layout.')
+    if not isinstance(layout, list) or len(layout) > MAX_WIDGETS + MAX_DRAWINGS:
+        raise ValueError('The layout has too many layers.')
 
     widgets = WIDGETS[screen]
     normalized = []
-    drawing_seen = False
+    drawings = 0
     for supplied in layout:
         if not isinstance(supplied, dict) or not isinstance(supplied.get('type'), str):
             raise ValueError('Choose a widget type.')
         if supplied['type'] == 'drawing':
-            if drawing_seen:
-                raise ValueError('Use one drawing layer per screen.')
-            bitmap = supplied.get('bitmap')
-            if not isinstance(bitmap, str) or len(bitmap) != DRAWING_LENGTH:
-                raise ValueError('The drawing is invalid.')
-            try:
-                pixels = b64decode(bitmap, validate=True)
-            except ValueError as error:
-                raise ValueError('The drawing is invalid.') from error
-            if len(pixels) != DRAWING_BYTES:
-                raise ValueError('The drawing is invalid.')
-            normalized.append({'type': 'drawing', 'bitmap': b64encode(pixels).decode()})
-            drawing_seen = True
+            drawings += 1
+            if drawings > MAX_DRAWINGS:
+                raise ValueError(f'Use up to {MAX_DRAWINGS} pen strokes per layout.')
+            normalized.append(_validate_drawing(supplied))
             continue
         definition = widgets.get(supplied['type'])
         if definition is None:
             raise ValueError('This widget is unavailable on this screen.')
         widget = {key: supplied.get(key, value) for key, value in definition['template'].items()}
-        x, y, w, h = (widget[key] for key in ('x', 'y', 'w', 'h'))
-        if (any(type(value) is not int for value in (x, y, w, h))
-                or not (0 <= x and 0 <= y and 1 <= w <= WIDTH - x and 1 <= h <= HEIGHT - y)):
-            raise ValueError('Keep each widget inside the display.')
+        _validate_box(*(widget[key] for key in BOX_KEYS))
         if widget['variant'] not in tuple(variant['value'] for variant in definition['variants']):
             raise ValueError('Choose an available widget style.')
         if (type(widget['size']) is not int or not 8 <= widget['size'] <= 60
@@ -144,7 +159,7 @@ def validate_layout(screen, layout):
         except UnicodeEncodeError as error:
             raise ValueError('Use valid Unicode text.') from error
         normalized.append(widget)
-    if len(normalized) - drawing_seen > MAX_WIDGETS:
+    if len(normalized) - drawings > MAX_WIDGETS:
         raise ValueError(f'Use up to {MAX_WIDGETS} widgets per layout.')
     return normalized
 
@@ -420,6 +435,11 @@ def _draw_progress(mask, widget, filled):
             draw.rectangle((inset, inset, inset + filled - 1, h - 1 - inset), fill=1)
 
 
+@lru_cache(maxsize=256)
+def _drawing_mask(bitmap, w, h):
+    return Image.frombytes('1', (w, h), b64decode(bitmap))
+
+
 def _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms):
     """Yield a widget's offset, pixel data and whether it is opaque art."""
     values = content_key(layout, now, weather, track, cover, progress, duration_ms=duration_ms,
@@ -427,7 +447,7 @@ def _widget_layers(layout, now, language, weather, units, track, cover, progress
     for widget, value in zip(layout, values):
         kind = widget['type']
         if kind == 'drawing':
-            yield (0, 0), Image.frombytes('1', (WIDTH, HEIGHT), b64decode(widget['bitmap'])), False
+            yield (0, 0), _drawing_mask(widget['bitmap'], widget.get('w', WIDTH), widget.get('h', HEIGHT)), False
             continue
         w, h = widget['w'], widget['h']
         if kind == 'cover':

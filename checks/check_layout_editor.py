@@ -67,8 +67,21 @@ with TemporaryDirectory() as folder:
         with Image.open(io.BytesIO(png)) as preview:
             assert preview.getpixel((0, 0)) == preview.getpixel((249, 121)) == 0
             assert preview.getpixel((1, 0)) == 255
-        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [drawing, drawing]})[0] == 400
+        dot = {'type': 'drawing', 'x': 12, 'y': 24, 'w': 1, 'h': 1, 'bitmap': 'gA=='}
+        second_dot = {**dot, 'x': 19, 'y': 40}
+        strokes = [dot, second_dot]
+        status, png = request('/api/layout-preview', {'screen': 'dashboard', 'layout': strokes})
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            assert preview.getpixel((12, 24)) == preview.getpixel((19, 40)) == 0
+            assert preview.getpixel((12, 25)) == 255
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': strokes})[0] == 200
+        assert DeviceSettings(root).layouts['dashboard'] == strokes
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [{**dot, 'x': 250}]})[0] == 400
+        max_drawings = schema['maxDrawings']
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [dot] * (max_drawings + 1)})[0] == 400
         assert request('/api/layouts', {'screen': 'dashboard', 'layout': [{**drawing, 'bitmap': 'AA=='}]})[0] == 400
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [drawing] * max_drawings})[0] == 200
         assert request('/api/layouts', {'screen': 'dashboard', 'layout': [drawing]})[0] == 200
         assert DeviceSettings(root).layouts == {'dashboard': [drawing], 'playback': None}
         assert request('/api/layouts', {'screen': 'dashboard', 'layout': None})[0] == 200

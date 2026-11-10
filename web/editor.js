@@ -12,7 +12,8 @@
   const preview = element('editor-image');
   const frame = preview.getContext('2d');
   const drawing = document.createElement('canvas');
-  const ink = drawing.getContext('2d');
+  const eraseSurface = document.createElement('canvas');
+  const eraseContext = eraseSurface.getContext('2d');
   const selection = element('editor-selection');
   const dropMarker = element('editor-drop-marker');
   const guides = {x: element('editor-guide-x'), y: element('editor-guide-y')};
@@ -78,7 +79,6 @@
   let drag;
   let paletteDrag;
   let layerDrag;
-  let inkBounds;
   let textEditing;
   let tool = 'select';
   let loadController;
@@ -86,18 +86,19 @@
   let previewTimer;
   let atlas;
   let tiles = new Map();
+  const inkTiles = new Map();
   let savingScreen;
   let libraryOperation;
 
   const current = () => drafts[screen];
   const layers = (layout = current().layout) => layout ?? schema.defaults[screen];
   const widgets = () => layers().filter(layer => layer.type !== 'drawing');
-  const bitmap = () => layers().find(layer => layer.type === 'drawing')?.bitmap;
+  const drawings = () => layers().filter(layer => layer.type === 'drawing');
   const definitions = () => schema.widgets[screen];
   const definition = (type) => definitions().find(widget => widget.type === type);
   const hasChanges = ({saved, layout}) => JSON.stringify(saved) !== JSON.stringify(layout);
   const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
-  const stride = () => Math.ceil(schema.width / 8);
+  const stride = width => Math.ceil(width / 8);
   const layerKey = ({x, y, ...appearance}) => JSON.stringify(appearance);
 
   function icon(type) {
@@ -109,13 +110,6 @@
     path.setAttribute('d', icons[type]);
     svg.append(path);
     return svg;
-  }
-
-  function boundsOf(layer) {
-    if (layer?.type !== 'drawing') return layer;
-    if (!inkBounds) return null;
-    return {...inkBounds, x: inkBounds.x + (drag?.inkOffset?.x ?? 0),
-      y: inkBounds.y + (drag?.inkOffset?.y ?? 0)};
   }
 
   async function request(path, {code = setupCode, payload, signal, fallback} = {}) {
@@ -143,7 +137,7 @@
     }
     reset.disabled = current().layout === null;
     blank.disabled = current().layout?.length === 0;
-    clearDrawing.disabled = !bitmap();
+    clearDrawing.disabled = drawings().length === 0;
     undo.disabled = current().undo.length === 0;
     redo.disabled = current().redo.length === 0;
     save.disabled = Boolean(savingScreen) || !hasChanges(current());
@@ -151,7 +145,7 @@
   }
 
   function layerName(layer) {
-    return translate(layer.type === 'drawing' ? 'Drawing' : definition(layer.type).label);
+    return translate(layer.type === 'drawing' ? 'Pen stroke' : definition(layer.type).label);
   }
 
   function widgetLabel(widget, index) {
@@ -226,10 +220,9 @@
       button.setAttribute('aria-pressed', selected);
     }
     const layer = layers()[current().selection];
-    const bounds = boundsOf(layer);
-    selection.hidden = !bounds || tool !== 'select';
+    selection.hidden = !layer || tool !== 'select';
     selection.dataset.kind = layer?.type === 'drawing' ? 'drawing' : 'widget';
-    if (bounds) position(selection, bounds);
+    if (layer) position(selection, layer);
     updateInspector();
   }
 
@@ -247,17 +240,13 @@
     const list = document.createDocumentFragment();
     for (const [index, widget] of layers().entries()) {
       const label = widgetLabel(widget, index);
-      let hitbox;
-      const bounds = boundsOf(widget);
-      if (bounds) {
-        hitbox = document.createElement('button');
-        hitbox.type = 'button';
-        hitbox.className = 'editor-hitbox';
-        hitbox.dataset.index = index;
-        hitbox.setAttribute('aria-label', label);
-        position(hitbox, bounds);
-        stage.append(hitbox);
-      }
+      const hitbox = document.createElement('button');
+      hitbox.type = 'button';
+      hitbox.className = 'editor-hitbox';
+      hitbox.dataset.index = index;
+      hitbox.setAttribute('aria-label', label);
+      position(hitbox, widget);
+      stage.append(hitbox);
       hitboxes.push(hitbox);
 
       const button = document.createElement('button');
@@ -297,7 +286,7 @@
     frame.drawImage(atlas, 0, 0, 1, 1, 0, 0, schema.width, schema.height);
     for (const [index, widget] of layers().entries()) {
       if (widget.type === 'drawing') {
-        frame.drawImage(drawing, drag?.inkOffset?.x ?? 0, drag?.inkOffset?.y ?? 0);
+        composeInk(widget);
         continue;
       }
       const fallback = drag?.index === index && drag.origin ? tiles.get(layerKey(drag.origin)) : undefined;
@@ -306,51 +295,121 @@
         frame.drawImage(atlas, 0, tile.y, tile.w, tile.h, widget.x, widget.y, widget.w, widget.h);
       }
     }
-    if (!bitmap() && drag?.bytes) frame.drawImage(drawing, 0, 0);
+    if (drag?.bytes && !drag.erase) frame.drawImage(drawing, 0, 0);
   }
 
-  function drawingBytes() {
-    const saved = bitmap();
-    return saved
-      ? Uint8Array.from(atob(saved), character => character.charCodeAt(0))
-      : new Uint8Array(stride() * schema.height);
+  function decodeInk(bitmap) {
+    return Uint8Array.from(atob(bitmap), character => character.charCodeAt(0));
   }
 
-  function showInk(bytes = drawingBytes()) {
-    const {width, height} = schema;
-    const color = document.documentElement.dataset.theme === 'dark' ? 255 : 0;
-    const image = ink.createImageData(width, height);
-    const rowBytes = stride();
-    let left = width, top = height, right = -1, bottom = -1;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (!(bytes[y * rowBytes + (x >> 3)] & (128 >> (x & 7)))) continue;
-        left = Math.min(left, x);
-        right = Math.max(right, x);
-        top = Math.min(top, y);
-        bottom = y;
-        const offset = (y * width + x) * 4;
-        image.data.fill(color, offset, offset + 3);
-        image.data[offset + 3] = 255;
+  function visitInk(bytes, w, h, visit) {
+    const rowBytes = stride(w);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const offset = y * rowBytes + (x >> 3);
+        const bit = 128 >> (x & 7);
+        if (bytes[offset] & bit) visit(x, y, offset, bit);
       }
     }
-    inkBounds = right < 0 ? null : {x: left, y: top, w: right - left + 1, h: bottom - top + 1};
-    ink.putImageData(image, 0, 0);
   }
 
-  function storeInk(bytes) {
-    const layout = layers().slice();
-    const index = layout.findIndex(layer => layer.type === 'drawing');
-    if (bytes.some(Boolean)) {
-      const next = btoa(String.fromCharCode(...bytes));
-      if (next === bitmap()) return;
-      const layer = {type: 'drawing', bitmap: next};
-      if (index < 0) layout.push(layer);
-      else layout[index] = layer;
-      setDraft(layout, index < 0 || !hitboxes[index]);
-    } else if (index >= 0) {
-      removeLayer(index);
+  function cropInk(bytes, width, height, x = 0, y = 0) {
+    let left = width, top = height, right = -1, bottom = -1;
+    visitInk(bytes, width, height, (px, py) => {
+      left = Math.min(left, px);
+      top = Math.min(top, py);
+      right = Math.max(right, px);
+      bottom = py;
+    });
+    if (right < 0) return null;
+    const w = right - left + 1;
+    const h = bottom - top + 1;
+    const rowBytes = stride(w);
+    const cropped = new Uint8Array(rowBytes * h);
+    visitInk(bytes, width, height, (px, py) => {
+      const localX = px - left;
+      cropped[(py - top) * rowBytes + (localX >> 3)] |= 128 >> (localX & 7);
+    });
+    return {type: 'drawing', x: x + left, y: y + top, w, h, bitmap: btoa(String.fromCharCode(...cropped))};
+  }
+
+  function editableLayout(layout) {
+    return layout?.map(layer => layer.type === 'drawing' && layer.w === undefined
+      ? cropInk(decodeInk(layer.bitmap), schema.width, schema.height) : layer).filter(Boolean) ?? null;
+  }
+
+  function paintInk(canvas, bytes, color) {
+    const {width, height} = canvas;
+    const context = canvas.getContext('2d');
+    const image = context.createImageData(width, height);
+    visitInk(bytes, width, height, (x, y) => {
+      const offset = (y * width + x) * 4;
+      image.data.fill(color, offset, offset + 3);
+      image.data[offset + 3] = 255;
+    });
+    context.putImageData(image, 0, 0);
+  }
+
+  function inkColor() {
+    return document.documentElement.dataset.theme === 'dark' ? 255 : 0;
+  }
+
+  function composeInk({x, y, w, h, bitmap}) {
+    const color = inkColor();
+    const key = w + ':' + h + ':' + color + ':' + bitmap;
+    let tile = inkTiles.get(key);
+    if (!tile) {
+      tile = document.createElement('canvas');
+      tile.width = w;
+      tile.height = h;
+      paintInk(tile, decodeInk(bitmap), color);
+      inkTiles.set(key, tile);
+      if (inkTiles.size > 128) inkTiles.delete(inkTiles.keys().next().value);
     }
+    if (drag?.erase) {
+      eraseContext.clearRect(0, 0, w, h);
+      eraseContext.drawImage(tile, 0, 0);
+      eraseContext.globalCompositeOperation = 'destination-out';
+      eraseContext.drawImage(drawing, -x, -y);
+      eraseContext.globalCompositeOperation = 'source-over';
+      frame.drawImage(eraseSurface, 0, 0, w, h, x, y, w, h);
+    } else {
+      frame.drawImage(tile, x, y);
+    }
+  }
+
+  function changeInk(transform) {
+    const draft = current();
+    const layout = [];
+    let changed = false;
+    let selection = -1;
+    for (const [index, layer] of layers().entries()) {
+      const result = layer.type === 'drawing' ? transform(layer) : layer;
+      if (result !== layer) changed = true;
+      if (!result) continue;
+      if (draft.selection === index) selection = layout.length;
+      layout.push(result);
+    }
+    if (!changed) return;
+    draft.selection = selection;
+    setDraft(layout, true);
+  }
+
+  function eraseInk(mask) {
+    const rowBytes = stride(schema.width);
+    changeInk(layer => {
+      const {x, y, w, h, bitmap} = layer;
+      const bytes = decodeInk(bitmap);
+      let changed = false;
+      visitInk(bytes, w, h, (px, py, offset, bit) => {
+        const globalX = x + px;
+        if (mask[(y + py) * rowBytes + (globalX >> 3)] & (128 >> (globalX & 7))) {
+          bytes[offset] &= ~bit;
+          changed = true;
+        }
+      });
+      return changed ? cropInk(bytes, w, h, x, y) : layer;
+    });
   }
 
   function stopPreview() {
@@ -423,7 +482,6 @@
     }
     clearPreview();
     renderPalette();
-    showInk();
     renderWidgets();
     updateStatus();
     schedulePreview(0);
@@ -433,15 +491,15 @@
   function updateLibraryControls() {
     const busy = Boolean(libraryOperation);
     librarySave.disabled = busy || !libraryName.value.trim();
-    libraryList.disabled = busy || !libraryList.value;
-    libraryOpen.disabled = libraryList.disabled;
-    libraryDelete.disabled = libraryList.disabled;
+    libraryList.disabled = busy;
+    libraryOpen.disabled = busy;
+    libraryDelete.disabled = busy || !libraryList.value;
   }
 
   function showLibraryNames(names, selected = '') {
-    libraryList.replaceChildren(...names.map(name => new Option(name, name)));
-    if (!names.length) libraryList.add(new Option(translate('No saved layouts'), ''));
-    else if (names.includes(selected)) libraryList.value = selected;
+    libraryList.replaceChildren(new Option('🔒 ' + translate('Default layout'), ''),
+      ...names.map(name => new Option(name, name)));
+    if (names.includes(selected)) libraryList.value = selected;
     updateLibraryControls();
   }
 
@@ -480,7 +538,7 @@
     libraryOperation?.abort();
     libraryOperation = undefined;
     libraryForm.reset();
-    libraryList.replaceChildren();
+    showLibraryNames([]);
     requestLibrary({onSuccess: data => showLibraryNames(data.names)});
   }
 
@@ -512,16 +570,17 @@
       if (controller.signal.aborted) return;
       schema = data;
       for (const [name, draft] of Object.entries(drafts)) {
-        if (!hasChanges(draft) && JSON.stringify(draft.saved) !== JSON.stringify(data.layouts[name])) {
-          draft.layout = data.layouts[name];
+        const saved = editableLayout(data.layouts[name]);
+        if (!hasChanges(draft) && JSON.stringify(draft.saved) !== JSON.stringify(saved)) {
+          draft.layout = saved;
           draft.undo = [];
           draft.redo = [];
         }
-        draft.saved = data.layouts[name];
+        draft.saved = saved;
         const visible = draft.layout ?? data.defaults[name];
         draft.selection = Math.min(draft.selection, visible.length - 1);
       }
-      for (const canvas of [preview, drawing]) {
+      for (const canvas of [preview, drawing, eraseSurface]) {
         canvas.width = data.width;
         canvas.height = data.height;
       }
@@ -560,19 +619,16 @@
   function setDraft(layout, structureChanged = false, remember = true) {
     const draft = current();
     const previous = draft.layout;
-    const previousBitmap = bitmap();
     draft.layout = layout;
     if (remember) recordHistory(previous);
     draft.message = '';
-    if (bitmap() !== previousBitmap) showInk();
     if (structureChanged) {
       renderWidgets();
     } else {
-      for (const [index, layer] of layers().entries()) {
-        const bounds = boundsOf(layer);
-        if (bounds && hitboxes[index]) position(hitboxes[index], bounds);
-      }
-      updateSelection();
+      const layer = layers()[draft.selection];
+      position(hitboxes[draft.selection], layer);
+      if (!selection.hidden) position(selection, layer);
+      updateInspector();
     }
     compose();
     updateStatus();
@@ -588,7 +644,7 @@
     setDraft(layout, false, remember);
   }
 
-  function moveWidget(dx, dy, origin = boundsOf(layers()[current().selection]), snap = false) {
+  function moveWidget(dx, dy, origin = layers()[current().selection], snap = false) {
     const {x, y, w, h} = origin;
     const next = {
       x: clamp(x + dx, 0, schema.width - w),
@@ -596,34 +652,7 @@
       w, h,
     };
     if (snap) snapPosition(next, current().selection);
-    if (layers()[current().selection].type === 'drawing') {
-      const offset = {x: next.x - x, y: next.y - y};
-      if (drag) {
-        drag.inkOffset = offset;
-        position(hitboxes[current().selection], next);
-        updateSelection();
-        compose();
-      } else {
-        translateInk(offset);
-      }
-      return;
-    }
     editWidget({x: next.x, y: next.y}, !drag);
-  }
-
-  function translateInk({x: dx, y: dy}) {
-    if (dx === 0 && dy === 0) return;
-    const source = drawingBytes();
-    const destination = new Uint8Array(source.length);
-    const rowBytes = stride();
-    for (let y = inkBounds.y; y < inkBounds.y + inkBounds.h; y++) {
-      for (let x = inkBounds.x; x < inkBounds.x + inkBounds.w; x++) {
-        if (source[y * rowBytes + (x >> 3)] & (128 >> (x & 7))) {
-          destination[(y + dy) * rowBytes + ((x + dx) >> 3)] |= 128 >> ((x + dx) & 7);
-        }
-      }
-    }
-    storeInk(destination);
   }
 
   function resizeWidget(dx, dy, {origin, corner}, free) {
@@ -709,14 +738,14 @@
   }
 
   function strokeTo(point) {
-    const {bytes, radius, erase} = drag;
+    const {bytes, radius} = drag;
     let [x, y] = drag.point;
     const [endX, endY] = point;
     const dx = Math.abs(endX - x);
     const dy = -Math.abs(endY - y);
     const stepX = Math.sign(endX - x);
     const stepY = Math.sign(endY - y);
-    const rowBytes = stride();
+    const rowBytes = stride(schema.width);
     let error = dx + dy;
     // Stamp a round brush along an integer line so rapid motions have no gaps.
     for (;;) {
@@ -725,7 +754,7 @@
           if ((px - x) ** 2 + (py - y) ** 2 > (radius + .35) ** 2) continue;
           const index = py * rowBytes + (px >> 3);
           const bit = 128 >> (px & 7);
-          bytes[index] = erase ? bytes[index] & ~bit : bytes[index] | bit;
+          bytes[index] |= bit;
         }
       }
       if (x === endX && y === endY) break;
@@ -740,7 +769,7 @@
       }
     }
     drag.point = point;
-    showInk(bytes);
+    paintInk(drawing, bytes, inkColor());
     compose();
   }
 
@@ -759,10 +788,8 @@
     const targets = [dimension / 2, 0, dimension];
     for (const [index, layer] of layers().entries()) {
       if (index === selected) continue;
-      const bounds = boundsOf(layer);
-      if (!bounds) continue;
-      const start = bounds[axis];
-      const span = horizontal ? bounds.w : bounds.h;
+      const start = layer[axis];
+      const span = horizontal ? layer.w : layer.h;
       targets.push(start, start + span, start + span / 2);
     }
     let best = {position};
@@ -956,9 +983,15 @@
     finishText(true);
     if (tool !== 'select') {
       event.preventDefault();
+      if (tool === 'draw' && drawings().length >= schema.maxDrawings) {
+        current().message = 'Use up to 96 pen strokes per layout.';
+        updateStatus();
+        return;
+      }
       const point = brushPoint(event);
       drag = {
-        id: event.pointerId, point, bytes: drawingBytes(), radius: Number(brush.value) >> 1,
+        id: event.pointerId, point, bytes: new Uint8Array(stride(schema.width) * schema.height),
+        radius: Number(brush.value) >> 1,
         erase: tool === 'erase',
       };
       stage.setPointerCapture(event.pointerId);
@@ -976,7 +1009,7 @@
     hitboxes[index].focus({preventScroll: true});
     selectWidget(index);
     drag = {
-      id: event.pointerId, point: canvasPoint(event), index, corner, origin: boundsOf(layers()[index]),
+      id: event.pointerId, point: canvasPoint(event), index, corner, origin: layers()[index],
       before: current().layout,
     };
     (hitbox ?? stage).setPointerCapture(event.pointerId);
@@ -999,15 +1032,19 @@
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) {
     stage.addEventListener(event, ({pointerId, type}) => {
       if (drag?.id !== pointerId) return;
-      const {bytes, before, inkOffset} = drag;
+      const {bytes, before, erase} = drag;
       drag = undefined;
       showGuides();
       if (bytes) {
-        if (type === 'pointerup') storeInk(bytes);
-        else showInk();
+        if (type === 'pointerup' && erase) eraseInk(bytes);
+        if (type === 'pointerup' && !erase) {
+          const layer = cropInk(bytes, schema.width, schema.height);
+          if (layer) {
+            current().selection = layers().length;
+            setDraft([...layers(), layer], true);
+          }
+        }
         compose();
-      } else if (inkOffset) {
-        translateInk(inkOffset);
       } else {
         recordHistory(before);
         updateStatus();
@@ -1128,11 +1165,12 @@
   });
   undo.addEventListener('click', () => stepHistory('undo', 'redo'));
   redo.addEventListener('click', () => stepHistory('redo', 'undo'));
-  for (const button of [clearDrawing, element('editor-remove-drawing')]) {
-    button.addEventListener('click', () => {
-      if (!drag) removeLayer(layers().findIndex(layer => layer.type === 'drawing'));
-    });
-  }
+  clearDrawing.addEventListener('click', () => {
+    if (!drag) changeInk(() => null);
+  });
+  element('editor-remove-drawing').addEventListener('click', () => {
+    if (!drag && layers()[current().selection]?.type === 'drawing') removeLayer(current().selection);
+  });
   for (const name of ['keydown', 'keyup']) {
     window.addEventListener(name, (event) => {
       if (event.key !== 'Shift' || !drag?.corner || !drag.delta) return;
@@ -1221,6 +1259,7 @@
 
   libraryToggle.addEventListener('click', () => setLibraryVisible(library.hidden));
   libraryName.addEventListener('input', updateLibraryControls);
+  libraryList.addEventListener('change', updateLibraryControls);
   libraryForm.addEventListener('submit', (event) => {
     event.preventDefault();
     if (drag || layerDrag || paletteDrag) return;
@@ -1244,20 +1283,20 @@
   libraryOpen.addEventListener('click', () => {
     if (drag || layerDrag || paletteDrag) return;
     const name = libraryList.value;
-    requestLibrary({
-      name,
-      onSuccess: ({layout}) => {
-        current().selection = -1;
-        setDraft(layout, true);
-        current().librarySaved = {name, layout};
-        setLibraryVisible(false);
-        libraryToggle.focus();
-      },
-    });
+    const openLayout = ({layout}) => {
+      layout = editableLayout(layout);
+      current().selection = -1;
+      setDraft(layout, true);
+      current().librarySaved = {name, layout};
+      setLibraryVisible(false);
+      libraryToggle.focus();
+    };
+    if (name) requestLibrary({name, onSuccess: openLayout});
+    else openLayout({layout: null});
   });
   libraryDelete.addEventListener('click', () => {
     const name = libraryList.value;
-    if (!window.confirm(translate('Delete this saved layout?'))) return;
+    if (!name || !window.confirm(translate('Delete this saved layout?'))) return;
     requestLibrary({
       payload: {name, delete: true},
       onSuccess: ({names}) => {
@@ -1303,12 +1342,13 @@
         widgetButtons[index].querySelector('span').textContent = layerName(widget);
       }
       renderPalette();
+      if (libraryList.options.length) libraryList.options[0].text = '🔒 ' + translate('Default layout');
       updateInspector();
       updateStatus();
     } else if (!records.some(record => record.oldValue !== root.getAttribute('data-theme'))) {
       return;
     }
-    showInk(drag?.bytes);
+    if (drag?.bytes) paintInk(drawing, drag.bytes, inkColor());
     schedulePreview();
   }).observe(document.documentElement, {attributeOldValue: true, attributeFilter: ['lang', 'data-theme']});
 
