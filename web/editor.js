@@ -830,7 +830,6 @@
   function setLibraryVisible(visible) {
     libraryToggle.setAttribute('aria-expanded', String(visible));
     library.hidden = !visible;
-    element('editor-layer-panel').hidden = visible;
     element('editor-widget-settings').hidden = visible;
     if (visible) {
       loadLibrary();

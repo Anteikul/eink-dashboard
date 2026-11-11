@@ -158,9 +158,9 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   display: grid;
   flex: 1;
   min-height: 0;
-  grid-template-columns: 108px minmax(0, 1fr) 246px;
-  grid-template-rows: minmax(0, 1fr);
-  grid-template-areas: "palette canvas inspector";
+  grid-template-columns: clamp(142px, 13vw, 172px) minmax(0, 1fr) 246px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "palette canvas inspector" "layers canvas inspector";
   gap: clamp(12px, 2vw, 22px);
 }
 .editor-preview {
@@ -176,7 +176,6 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   grid-area: inspector;
   display: flex;
   flex-direction: column;
-  gap: 10px;
   min-width: 0;
   min-height: 0;
   padding: 2px 5px 8px;
@@ -344,7 +343,8 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-canvas-alignment button { width: 34px; }
 .editor-canvas-alignment button:nth-child(4) { margin-left: 4px; }
 .editor-canvas-alignment button:nth-child(n+3)::after { inset-inline: auto 0; }
-#editor-palette { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+#editor-palette { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+#editor-palette .editor-icon { width: 100%; }
 #editor-palette button { cursor: grab; touch-action: none; }
 #editor-palette button:active { cursor: grabbing; }
 .editor-icon {
@@ -387,14 +387,14 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-message { margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
 .editor-message:empty { margin: 0; }
 .editor-preview-status { display: flex; align-items: center; gap: 8px; }
-.editor-widgets { display: flex; flex-direction: column; flex: none; min-height: 0; max-height: 45%; margin-top: auto; }
-#editor-widgets { display: grid; gap: 6px; min-height: 0; max-height: min(168px, 24dvh); overflow: auto; margin: 6px 0 0; padding: 3px; list-style: none; }
+.editor-widgets { grid-area: layers; display: flex; flex-direction: column; align-self: start; min-width: 0; min-height: 0; max-height: 100%; }
+#editor-widgets { display: grid; gap: 6px; min-height: 0; overflow: auto; overscroll-behavior: contain; margin: 6px 0 0; padding: 3px; list-style: none; }
 #editor-widgets:empty { display: none; }
 #editor-widgets li { position: relative; }
 #editor-widgets button { width: 100%; min-height: 34px; gap: 8px; padding: 4px 8px; border-color: var(--line); text-align: left; cursor: grab; }
 #editor-widgets button[aria-pressed=false] { background: var(--paper); }
 #editor-widgets button[aria-pressed=true] { border-color: #7a886d; }
-#editor-widgets button span { flex: 1; }
+#editor-widgets button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #editor-widgets .editor-grip { opacity: .6; touch-action: none; width: 28px; height: 24px; stroke-width: 3; }
 #editor-widgets li[data-dragging] { opacity: .55; }
 #editor-widgets li[data-drop]::after {
@@ -497,26 +497,18 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 
 @media (max-width: 800px) and (orientation: portrait), (max-width: 600px) {
   .editor-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr);
     grid-template-rows: auto minmax(0, 1.55fr) minmax(0, 1fr);
-    grid-template-areas: "palette" "canvas" "inspector";
+    grid-template-areas: "palette palette" "canvas canvas" "layers inspector";
     gap: 8px;
   }
   .editor-palette { display: flex; align-items: center; gap: 9px; min-width: 0; }
   #editor-palette { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 0; }
-  .editor-inspector {
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
-    grid-template-rows: minmax(0, 1fr);
-    gap: 8px;
-    border-top: 1px solid var(--line);
-    padding-top: 8px;
-    overflow: hidden;
-  }
-  .editor-inspector > div { min-width: 0; min-height: 0; }
-  .editor-widgets { max-height: none; margin-top: 0; }
-  #editor-widgets { max-height: none; }
-  #editor-library { grid-column: 1 / -1; }
+  #editor-palette .editor-icon { width: 44px; }
+  .editor-inspector { padding: 0; }
+  .editor-widgets { padding: 6px; }
+  #editor-widgets button { gap: 4px; padding-inline: 4px; }
+  #editor-widgets svg, #editor-widgets .editor-grip { width: 16px; height: 16px; }
 }
 
 @media (max-width: 540px) {
@@ -524,6 +516,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   .editor-topbar button { min-height: 36px; font-size: 13px; }
   .editor-palette { display: block; }
   #editor-palette { margin-top: 4px; }
+  #editor-palette .editor-icon { width: 40px; }
   .editor-icon { width: 40px; min-height: 40px; }
   .editor-toolbar, .editor-contextbar { margin-bottom: 5px; }
 }
