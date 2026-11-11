@@ -12,7 +12,7 @@ fi
 
 address=${EINK_LISTEN_ADDRESS:-}
 if [ -z "$address" ] && [ -S /run/eink-wifi.sock ] && [ "$#" -eq 0 ]; then
-    exec authbind --deep python3 -u dashboard.py --seconds 0 --wifi-setup
+    exec authbind --deep python3 -u updates.py --seconds 0 --wifi-setup
 fi
 while [ -z "$address" ]; do
     address=$(ip -o -4 addr show up scope global 2>/dev/null |
@@ -27,6 +27,6 @@ if [ -n "$address" ]; then
     set -- --listen "$address" "$@"
 fi
 if command -v authbind >/dev/null; then
-    exec authbind --deep python3 -u dashboard.py --seconds 0 "$@"
+    exec authbind --deep python3 -u updates.py --seconds 0 "$@"
 fi
-exec python3 -u dashboard.py --seconds 0 "$@"
+exec python3 -u updates.py --seconds 0 "$@"

@@ -1,5 +1,6 @@
 """Prepare album images and render the music screen."""
 import hashlib
+import os
 import tempfile
 from functools import lru_cache
 from io import BytesIO
@@ -10,8 +11,9 @@ from urllib.request import urlopen
 from PIL import Image, ImageDraw, ImageFont, ImageOps, PngImagePlugin
 
 ROOT = Path(__file__).resolve().parent
-FONTS = ROOT / '.spotify-runtime/usr/share/fonts/truetype/dejavu'
-CACHE_ROOT = ROOT / '.cover-cache'
+DATA_ROOT = Path(os.environ.get('EINK_DATA_DIR', ROOT)).resolve()
+FONTS = DATA_ROOT / '.spotify-runtime/usr/share/fonts/truetype/dejavu'
+CACHE_ROOT = DATA_ROOT / '.cover-cache'
 COVER_VERSION = hashlib.sha256((ROOT / 'album_algorithm.py').read_bytes()).hexdigest()
 COVER_LOCKS = tuple(Lock() for _ in range(16))
 COVER_TEXT_X = 118
@@ -142,7 +144,7 @@ def remote_cover(url, album_id=''):
 def prepare_cover(track):
     try:
         if track.album_id:
-            path = ROOT / 'covers' / f'{track.album_id}.jpg'
+            path = DATA_ROOT / 'covers' / f'{track.album_id}.jpg'
             if path.is_file():
                 return local_cover(path, path.stat().st_mtime_ns)[0]
         if track.artwork:

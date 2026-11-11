@@ -132,7 +132,8 @@ class PanelState:
                     'mode': self.mode, 'page': self.page, 'revision': self.revision, 'trackUrl': self.track_url}
 
 
-def start_server(host, port, state, settings, reload_settings, *, wifi=None, layout_preview=None, spotify=None):
+def start_server(host, port, state, settings, reload_settings, *, wifi=None, layout_preview=None, spotify=None,
+                 updater=None):
     assets = Path(__file__).with_name('web')
     routes = {
         '/': ('index.html', 'text/html; charset=utf-8'),
@@ -159,7 +160,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             for url, (filename, kind) in routes.items()}
     admin_routes = {'/api/settings', '/api/setup-code', '/api/password-protection', '/api/local-name', '/api/places', '/api/spotify/start',
                     '/api/spotify/finish', '/api/spotify/disconnect', '/api/layouts', '/api/layout-preview',
-                    '/api/layout-library', '/api/photo-import', '/api/spotify/check'}
+                    '/api/layout-library', '/api/photo-import', '/api/spotify/check', '/api/update'}
     allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {
         '/api/theme', '/api/display-mode', '/api/language', '/api/unlock',
     }
@@ -167,6 +168,9 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
 
     def panel_status():
         return {**state.status(), 'language': settings.values['language']}
+
+    def update_status():
+        return updater.status() if updater is not None else {'state': 'unavailable', 'version': None}
 
     class Handler(BaseHTTPRequestHandler):
         def setup(self):
@@ -265,6 +269,9 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             elif path == '/api/settings':
                 if self.setup_access():
                     self.json(200, settings.status())
+            elif path == '/api/update':
+                if self.setup_access():
+                    self.json(200, update_status())
             elif path == '/api/layouts':
                 if self.setup_access():
                     size, layouts = settings.layout_state
@@ -372,6 +379,12 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     settings.set_password_required(required)
                     headers = [('Set-Cookie', session_cookie(settings.session_key, settings.code))] if required else ()
                     self.json(200, {'required': required}, headers)
+                    return
+                if self.path == '/api/update':
+                    retry = payload.get('retry', False)
+                    if type(retry) is not bool:
+                        raise ValueError('Invalid request.')
+                    self.json(200, updater.check(retry) if updater is not None else update_status())
                     return
                 if self.path == '/api/layouts':
                     screen = payload['screen']

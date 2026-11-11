@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 .venv/
 .spotify-runtime/
+.updates/
 .spotify.json
 .settings.json
 .layouts.json

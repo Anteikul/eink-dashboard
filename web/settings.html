@@ -30,6 +30,16 @@
       <p id="setup-status" role="status" data-i18n></p>
       <a id="settings-sign-in" href="/unlock?next=settings" target="_blank" rel="noopener" data-i18n hidden>Sign in again</a>
       <div id="setup-fields" hidden>
+        <div class="settings-cards">
+          <section class="setup-form settings-card" aria-labelledby="update-title">
+            <h3 id="update-title" data-i18n>Updates</h3>
+            <div class="settings-save">
+              <button id="check-update" type="button" data-i18n disabled>Check for updates</button>
+              <code id="installed-version" aria-label="Installed version" data-i18n-attributes="aria-label" hidden></code>
+              <p id="update-status" role="status"></p>
+            </div>
+          </section>
+        </div>
         <form id="device-form" class="setup-form">
           <div class="settings-cards">
             <section class="setup-form settings-card" aria-labelledby="display-settings-title">

@@ -18,12 +18,13 @@ from urllib.request import urlopen
 from zoneinfo import ZoneInfo
 
 from control import PanelState, preview_png, start_server
-from device_settings import DEFAULTS, DeviceSettings
+from device_settings import DEFAULTS, DeviceSettings, write_private
 from layout_editor import (
     PANEL_SIZE, clock_has_seconds, content_key, editor_schema, preview_weather, render_custom, render_layer_atlas,
 )
 from local_name import LocalName
 from spotify_playback import SpotifyPlayback, Track
+from updates import RESTART_EXIT, UpdateStore, Updater, installed_version
 from wifi_setup import AP_ADDRESS, Link, NetworkSetup
 
 WIDTH, HEIGHT = PANEL_SIZE
@@ -33,6 +34,7 @@ WEEKDAYS = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
 WEEKDAYS_CS = ('Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne')
 MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
 FOLDER = Path(__file__).resolve().parent
+DATA_FOLDER = Path(os.environ.get('EINK_DATA_DIR', FOLDER)).resolve()
 ATLAS = json.loads((FOLDER / 'atlas.json').read_text(encoding='utf-8'))
 
 
@@ -284,6 +286,10 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
         reload_requested.set()
         stop.set()
 
+    data = settings.path.parent
+    updater = (Updater(UpdateStore(data), installed_version(FOLDER), reload_settings)
+               if os.environ.get('EINK_SUPERVISED') == '1' else None)
+    ready = os.environ.get('EINK_UPDATE_READY')
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, lambda *_: stop.set())
     config = settings.values
@@ -293,7 +299,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     weather_enabled = config['weather_enabled']
     if weather_enabled:
         threading.Thread(target=weather.poll, args=(stop,), daemon=True).start()
-    state = PanelState(FOLDER / 'theme.txt')
+    state = PanelState(data / 'theme.txt')
     credentials = settings.credentials
     spotify = None
     if credentials.is_file():
@@ -322,13 +328,13 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     join_until = None
     partial_count = 0
     previous = None
-    network = (NetworkSetup(password_file=FOLDER / '.hotspot-password', delay=config['hotspot_delay'])
+    network = (NetworkSetup(password_file=data / '.hotspot-password', delay=config['hotspot_delay'])
                if wifi_setup else None)
     if network:
         threading.Thread(target=network.poll, args=(stop,), daemon=True).start()
     active_link = Link(listen)
     server = (start_server(listen, port, state, settings, reload_settings,
-                           layout_preview=render_layout_preview, spotify=spotify)
+                           layout_preview=render_layout_preview, spotify=spotify, updater=updater)
               if listen else None)
     local_name = LocalName()
     try:
@@ -343,7 +349,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 if link.address:
                     server = start_server(link.address, port, state, settings, reload_settings,
                                           wifi=network if hotspot else None,
-                                          layout_preview=render_layout_preview, spotify=spotify)
+                                          layout_preview=render_layout_preview, spotify=spotify, updater=updater)
                 active_link = link
             preferences = settings.values
             local_name.update(link.address if server and not hotspot and preferences['local_name'] else None,
@@ -461,6 +467,9 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 join_until = time.monotonic() + JOIN_CONFIRM_SECONDS
             if not hotspot and (server or network):
                 state.publish(theme, preview_png(screen, WIDTH, HEIGHT), track.url if track else None, page=page)
+            if ready:
+                write_private(Path(ready), 'ready\n')
+                ready = None
             counts['full' if full else 'partial'] += 1
             label = 'wifi setup' if hotspot else 'connected' if showing_join else page
             print(f'{now:%H:%M:%S} {detail} {label} {time.monotonic() - started:.3f}s', flush=True)
@@ -491,15 +500,17 @@ def main():
         parser.error('--seconds must be nonnegative')
     if args.wifi_setup and (args.listen or args.port != 80):
         parser.error('--wifi-setup selects its own listen address and uses port 80')
-    with (FOLDER / '.panel.lock').open('a') as lock:
+    with (DATA_FOLDER / '.panel.lock').open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             parser.exit(1, 'Dashboard already running.\n')
-        settings = DeviceSettings(FOLDER)
+        settings = DeviceSettings(DATA_FOLDER)
         rotation = settings.values['rotation'] if args.rotation is None else args.rotation
         restart = run(rotation, args.seconds, args.listen, args.port, settings, args.wifi_setup)
     if restart:
+        if os.environ.get('EINK_SUPERVISED') == '1':
+            sys.exit(RESTART_EXIT)
         os.execv(sys.executable, [sys.executable, *sys.orig_argv[1:]])
 
 

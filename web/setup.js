@@ -22,11 +22,25 @@ const localName = document.querySelector('#local-name');
 const localHostname = document.querySelector('#local-hostname');
 const localNameForm = document.querySelector('#local-name-form');
 const localNameStatus = document.querySelector('#local-name-status');
+const updateButton = document.querySelector('#check-update');
+const updateStatus = document.querySelector('#update-status');
+const installedVersion = document.querySelector('#installed-version');
+const updatingStates = new Set(['checking', 'downloading', 'restarting']);
+const updateMessages = {
+  checking: 'Checking GitHub for updates…',
+  current: 'The dashboard is up to date.',
+  downloading: 'Downloading and checking the update…',
+  restarting: 'Restarting the dashboard…',
+  rolled_back: 'The update did not start. The previous version was restored.',
+  failed: 'Could not install the update. Try again.',
+  unavailable: 'Updates are available when the dashboard runs on the Pi.',
+};
 let foundPlaces = [];
 let selectedPlace = -1;
 let placeTimer;
 let placeRequest;
 let spotifyCheckRequest;
+let checkingUpdate = false;
 
 languageSelect.addEventListener('change', async () => {
   const status = document.querySelector('#language-status');
@@ -316,6 +330,50 @@ setupCodeForm.addEventListener('submit', async (event) => {
   }
 });
 
+function showUpdate(data) {
+  installedVersion.hidden = !data.version;
+  installedVersion.textContent = data.version?.slice(0, 7) ?? '';
+  setText(updateStatus, updateMessages[data.state] ?? '');
+}
+
+async function checkUpdate(retry = false) {
+  if (checkingUpdate) return;
+  checkingUpdate = updateButton.disabled = true;
+  let data;
+  try {
+    setText(updateStatus, updateMessages.checking);
+    data = await api('/api/update', {retry});
+    const previous = data.version;
+    const deadline = Date.now() + 120000;
+    showUpdate(data);
+    while (updatingStates.has(data.state) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      try {
+        data = await api('/api/update');
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+        continue;
+      }
+      if (data.version && data.version !== previous && !updatingStates.has(data.state)) {
+        window.location.reload();
+        return;
+      }
+      showUpdate(data);
+    }
+    if (updatingStates.has(data.state)) setText(updateStatus, 'The update is still running. Check again shortly.');
+  } catch (error) {
+    setText(updateStatus, error instanceof TypeError ? 'The Pi did not respond.' : error.message);
+  } finally {
+    checkingUpdate = false;
+    updateButton.disabled = data?.state === 'unavailable';
+  }
+}
+
+updateButton.addEventListener('click', () => checkUpdate(true));
+window.addEventListener('pageshow', event => {
+  if (event.persisted && !setupFields.hidden) checkUpdate();
+});
+
 api('/api/state').then(data => {
   applyLanguage(data.language);
   document.documentElement.dataset.theme = data.appliedTheme || data.theme;
@@ -324,4 +382,5 @@ api('/api/state').then(data => {
 action(async () => {
   showSettings(await api('/api/settings'));
   setupFields.hidden = false;
+  checkUpdate();
 });
