@@ -1189,8 +1189,8 @@
     if (widget.type === 'text') widget.text = translate(widget.text);
     const layout = [...layers(), widget];
     current().selection = layout.length - 1;
-    setTool('select');
     setDraft(layout, true);
+    setTool('select');
     showGuides();
     hitboxes.at(-1).focus({preventScroll: true});
   }
