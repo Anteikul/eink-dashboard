@@ -11,7 +11,6 @@
   const tabs = [...editor.querySelectorAll('[role=tab]')];
   const stage = element('editor-stage');
   const canvasArea = element('editor-canvas-area');
-  const bezel = stage.parentElement;
   const preview = element('editor-image');
   const frame = preview.getContext('2d');
   const drawing = document.createElement('canvas');
@@ -125,17 +124,16 @@
   function positionHistory() {
     const area = canvasArea.getBoundingClientRect();
     if (!area.width || !area.height) return;
-    const border = bezel.getBoundingClientRect().width - stage.getBoundingClientRect().width;
     const extraRow = toolbar.hasAttribute('data-history-row') ? toolbar.offsetHeight - tools.offsetHeight : 0;
     const widthInOneRow = Math.min(area.width,
-      (area.height + extraRow - border) * preview.width / preview.height + border);
+      (area.height + extraRow) * preview.width / preview.height);
     toolbar.toggleAttribute('data-history-row', (widthInOneRow - tools.offsetWidth) / 2 < history.offsetWidth + 2);
-    history.style.marginInlineEnd = Math.max(0, area.right - bezel.getBoundingClientRect().right) + 'px';
+    history.style.marginInlineEnd = Math.max(0, area.right - stage.getBoundingClientRect().right) + 'px';
   }
 
   const historyObserver = new ResizeObserver(positionHistory);
   historyObserver.observe(canvasArea);
-  historyObserver.observe(bezel);
+  historyObserver.observe(stage);
 
   function icon(type) {
     const ns = 'http://www.w3.org/2000/svg';
@@ -334,6 +332,7 @@
       hitbox.type = 'button';
       hitbox.className = 'editor-hitbox';
       hitbox.dataset.index = index;
+      hitbox.dataset.kind = widget.type;
       hitbox.setAttribute('aria-label', label);
       positionLayer(hitbox, widget);
       stage.append(hitbox);

@@ -200,12 +200,14 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   container-type: size;
   place-items: start center;
 }
-.editor-canvas-area .bezel {
-  width: clamp(0px, calc((100cqh - 18px) * var(--display-ratio, 2.04918) + 18px), 100%);
-  padding: 8px;
-  border-radius: 9px;
+#editor-stage {
+  position: relative;
+  width: min(100%, calc(100cqh * var(--display-ratio, 2.04918)));
+  aspect-ratio: 250 / 122;
+  overflow: hidden;
+  background: #f9f9f4;
+  user-select: none;
 }
-#editor-stage { position: relative; width: 100%; aspect-ratio: 250 / 122; overflow: hidden; background: #f9f9f4; user-select: none; }
 #editor-stage:focus { outline: none; }
 #editor-stage canvas {
   position: absolute;
@@ -224,6 +226,10 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   background: transparent;
   cursor: grab;
   touch-action: none;
+}
+#editor-stage[data-tool="select"] .editor-hitbox:not([data-kind="drawing"], [aria-pressed=true], :hover, :focus-visible) {
+  outline: 1px dashed rgb(59 143 98 / .75);
+  outline-offset: -1px;
 }
 .editor-hitbox:hover:not([aria-pressed=true]) {
   outline: 1px dashed #30754c;
@@ -382,10 +388,11 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-message:empty { margin: 0; }
 .editor-preview-status { display: flex; align-items: center; gap: 8px; }
 .editor-widgets { display: flex; flex-direction: column; flex: none; min-height: 0; max-height: 45%; margin-top: auto; }
-#editor-widgets { display: grid; gap: 4px; min-height: 0; max-height: min(168px, 24dvh); overflow: auto; margin: 6px 0 0; padding: 3px; list-style: none; }
+#editor-widgets { display: grid; gap: 6px; min-height: 0; max-height: min(168px, 24dvh); overflow: auto; margin: 6px 0 0; padding: 3px; list-style: none; }
 #editor-widgets:empty { display: none; }
 #editor-widgets li { position: relative; }
 #editor-widgets button { width: 100%; min-height: 34px; gap: 8px; padding: 4px 8px; border-color: var(--line); text-align: left; cursor: grab; }
+#editor-widgets button[aria-pressed=false] { background: var(--paper); }
 #editor-widgets button[aria-pressed=true] { border-color: #7a886d; }
 #editor-widgets button span { flex: 1; }
 #editor-widgets .editor-grip { opacity: .6; touch-action: none; width: 28px; height: 24px; stroke-width: 3; }
