@@ -129,7 +129,8 @@ def render_layout_preview(screen, layout, theme, language, units, *, layers=Fals
     from io import BytesIO
     from music_screen import progress_pixels, render_music
 
-    now = datetime(2026, 11, 10, 14, 38, 27)
+    # Include zero in each time field so dotted and slashed glyphs show in the editor.
+    now = datetime(2026, 11, 10, 20, 2, 9)
     weather = preview_weather(units)
     music = screen == 'playback'
     sample = {'weather': weather, 'units': units, 'size': size, 'weather_enabled': weather_enabled}
