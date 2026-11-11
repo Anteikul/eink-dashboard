@@ -19,7 +19,7 @@ Open the address printed by the installer, such as `http://192.168.1.25/`, from 
 
 The gear opens **Settings** at `/settings`, where you can choose English or Czech. Unlock **Device setup** with the code printed by the installer to change location, display options, weather and Spotify intervals, and Wi-Fi setup timing. In **Web password**, you can change the code or let anyone who can reach the web interface open the settings and editor. Turn the password requirement back on to use the current code again. To recover the code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
 
-Opening Settings checks the repository's `main` branch on GitHub. The Pi installs a newer dashboard version automatically and restarts the dashboard. If the new version cannot start, the Pi returns to the previous version. Device settings, Wi-Fi, Spotify credentials, and saved layouts stay in the installation folder. **Check for updates** runs the check again. Use `install.sh` for system packages and the optional Wi-Fi helper.
+Opening Settings checks the repository's `main` branch on GitHub. When a newer version is available, select **Update** to download it and restart the dashboard. If the new version cannot start, the Pi returns to the previous version. Device settings, Wi-Fi, Spotify credentials, and saved layouts stay in the installation folder. **Check for updates** runs the check again. Use `install.sh` for system packages and the optional Wi-Fi helper.
 
 You can also open `http://eink.local/` on the same network. To change the name or turn it off, unlock **Device setup** and use **Local address**. If you change or disable the name while using it, Settings reopens at the Pi's IP address. The setup hotspot uses the address shown on the e-paper display.
 

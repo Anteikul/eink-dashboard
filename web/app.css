@@ -77,6 +77,7 @@ h2 { font-size: 15px; margin: 0; font-weight: 680; }
 .settings-card .setup-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); }
 .settings-save { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .settings-save button { background: var(--accent); color: #1e251f; }
+#check-update { background: transparent; color: var(--ink); border-color: var(--line); }
 .settings-card [role=status]:empty, .settings-save [role=status]:empty { display: none; }
 .settings { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px 18px; margin-top: 18px; }
 #mode-controls { flex-wrap: wrap; }

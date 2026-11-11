@@ -23,16 +23,20 @@ const localHostname = document.querySelector('#local-hostname');
 const localNameForm = document.querySelector('#local-name-form');
 const localNameStatus = document.querySelector('#local-name-status');
 const updateButton = document.querySelector('#check-update');
+const installButton = document.querySelector('#install-update');
 const updateStatus = document.querySelector('#update-status');
 const installedVersion = document.querySelector('#installed-version');
+const availableVersion = document.querySelector('#available-version');
 const updatingStates = new Set(['checking', 'downloading', 'restarting']);
 const updateMessages = {
   checking: 'Checking GitHub for updates…',
   current: 'The dashboard is up to date.',
+  available: 'An update is available.',
   downloading: 'Downloading and checking the update…',
   restarting: 'Restarting the dashboard…',
   rolled_back: 'The update did not start. The previous version was restored.',
-  failed: 'Could not install the update. Try again.',
+  failed: 'Could not check for updates. Try again.',
+  install_failed: 'Could not install the update. Try again.',
   unavailable: 'Updates are available when the dashboard runs on the Pi.',
 };
 let foundPlaces = [];
@@ -41,6 +45,7 @@ let placeTimer;
 let placeRequest;
 let spotifyCheckRequest;
 let checkingUpdate = false;
+let offeredRevision = null;
 
 languageSelect.addEventListener('change', async () => {
   const status = document.querySelector('#language-status');
@@ -333,16 +338,19 @@ setupCodeForm.addEventListener('submit', async (event) => {
 function showUpdate(data) {
   installedVersion.hidden = !data.version;
   installedVersion.textContent = data.version?.slice(0, 7) ?? '';
+  offeredRevision = data.availableVersion ?? null;
+  installButton.hidden = !offeredRevision;
+  availableVersion.textContent = offeredRevision?.slice(0, 7) ?? '';
   setText(updateStatus, updateMessages[data.state] ?? '');
 }
 
-async function checkUpdate(retry = false) {
+async function runUpdate(path, payload, initialState) {
   if (checkingUpdate) return;
-  checkingUpdate = updateButton.disabled = true;
+  checkingUpdate = updateButton.disabled = installButton.disabled = true;
   let data;
   try {
-    setText(updateStatus, updateMessages.checking);
-    data = await api('/api/update', {retry});
+    setText(updateStatus, updateMessages[initialState]);
+    data = await api(path, payload);
     const previous = data.version;
     const deadline = Date.now() + 120000;
     showUpdate(data);
@@ -366,10 +374,18 @@ async function checkUpdate(retry = false) {
   } finally {
     checkingUpdate = false;
     updateButton.disabled = data?.state === 'unavailable';
+    installButton.disabled = !offeredRevision || updatingStates.has(data?.state);
   }
 }
 
-updateButton.addEventListener('click', () => checkUpdate(true));
+function checkUpdate() {
+  return runUpdate('/api/update', {}, 'checking');
+}
+
+updateButton.addEventListener('click', checkUpdate);
+installButton.addEventListener('click', () => {
+  if (offeredRevision) runUpdate('/api/update/install', {version: offeredRevision}, 'downloading');
+});
 window.addEventListener('pageshow', event => {
   if (event.persisted && !setupFields.hidden) checkUpdate();
 });

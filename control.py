@@ -160,7 +160,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             for url, (filename, kind) in routes.items()}
     admin_routes = {'/api/settings', '/api/setup-code', '/api/password-protection', '/api/local-name', '/api/places', '/api/spotify/start',
                     '/api/spotify/finish', '/api/spotify/disconnect', '/api/layouts', '/api/layout-preview',
-                    '/api/layout-library', '/api/photo-import', '/api/spotify/check', '/api/update'}
+                    '/api/layout-library', '/api/photo-import', '/api/spotify/check', '/api/update', '/api/update/install'}
     allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {
         '/api/theme', '/api/display-mode', '/api/language', '/api/unlock',
     }
@@ -384,7 +384,13 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     retry = payload.get('retry', False)
                     if type(retry) is not bool:
                         raise ValueError('Invalid request.')
-                    self.json(200, updater.check(retry) if updater is not None else update_status())
+                    self.json(200, updater.check() if updater is not None else update_status())
+                    return
+                if self.path == '/api/update/install':
+                    version = payload.get('version')
+                    if not isinstance(version, str):
+                        raise ValueError('Check for updates before installing.')
+                    self.json(200, updater.install(version) if updater is not None else update_status())
                     return
                 if self.path == '/api/layouts':
                     screen = payload['screen']

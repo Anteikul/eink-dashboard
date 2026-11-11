@@ -119,6 +119,9 @@ with TemporaryDirectory() as folder:
         assert get('/api/update', {}, origin='http://other.example')[0] == 403
         assert get('/api/update', {'retry': 'yes'})[0] == 400
         assert get('/api/update', {}) == (200, {'state': 'unavailable', 'version': None})
+        assert get('/api/update/install', {'version': 'b' * 40}, code='')[0] == 403
+        assert get('/api/update/install', {'version': 'b' * 40}, origin='http://other.example')[0] == 403
+        assert get('/api/update/install', {})[0] == 400
         assert get('/api/settings', DEFAULTS, origin='http://other.example')[0] == 403
         status, data = get('/api/settings')
         assert status == 200 and data['settings'] == DEFAULTS and not data['spotifyConnected']

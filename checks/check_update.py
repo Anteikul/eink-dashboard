@@ -49,10 +49,19 @@ with TemporaryDirectory() as directory:
     updater = Updater(store, old, restarted.set)
     with patch('updates.latest_version', return_value=new), patch('updates.is_ahead', return_value=True), \
             patch('updates.prepare_release') as prepare:
-        updater.check()
+        updater.check_for_update()
+        assert updater.status() == {'state': 'available', 'version': old, 'availableVersion': new}
+        assert not prepare.called and not store.pending.exists() and not restarted.is_set()
+        try:
+            updater.install('c' * 40)
+        except ValueError:
+            assert not prepare.called
+        else:
+            raise AssertionError('Accepted a revision that was never offered')
+        updater.install(new)
         assert restarted.wait(5)
     assert store.pending.read_text().strip() == new and prepare.call_count == 1
-    assert updater.status() == {'state': 'restarting', 'version': old}
+    assert updater.status()['state'] == 'restarting'
 
 with TemporaryDirectory() as directory:
     store = UpdateStore(Path(directory))
@@ -60,8 +69,9 @@ with TemporaryDirectory() as directory:
     updater = Updater(store, old, restarted.set)
     with patch('updates.latest_version', return_value=new), patch('updates.is_ahead', return_value=True), \
             patch('updates.prepare_release', side_effect=EOFError('Download interrupted')):
-        updater.check_and_prepare(False)
-    assert updater.status() == {'state': 'failed', 'version': old}
+        updater.check_for_update()
+        updater.install_release(new)
+    assert updater.status() == {'state': 'install_failed', 'version': old, 'availableVersion': new}
     assert not store.pending.exists() and not restarted.is_set()
 
 with TemporaryDirectory() as directory:
@@ -86,12 +96,14 @@ with TemporaryDirectory() as directory:
     assert launch(root, []) == 0
     assert root.joinpath('old-started').exists() and store.active.read_text().strip() == old
     assert store.failed.read_text().strip() == new and not store.pending.exists()
-    updater = Updater(store, old, lambda: None)
+    restarted = Event()
+    updater = Updater(store, old, restarted.set)
     with patch('updates.latest_version', return_value=new), patch('updates.is_ahead', return_value=True), \
             patch('updates.prepare_release') as prepare:
-        updater.check_and_prepare(False)
+        updater.check_for_update()
         assert updater.status()['state'] == 'rolled_back' and not prepare.called
-        updater.check_and_prepare(True)
+        updater.install(new)
+        assert restarted.wait(5)
         assert store.pending.read_text().strip() == new and prepare.call_count == 1
 
 with TemporaryDirectory() as directory:

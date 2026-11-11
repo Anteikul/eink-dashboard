@@ -122,6 +122,7 @@ class Updater:
         self.restart = restart
         self.lock = Lock()
         self.state = 'idle'
+        self.available_version = None
 
     def status(self):
         with self.lock:
@@ -130,36 +131,54 @@ class Updater:
                 state = 'restarting'
             elif state == 'idle' and read_revision(self.store.failed):
                 state = 'rolled_back'
-            return {'state': state, 'version': self.version}
+            result = {'state': state, 'version': self.version}
+            if self.available_version is not None:
+                result['availableVersion'] = self.available_version
+            return result
 
     def set_state(self, state):
         with self.lock:
             self.state = state
 
-    def check(self, retry=False):
+    def check(self):
         with self.lock:
             if self.state not in BUSY and not read_revision(self.store.pending):
+                self.available_version = None
                 self.state = 'checking'
-                Thread(target=self.check_and_prepare, args=(retry,), daemon=True).start()
+                Thread(target=self.check_for_update, daemon=True).start()
         return self.status()
 
-    def check_and_prepare(self, retry):
+    def check_for_update(self):
         try:
             version = latest_version()
             if version == self.version or (self.version is not None and not is_ahead(self.version, version)):
                 self.set_state('current')
                 return
-            if not retry and read_revision(self.store.failed) == version:
-                self.set_state('rolled_back')
-                return
-            self.set_state('downloading')
+            with self.lock:
+                self.available_version = version
+                self.state = 'rolled_back' if read_revision(self.store.failed) == version else 'available'
+        except Exception as error:
+            print(f'Update check failed ({type(error).__name__}): {error}', flush=True)
+            self.set_state('failed')
+
+    def install(self, version):
+        with self.lock:
+            if version is None or version != self.available_version:
+                raise ValueError('Check for updates before installing.')
+            if self.state in ('available', 'rolled_back', 'install_failed') and not read_revision(self.store.pending):
+                self.state = 'downloading'
+                Thread(target=self.install_release, args=(version,), daemon=True).start()
+        return self.status()
+
+    def install_release(self, version):
+        try:
             prepare_release(self.store, version)
             write_private(self.store.pending, version + '\n')
             self.set_state('restarting')
             self.restart()
         except Exception as error:
             print(f'Update failed ({type(error).__name__}): {error}', flush=True)
-            self.set_state('failed')
+            self.set_state('install_failed')
 
 
 def supervise(store, args):
