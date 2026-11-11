@@ -28,8 +28,9 @@
   const palette = element('editor-palette');
   const photoFile = element('editor-photo-file');
   const cropButton = element('editor-crop-photo');
-  const photoDialog = element('editor-photo-dialog');
-  const photoCrop = createPhotoCrop(photoDialog, (canvas, photo) => {
+  const cropSurface = element('editor-photo-crop');
+  const photoStatus = element('editor-photo-status');
+  const photoCrop = createPhotoCrop(cropSurface, cropButton, (canvas, photo) => {
     canvas.width = photo.w;
     canvas.height = photo.h;
     paintInk(canvas, decodeInk(photo.bitmap), 255);
@@ -101,6 +102,7 @@
   let drag;
   let paletteDrag;
   let photoPoint;
+  let photoImporting = false;
   let layerDrag;
   let textEditing;
   let tool = 'select';
@@ -121,8 +123,8 @@
   const layers = (layout = current().layout) => layout ?? schema.defaults[screen];
   const widgets = () => layers().filter(layer => layer.type !== 'drawing');
   const drawings = () => layers().filter(layer => layer.type === 'drawing');
-  const definitions = () => schema.widgets[screen];
-  const definition = (type) => definitions().find(widget => widget.type === type);
+  const definitions = (target = screen) => schema.widgets[target];
+  const definition = (type, target) => definitions(target).find(widget => widget.type === type);
   const hasChanges = ({saved, layout}) => JSON.stringify(saved) !== JSON.stringify(layout);
   const restoreLayout = draft => draft.librarySaved?.layout ?? null;
   const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
@@ -217,11 +219,14 @@
 
   function updatePalette() {
     const full = widgets().length >= schema.maxWidgets;
-    for (const button of palette.children) button.disabled = full;
+    for (const button of palette.children) {
+      button.disabled = full || (photoImporting && button.dataset.widget === 'photo');
+    }
   }
 
   function updateInspector() {
     const widget = layers()[current().selection];
+    cropButton.disabled = widget?.type !== 'photo';
     const isDrawing = widget?.type === 'drawing';
     const item = widget && !isDrawing ? definition(widget.type) : null;
     const textStyle = item?.textStyle && !(
@@ -244,7 +249,6 @@
 
     element('editor-selected-widget').textContent = widgetLabel(widget, current().selection);
     element('editor-variant-label').hidden = item.variants.length === 0;
-    cropButton.hidden = widget.type !== 'photo';
     element('editor-text-style').hidden = !textStyle;
     element('editor-text-label').hidden = widget.type !== 'text';
     const customFormat = item.customFormat && widget.variant === 'custom';
@@ -608,6 +612,7 @@
   }
 
   function showScreen() {
+    photoCrop.close(false);
     finishText(false);
     drag = undefined;
     marquee.hidden = true;
@@ -902,8 +907,7 @@
     }
   }
 
-  function recordHistory(previous) {
-    const {undo, redo, layout} = current();
+  function recordHistory(previous, {undo, redo, layout} = current()) {
     if (JSON.stringify(previous) === JSON.stringify(layout)) return;
     undo.push(previous);
     if (undo.length > 40) undo.shift();
@@ -914,14 +918,18 @@
     if (!atlas || widgets().some(widget => !tiles.has(layerKey(widget)))) schedulePreview(80);
   }
 
-  function setDraft(layout, structureChanged = false, remember = true) {
-    const draft = current();
+  function setDraft(layout, structureChanged = false, remember = true, target = screen) {
+    const draft = drafts[target];
     const previous = draft.layout;
     draft.layout = layout;
-    if (remember) recordHistory(previous);
+    if (remember) recordHistory(previous, draft);
     draft.message = '';
+    if (structureChanged) draft.group = [];
+    if (target !== screen) {
+      updateStatus();
+      return;
+    }
     if (structureChanged) {
-      draft.group = [];
       renderWidgets();
     } else {
       for (const index of selectedIndices()) positionLayer(hitboxes[index], layers()[index]);
@@ -1188,29 +1196,37 @@
     return box;
   }
 
-  function widgetAt({w, h}, point) {
-    return snapPosition({
+  function widgetAt({w, h}, point, snap = true) {
+    const box = {
       x: clamp(Math.round(point.x - w / 2), 0, schema.width - w),
       y: clamp(Math.round(point.y - h / 2), 0, schema.height - h),
       w, h,
-    });
+    };
+    return snap ? snapPosition(box) : box;
   }
 
   function insideCanvas({x, y}) {
     return x >= 0 && y >= 0 && x < schema.width && y < schema.height;
   }
 
-  function addWidget(item, point, overrides) {
-    if (widgets().length >= schema.maxWidgets) return;
+  function addWidget(item, point, overrides, target = screen) {
+    const draft = drafts[target];
+    const previous = draft.layout ?? schema.defaults[target];
+    if (previous.filter(layer => layer.type !== 'drawing').length >= schema.maxWidgets) return false;
+    const active = target === screen;
     const template = {...item.template, ...overrides};
-    const widget = {...template, ...(point && widgetAt(template, point))};
+    const widget = {...template, ...(point && widgetAt(template, point, active && !photoCrop.active))};
     if (widget.type === 'text') widget.text = translate(widget.text);
-    const layout = [...layers(), widget];
-    current().selection = layout.length - 1;
-    setDraft(layout, true);
-    setTool('select');
-    showGuides();
-    hitboxes.at(-1).focus({preventScroll: true});
+    const layout = [...previous, widget];
+    const select = active && !photoCrop.active && !textEditing;
+    if (select) draft.selection = layout.length - 1;
+    setDraft(layout, true, true, target);
+    if (select) {
+      setTool('select');
+      showGuides();
+      hitboxes.at(-1).focus({preventScroll: true});
+    }
+    return true;
   }
 
   function pickWidget(item, point) {
@@ -1222,31 +1238,36 @@
     }
   }
 
-  function importPhoto(file, point) {
-    if (!file || widgets().length >= schema.maxWidgets) return;
+  async function importPhoto(file, point) {
+    if (!file || photoImporting || widgets().length >= schema.maxWidgets) return;
     if (!file.size || file.size > schema.photoMaxBytes) {
-      setText(previewStatus, 'Choose an image file up to 16 MB.');
+      setText(photoStatus, 'Choose an image file up to 16 MB.');
       return;
     }
-    const destination = point ?? {x: schema.width / 2, y: schema.height / 2};
-    photoCrop.open({
-      load: async signal => {
-        try {
-          const response = await request('/api/photo-import', {file, signal, fallback: 'Could not import the photo.'});
-          return await response.json();
-        } catch (error) {
-          if (error.message === badCode) showAccessError(error.message);
-          throw error;
-        }
-      },
-      onApply: (photo, crop) => {
-        const [, , width, height] = crop;
-        const scale = Math.min(schema.width * .75 / width, schema.height * .75 / height);
-        const w = Math.max(1, Math.round(width * scale));
-        const h = Math.max(1, Math.round(height * scale));
-        addWidget(definition('photo'), destination, {w, h, photo, crop});
-      },
-    });
+    const target = screen;
+    photoImporting = true;
+    updatePalette();
+    setText(photoStatus, 'Converting photo to black and white…');
+    try {
+      const response = await request('/api/photo-import', {file, fallback: 'Could not import the photo.'});
+      const photo = await response.json();
+      while (target === screen && (drag || paletteDrag || layerDrag)) {
+        await new Promise(requestAnimationFrame);
+      }
+      const scale = Math.min(schema.width * .75 / photo.w, schema.height * .75 / photo.h);
+      const w = Math.max(1, Math.round(photo.w * scale));
+      const h = Math.max(1, Math.round(photo.h * scale));
+      const crop = [0, 0, photo.w, photo.h];
+      const destination = point ?? {x: schema.width / 2, y: schema.height / 2};
+      const added = addWidget(definition('photo', target), destination, {w, h, photo, crop}, target);
+      setText(photoStatus, added ? '' : 'Use up to 18 widgets per layout.');
+    } catch (error) {
+      if (error.message === badCode) showAccessError(error.message);
+      setText(photoStatus, error instanceof TypeError ? 'Could not import the photo.' : error.message);
+    } finally {
+      photoImporting = false;
+      updatePalette();
+    }
   }
 
   function reorder(index, target) {
@@ -1342,7 +1363,7 @@
   window.addEventListener('beforeunload', (event) => {
     const unsaved = Object.values(drafts).some(draft => hasChanges(draft) &&
       (!draft.librarySaved || JSON.stringify(draft.librarySaved.layout) !== JSON.stringify(draft.layout)));
-    if (!textEditing && !unsaved) return;
+    if (!textEditing && !photoCrop.changed() && !unsaved) return;
     event.preventDefault();
     event.returnValue = '';
   });
@@ -1597,15 +1618,19 @@
     photoPoint = undefined;
   });
   cropButton.addEventListener('click', () => {
-    const layer = layers()[current().selection];
-    if (layer?.type === 'photo') {
-      photoCrop.open({
-        photo: layer.photo, crop: layer.crop,
-        onApply: (_photo, crop) => {
-          if (crop.some((value, index) => value !== layer.crop[index])) editWidget({crop});
-        },
-      });
+    if (photoCrop.active) {
+      photoCrop.close();
+      return;
     }
+    const layer = layers()[current().selection];
+    if (layer?.type !== 'photo' || drag || layerDrag || paletteDrag) return;
+    const {photo} = layer;
+    const scale = Math.min(layer.w / photo.w, layer.h / photo.h);
+    const w = photo.w * scale;
+    const h = photo.h * scale;
+    position(cropSurface, {x: layer.x + (layer.w - w) / 2, y: layer.y + (layer.h - h) / 2, w, h});
+    setTool('select');
+    photoCrop.open({photo, crop: layer.crop, onApply: crop => editWidget({crop})});
   });
   stage.addEventListener('dragover', event => {
     if (event.dataTransfer.types.includes('Files')) event.preventDefault();
@@ -1640,7 +1665,7 @@
     });
   }
   editor.addEventListener('keydown', (event) => {
-    if (photoDialog.open || content.hidden || event.isComposing || event.target.matches('input, textarea, select')) return;
+    if (photoCrop.active || content.hidden || event.isComposing || event.target.matches('input, textarea, select')) return;
     const selected = selectedIndices();
     if ((event.key === 'Delete' || event.key === 'Backspace') &&
         selected.length && !drag && !layerDrag && !paletteDrag) {
@@ -1655,7 +1680,7 @@
     }
   });
   window.addEventListener('keydown', (event) => {
-    if (photoDialog.open || content.hidden || event.isComposing || !(event.ctrlKey || event.metaKey) ||
+    if (photoCrop.active || content.hidden || event.isComposing || !(event.ctrlKey || event.metaKey) ||
         event.key.toLowerCase() !== 'z' || event.target.isContentEditable ||
         event.target.matches?.('input, textarea, select')) return;
     event.preventDefault();

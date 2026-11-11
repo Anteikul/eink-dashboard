@@ -87,13 +87,15 @@
             <p id="local-name-status" role="status"></p>
           </form>
           <section class="setup-form settings-card spotify-setup" aria-labelledby="spotify-title">
-            <h3 id="spotify-title" data-i18n>Spotify</h3>
+            <div class="spotify-heading">
+              <h3 id="spotify-title" data-i18n>Spotify</h3>
+              <span id="spotify-verified" role="img" tabindex="0" aria-label="Spotify connected" data-i18n-attributes="aria-label" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+              </span>
+            </div>
             <p id="spotify-status" data-i18n></p>
             <div id="spotify-check" hidden>
-              <p class="spotify-check-result" role="status">
-                <svg id="spotify-verified" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="m5 12 4 4L19 6"/></svg>
-                <span id="spotify-check-status"></span>
-              </p>
+              <p id="spotify-check-status" role="status"></p>
               <button id="spotify-check-button" type="button" data-i18n>Check Spotify API</button>
             </div>
             <form id="spotify-form" class="setup-form">

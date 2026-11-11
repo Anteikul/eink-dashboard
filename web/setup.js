@@ -95,7 +95,7 @@ function showSettings(data) {
 function showSpotify(data) {
   document.querySelector('#redirect-uri').textContent = data.redirectUri;
   setText(document.querySelector('#spotify-status'), data.spotifyConnected
-    ? 'Your account is connected.' : 'Connect your Spotify account to show music.');
+    ? '' : 'Connect your Spotify account to show music.');
   spotifyForm.hidden = data.spotifyConnected;
   if (data.spotifyConnected) finishForm.hidden = true;
   disconnect.hidden = !data.spotifyConnected;
@@ -117,7 +117,7 @@ async function verifySpotify() {
     if (!result.verified) throw new Error('Could not verify Spotify API.');
     if (!controller.signal.aborted) {
       spotifyVerified.hidden = false;
-      setText(spotifyCheckStatus, 'Spotify API verified.');
+      setText(spotifyCheckStatus, '');
     }
   } catch (error) {
     if (!controller.signal.aborted) setText(spotifyCheckStatus, error.message);

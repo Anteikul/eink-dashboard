@@ -98,8 +98,27 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .setup [hidden] { display: none !important; }
 .setup-form { display: grid; gap: 8px; margin: 14px 0; }
 .spotify-setup .setup-form { margin: 0; }
-.spotify-check-result { display: flex; align-items: center; gap: 6px; }
-#spotify-verified { width: 19px; height: 19px; fill: none; stroke: var(--focus); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.spotify-heading { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+.setup-form .spotify-heading h3 { margin: 0; }
+#spotify-status:empty { display: none; }
+#spotify-verified { position: relative; display: inline-flex; border-radius: 3px; }
+#spotify-verified:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+#spotify-verified svg { width: 19px; height: 19px; fill: none; stroke: var(--focus); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+#spotify-verified:is(:hover, :focus-visible)::after {
+  content: attr(aria-label);
+  position: absolute;
+  z-index: 5;
+  inset-inline-start: 50%;
+  inset-block-end: calc(100% + 5px);
+  transform: translateX(-50%);
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .setup-form h3 { margin: 9px 0 0; font-size: 14px; }
 .setup-form p, #setup-status { margin: 2px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 #setup-status:empty { display: none; }
@@ -497,21 +516,18 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 }
 #editor-library-status { flex: none; }
 
-#editor-photo-dialog { width: min(540px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 18px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
-#editor-photo-dialog::backdrop { background: rgb(0 0 0 / .56); }
-#editor-photo-dialog form { margin: 0; gap: 10px; }
 #editor-photo-status:empty { display: none; }
-#editor-photo-controls { display: grid; gap: 8px; }
-#editor-photo-surface {
-  position: relative;
-  width: min(100%, calc(min(44dvh, 360px) * var(--photo-ratio)));
-  margin-inline: auto;
+#editor-crop-photo:disabled { cursor: default; }
+#editor-photo-crop {
+  position: absolute;
+  z-index: 6;
   overflow: hidden;
   background: #000;
   cursor: crosshair;
   touch-action: none;
 }
-#editor-photo-image { display: block; width: 100%; height: auto; image-rendering: pixelated; pointer-events: none; }
+#editor-photo-crop:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#editor-stage:has(#editor-photo-crop:not([hidden])) #editor-selection { display: none; }
 #editor-photo-selection {
   position: absolute;
   outline: 2px solid var(--accent);
@@ -519,10 +535,6 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   box-shadow: 0 0 0 100vmax rgb(0 0 0 / .5);
   pointer-events: none;
 }
-.editor-photo-geometry { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.editor-photo-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 6px; }
-.editor-photo-actions button, #editor-crop-photo { border-color: var(--line); }
-#editor-photo-apply { background: var(--accent); color: #1e251f; }
 
 @media (max-width: 800px) and (orientation: portrait), (max-width: 600px) {
   .editor-grid {
