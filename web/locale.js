@@ -112,6 +112,7 @@ const czech = new Map(Object.entries({
   'Save to library': 'Uložit do knihovny',
   'Delete saved layout': 'Smazat uložené rozvržení',
   'Default layout': 'Výchozí rozvržení',
+  'Custom layout': 'Vlastní rozvržení',
   'Built-in layout': 'Vestavěná předloha',
   'Save date unknown': 'Datum uložení neznámé',
   'Could not open the layout library.': 'Knihovnu se nepodařilo otevřít.',

@@ -20,7 +20,8 @@ from zoneinfo import ZoneInfo
 from control import PanelState, preview_png, start_server
 from device_settings import DEFAULTS, ROTATIONS, DeviceSettings, write_private
 from layout_editor import (
-    PANEL_SIZE, clock_has_seconds, content_key, editor_schema, preview_weather, render_custom, render_layer_atlas,
+    PANEL_SIZE, clock_has_seconds, content_key, editor_schema, panel_bounds, preview_weather, render_custom,
+    render_layer_atlas,
 )
 from local_name import LocalName
 from spotify_playback import SpotifyPlayback, Track
@@ -123,24 +124,26 @@ def display_page(mode, playing, automatic_playback):
 def fit_panel(pixels, size, theme, *, rotation=0):
     if size == PANEL_SIZE and rotation in (0, 180):
         return pixels[::-1] if rotation == 180 else pixels
-    from PIL import Image, ImageOps
+    from PIL import Image
 
     source = Image.frombytes('L', size, bytes(pixels))
     if rotation == 90:
         source = source.transpose(Image.Transpose.ROTATE_270)
     elif rotation == 270:
         source = source.transpose(Image.Transpose.ROTATE_90)
-    if source.size == PANEL_SIZE:
-        return bytearray(source.tobytes())
-    resized = ImageOps.contain(source, PANEL_SIZE, Image.Resampling.NEAREST)
+    x, y, width, height = panel_bounds(size, rotation)
+    resized = source.resize((width, height), Image.Resampling.NEAREST)
+    if rotation == 180:
+        resized = resized.transpose(Image.Transpose.ROTATE_180)
+    if resized.size == PANEL_SIZE:
+        return bytearray(resized.tobytes())
     panel = Image.new('L', PANEL_SIZE, int(theme == 'light'))
-    panel.paste(resized, ((WIDTH - resized.width) // 2, (HEIGHT - resized.height) // 2))
-    frame = bytearray(panel.tobytes())
-    return frame[::-1] if rotation == 180 else frame
+    panel.paste(resized, (x, y))
+    return bytearray(panel.tobytes())
 
 
 def render_layout_preview(screen, layout, theme, language, units, *, layers=False, size=PANEL_SIZE,
-                          weather_enabled=True, geometry=None):
+                          weather_enabled=True, geometry=None, rotation=None):
     from io import BytesIO
     from music_screen import progress_pixels, render_music
 
@@ -166,6 +169,9 @@ def render_layout_preview(screen, layout, theme, language, units, *, layers=Fals
         pixels = render_music(track, theme, cover, progress_pixels(progress, cover))
     else:
         pixels = render(now, weather, theme, units, language, weather_enabled=weather_enabled)
+    if rotation is not None:
+        pixels = fit_panel(pixels, size, theme, rotation=rotation)
+        size = PANEL_SIZE
     return preview_png(pixels, *size)
 
 
@@ -341,7 +347,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
         threading.Thread(target=network.poll, args=(stop,), daemon=True).start()
     active_link = Link(listen)
     server = (start_server(listen, port, state, settings, reload_settings,
-                           layout_preview=render_layout_preview, spotify=spotify, updater=updater)
+                           layout_preview=render_layout_preview, spotify=spotify, updater=updater, rotation=rotation)
               if listen else None)
     local_name = LocalName()
     try:
@@ -356,7 +362,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 if link.address:
                     server = start_server(link.address, port, state, settings, reload_settings,
                                           wifi=network if hotspot else None,
-                                          layout_preview=render_layout_preview, spotify=spotify, updater=updater)
+                                          layout_preview=render_layout_preview, spotify=spotify, updater=updater,
+                                          rotation=rotation)
                 active_link = link
             preferences = settings.values
             local_name.update(link.address if server and not hotspot and preferences['local_name'] else None,
@@ -473,8 +480,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             if showing_join and join_until is None:
                 join_until = time.monotonic() + JOIN_CONFIRM_SECONDS
             if not hotspot and (server or network):
-                preview = screen[::-1] if rotation == 180 else screen
-                state.publish(theme, preview_png(preview, WIDTH, HEIGHT), track.url if track else None, page=page)
+                state.publish(theme, preview_png(screen, WIDTH, HEIGHT), track.url if track else None, page=page)
             if ready:
                 write_private(Path(ready), 'ready\n')
                 ready = None

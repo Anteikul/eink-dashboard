@@ -54,6 +54,9 @@ with TemporaryDirectory() as folder:
         schema = json.loads(data)
         assert schema['layouts'] == {'dashboard': None, 'playback': None}
         assert (schema['width'], schema['height']) == (250, 122)
+        assert schema['panel'] == {'rotation': 180, 'width': 250, 'height': 122, 'bounds': [0, 0, 250, 122]}
+        assert json.loads(request('/api/state', code='')[1])['activeLayout'] == {
+            'screen': 'dashboard', 'kind': 'default', 'name': None}
         source = Image.new('RGB', (16, 8), 'black')
         ImageDraw.Draw(source).rectangle((8, 0, 15, 7), fill='white')
         for format in ('JPEG', 'PNG', 'GIF', 'BMP', 'TIFF'):
@@ -249,10 +252,12 @@ with TemporaryDirectory() as folder:
         assert DeviceSettings(root).get_layout_library('dashboard', 'Moje plocha')['layout'] == draft['layout']
         assert json.loads(request(listing + '&details=1')[1])['entries'] == [metadata]
         assert request(entry + '&thumbnail=1', code='wrong')[0] == 403
-        assert request(entry + '&thumbnail=1') == request(
-            '/api/layout-preview', {'screen': 'dashboard', 'layout': draft['layout']})
-        assert request(listing + '&name=&thumbnail=1') == request(
-            '/api/layout-preview', {'screen': 'dashboard', 'layout': schema['defaults']['dashboard']})
+        for path, preview_layout in ((entry, draft['layout']), (listing + '&name=', schema['defaults']['dashboard'])):
+            status, thumbnail_png = request(path + '&thumbnail=1')
+            logical_status, logical_png = request('/api/layout-preview', {'screen': 'dashboard', 'layout': preview_layout})
+            assert status == logical_status == 200
+            with Image.open(io.BytesIO(thumbnail_png)) as thumbnail, Image.open(io.BytesIO(logical_png)) as logical:
+                assert thumbnail.tobytes() == logical.transpose(Image.Transpose.ROTATE_180).tobytes()
         assert (root / '.layout-library.json').stat().st_mode & 0o777 == 0o600
         assert settings.layouts == {'dashboard': None, 'playback': []}
         apply = library + '/apply'
@@ -264,11 +269,31 @@ with TemporaryDirectory() as folder:
         assert state.mode == 'auto' and settings.layouts['dashboard'] is None
         status, applied = request(apply, selection)
         assert status == 200 and json.loads(applied)['mode'] == 'dashboard'
+        assert json.loads(applied)['activeLayout'] == {
+            'screen': 'dashboard', 'kind': 'saved', 'name': 'Moje plocha'}
+        assert DeviceSettings(root).active_layout('dashboard')['name'] == 'Moje plocha'
+        layout_file = json.loads(settings.layouts_path.read_text())
+        del layout_file['names']
+        settings.layouts_path.write_text(json.dumps(layout_file))
+        assert DeviceSettings(root).active_layout('dashboard')['name'] == 'Moje plocha'
+        assert request(library, {**draft, 'name': 'Stejné rozvržení'})[0] == 200
+        assert request(apply, {**selection, 'name': 'Stejné rozvržení'})[0] == 200
+        assert DeviceSettings(root).active_layout('dashboard')['name'] == 'Stejné rozvržení'
+        assert request(library, {**draft, 'name': 'Stejné rozvržení', 'delete': True})[0] == 200
+        assert DeviceSettings(root).active_layout('dashboard')['kind'] == 'custom'
+        assert request(apply, selection)[0] == 200
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': custom})[0] == 200
+        assert json.loads(request('/api/state', code='')[1])['activeLayout'] == {
+            'screen': 'dashboard', 'kind': 'custom', 'name': None}
+        assert request(apply, selection)[0] == 200
         assert DeviceSettings(root).layouts == {'dashboard': draft['layout'], 'playback': []}
         assert PanelState(root / 'theme.txt').mode == 'dashboard'
         assert json.loads(request(entry)[1])['layout'] == draft['layout']
         assert request(apply, {'screen': 'dashboard', 'name': None})[0] == 200
         assert settings.layouts['dashboard'] is None
+        assert request('/api/layouts', {**draft, 'libraryName': 'Moje plocha'})[0] == 200
+        assert DeviceSettings(root).active_layout('dashboard')['name'] == 'Moje plocha'
+        assert request(apply, {'screen': 'dashboard', 'name': None})[0] == 200
         playback = {'screen': 'playback', 'name': 'Hudba', 'layout': custom}
         assert request(library, playback)[0] == 200
         status, applied = request(apply, {'screen': 'playback', 'name': 'Hudba'})
@@ -369,6 +394,10 @@ with TemporaryDirectory() as folder:
         assert request('/api/settings', original)[0] == 200
         assert settings.layouts['dashboard'] == layout
         assert settings.get_layout_library('dashboard', 'Starší')['layout'] == custom
+        for rotation in (90, 270):
+            assert request('/api/settings', {**original, 'rotation': rotation})[0] == 200
+            assert json.loads(request('/api/layouts')[1])['panel'] == {
+                'rotation': rotation, 'width': 250, 'height': 122, 'bounds': [95, 0, 60, 122]}
         assert request('/api/settings', enlarged)[0] == 200
         assert request(apply, {'screen': 'dashboard', 'name': 'Starší'})[0] == 200
         assert settings.layouts['dashboard'] == settings.get_layout_library('dashboard', 'Starší')['layout']

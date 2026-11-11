@@ -83,6 +83,8 @@ h2 { font-size: 15px; margin: 0; font-weight: 680; }
 .quick-layouts { margin-top: 18px; border: 1px solid var(--line); border-radius: 8px; }
 .quick-layouts summary { padding: 12px; cursor: pointer; font-size: 14px; font-weight: 600; }
 .quick-layouts summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#active-layout:not([hidden]) { margin-inline-start: 8px; color: var(--muted); font-weight: 500; overflow-wrap: anywhere; }
+.quick-layouts button[aria-pressed=true]::after { content: '✓'; margin-inline-start: auto; }
 #quick-layout-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 12px; padding: 0 12px 12px; border: 0; }
 #quick-layout-options[hidden], #quick-layout-status:empty { display: none; }
 .quick-layouts h3 { margin: 0 0 5px; color: var(--muted); font-size: 13px; }
@@ -231,15 +233,20 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   container-type: size;
   place-items: start center;
 }
-#editor-stage {
+#editor-panel-frame {
   position: relative;
   width: min(100%, calc(100cqh * var(--display-ratio, 2.04918)));
-  aspect-ratio: 250 / 122;
-  background: #f9f9f4;
+  aspect-ratio: var(--display-ratio, 2.04918);
+  background: #fff;
+}
+:root[data-theme=dark] #editor-panel-frame { background: #000; }
+#editor-stage {
+  position: absolute;
+  transform: translate(-50%, -50%) rotate(var(--rotation));
   user-select: none;
 }
 #editor-stage:focus { outline: none; }
-#editor-stage canvas {
+#editor-image, #editor-stage canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -336,6 +343,8 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-handle[data-corner$="e"] { left: 100%; }
 .editor-handle:is([data-corner="nw"], [data-corner="se"]) { cursor: nwse-resize; }
 .editor-handle:is([data-corner="ne"], [data-corner="sw"]) { cursor: nesw-resize; }
+#editor-stage[data-quarter-turn] .editor-handle:is([data-corner="nw"], [data-corner="se"]) { cursor: nesw-resize; }
+#editor-stage[data-quarter-turn] .editor-handle:is([data-corner="ne"], [data-corner="sw"]) { cursor: nwse-resize; }
 #editor-stage:not([data-tool="select"]) { cursor: crosshair; touch-action: none; }
 #editor-stage:not([data-tool="select"]) .editor-hitbox { pointer-events: none; }
 .editor-tools, .editor-history, .editor-contextbar, .editor-brush-options,

@@ -58,6 +58,12 @@ def library_entry(value):
     return value['layout'], saved_at if isinstance(saved_at, str) else None
 
 
+def library_layout(screen, entry, size):
+    layout, _ = library_entry(entry)
+    source = validate_display_size(entry.get('size', PANEL_SIZE)) if isinstance(entry, dict) else PANEL_SIZE
+    return resize_layout(validate_layout(screen, layout, source), source, size)
+
+
 def library_listing(entries, *, details=False):
     names = sorted(entries, key=str.casefold)
     result = {'names': names}
@@ -154,14 +160,34 @@ class DeviceSettings:
             write_private(session_key_path, self.session_key.hex() + '\n')
 
     def load_layouts(self):
-        defaults = {screen: (PANEL_SIZE, None) for screen in LAYOUT_SCREENS}
+        defaults = {screen: (PANEL_SIZE, None, None) for screen in LAYOUT_SCREENS}
         try:
             saved = json.loads(self.layouts_path.read_text())
             sizes = saved.get('sizes', {})
+            names = saved.get('names', {})
+            if not isinstance(names, dict):
+                names = {}
+            try:
+                library = self.read_library()
+            except OSError:
+                library = {}
             layouts = {}
             for screen in defaults:
                 size = validate_display_size(sizes.get(screen, PANEL_SIZE))
-                layouts[screen] = size, validate_layout(screen, saved.get(screen), size)
+                layout = validate_layout(screen, saved.get(screen), size)
+                # Older installations stored the layout alone. Recover its name if the match is unique.
+                candidates = library.get(screen, {})
+                if screen in names:
+                    candidates = {key: entry for key, entry in candidates.items() if key == names[screen]}
+                matches = []
+                if layout is not None:
+                    for name, entry in candidates.items():
+                        try:
+                            if library_layout(screen, entry, size) == layout:
+                                matches.append(name)
+                        except (KeyError, TypeError, ValueError):
+                            continue
+                layouts[screen] = size, layout, matches[0] if len(matches) == 1 else None
             return layouts
         except FileNotFoundError:
             pass
@@ -175,7 +201,12 @@ class DeviceSettings:
 
     def layouts_at(self, size):
         return {screen: resize_layout(layout, source, size)
-                for screen, (source, layout) in self._stored_layouts.items()}
+                for screen, (source, layout, _) in self._stored_layouts.items()}
+
+    def active_layout(self, screen):
+        _, layout, name = self._stored_layouts[screen]
+        kind = 'saved' if name is not None else 'default' if layout is None else 'custom'
+        return {'screen': screen, 'kind': kind, 'name': name}
 
     def require_display_size(self, expected):
         size = self.layout_state[0]
@@ -183,18 +214,43 @@ class DeviceSettings:
             raise ValueError('Display dimensions changed. Reopen the editor.')
         return size
 
-    def save_layout(self, screen, layout, *, expected_size=None):
+    def save_layout(self, screen, layout, *, expected_size=None, name=None):
         with self.lock:
             size = self.require_display_size(expected_size)
             layout = validate_layout(screen, layout, size)
-            if layout != self.layouts[screen]:
-                stored = {**self._stored_layouts, screen: (size, layout)}
-                data = {name: value for name, (_, value) in stored.items()}
-                data['sizes'] = {name: dimensions for name, (dimensions, _) in stored.items()}
-                write_private(self.layouts_path, json.dumps(data, ensure_ascii=False) + '\n')
-                self._stored_layouts = stored
-                self.layout_state = size, {**self.layouts, screen: layout}
+            selected = self._stored_layouts[screen][2] if layout == self.layouts[screen] else None
+            if name is not None:
+                name = layout_name(name)
+                try:
+                    if layout == self.get_layout_library(screen, name, size=size)['layout']:
+                        selected = name
+                except KeyError:
+                    pass
+            if layout != self.layouts[screen] or selected != self._stored_layouts[screen][2]:
+                self._write_layout(screen, size, layout, selected)
         return layout
+
+    def apply_layout(self, screen, name):
+        with self.lock:
+            size = self.layout_state[0]
+            if name is not None:
+                name = layout_name(name)
+                layout = self.get_layout_library(screen, name, size=size)['layout']
+            else:
+                layout = validate_layout(screen, None, size)
+            if layout != self.layouts[screen] or name != self._stored_layouts[screen][2]:
+                self._write_layout(screen, size, layout, name)
+
+    def _write_layout(self, screen, size, layout, name):
+        current_size, layouts = self.layout_state
+        visible = resize_layout(layout, size, current_size)
+        stored = {**self._stored_layouts, screen: (size, layout, name)}
+        data = {key: value for key, (_, value, _) in stored.items()}
+        data['sizes'] = {key: dimensions for key, (dimensions, _, _) in stored.items()}
+        data['names'] = {key: selected for key, (_, _, selected) in stored.items()}
+        write_private(self.layouts_path, json.dumps(data, ensure_ascii=False) + '\n')
+        self._stored_layouts = stored
+        self.layout_state = current_size, {**layouts, screen: visible}
 
     def read_library(self):
         try:
@@ -216,10 +272,8 @@ class DeviceSettings:
         if name is None:
             return library_listing(entries, details=details)
         entry = entries[layout_name(name)]
-        layout, _ = library_entry(entry)
-        source = validate_display_size(entry.get('size', PANEL_SIZE)) if isinstance(entry, dict) else PANEL_SIZE
         size = self.layout_state[0] if size is None else size
-        return {'layout': resize_layout(validate_layout(screen, layout, source), source, size)}
+        return {'layout': library_layout(screen, entry, size)}
 
     def edit_layout_library(self, screen, name, layout, *, delete=False, expected_size=None):
         if screen not in LAYOUT_SCREENS:
@@ -231,6 +285,9 @@ class DeviceSettings:
             entries = library[screen]
             if delete:
                 del entries[name]
+                source, active, selected = self._stored_layouts[screen]
+                if selected == name:
+                    self._write_layout(screen, source, active, None)
             else:
                 if name in entries:
                     raise ValueError('A saved layout already has that name.')

@@ -5,6 +5,7 @@ const image = document.querySelector('#preview');
 const placeholder = document.querySelector('#placeholder');
 const trackLink = document.querySelector('#track-link');
 const layoutPicker = document.querySelector('#saved-layouts');
+const activeLayoutLabel = document.querySelector('#active-layout');
 const layoutOptions = document.querySelector('#quick-layout-options');
 const layoutStatus = document.querySelector('#quick-layout-status');
 const layoutSections = [...layoutOptions.querySelectorAll('[data-screen]')];
@@ -14,14 +15,31 @@ let saveError = '';
 let reading = false;
 let change = 0;
 let loadingLayouts = false;
+let activeLayout;
 
 image.addEventListener('load', () => {
   placeholder.hidden = true;
   image.hidden = false;
 });
 
+function showActiveLayout() {
+  if (!activeLayout) return;
+  const {screen, kind, name} = activeLayout;
+  const title = name ?? translate(kind === 'default' ? 'Default layout' : 'Custom layout');
+  activeLayoutLabel.textContent = '· ' + title;
+  activeLayoutLabel.hidden = false;
+  for (const section of layoutSections) {
+    for (const button of section.querySelectorAll('button[data-layout]')) {
+      const selected = section.dataset.screen === screen && kind !== 'custom' && button.dataset.layout === (name ?? '');
+      button.setAttribute('aria-pressed', String(selected));
+    }
+  }
+}
+
 function show(data) {
   applyLanguage(data.language);
+  activeLayout = data.activeLayout;
+  showActiveLayout();
   const applied = data.appliedTheme === data.theme && data.page && (data.mode === 'auto' || data.page === data.mode);
   trackLink.hidden = !data.trackUrl;
   if (data.trackUrl) trackLink.querySelector('a').href = data.trackUrl;
@@ -128,6 +146,7 @@ async function loadQuickLayouts() {
       });
       section.querySelector('[data-saved-names]').replaceChildren(...buttons);
     }
+    showActiveLayout();
     layoutOptions.hidden = false;
     layoutOptions.disabled = false;
     setText(layoutStatus, '');

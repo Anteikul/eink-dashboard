@@ -145,27 +145,29 @@
               </div>
             </div>
             <div id="editor-canvas-area" class="editor-canvas-area">
-              <div id="editor-stage" data-tool="select" tabindex="-1" aria-label="Display canvas" data-i18n-attributes="aria-label" role="group">
+              <div id="editor-panel-frame">
                 <canvas id="editor-image" width="250" height="122" role="img" aria-label="Sample e-ink frame" data-i18n-attributes="aria-label"></canvas>
-                <div id="editor-selection" hidden aria-hidden="true">
-                  <span class="editor-handle" data-corner="nw"></span>
-                  <span class="editor-handle" data-corner="ne"></span>
-                  <span class="editor-handle" data-corner="sw"></span>
-                  <span class="editor-handle" data-corner="se"></span>
-                </div>
-                <div id="editor-marquee" hidden aria-hidden="true"></div>
-                <div id="editor-drop-marker" hidden aria-hidden="true"></div>
-                <div id="editor-guide-x" class="editor-guide" hidden aria-hidden="true"></div>
-                <div id="editor-guide-y" class="editor-guide" hidden aria-hidden="true"></div>
-                <textarea id="editor-inline-text" aria-label="Edit text on canvas" data-i18n-attributes="aria-label" rows="2" hidden></textarea>
-                <div id="editor-photo-crop" role="group" aria-label="Crop photo" data-i18n-attributes="aria-label" tabindex="0" hidden>
-                  <canvas id="editor-photo-image" role="img" aria-label="Black and white photo" data-i18n-attributes="aria-label"></canvas>
-                  <div id="editor-photo-mask" aria-hidden="true"><div></div></div>
-                  <div id="editor-photo-selection" aria-hidden="true">
+                <div id="editor-stage" data-tool="select" tabindex="-1" aria-label="Display canvas" data-i18n-attributes="aria-label" role="group">
+                  <div id="editor-selection" hidden aria-hidden="true">
                     <span class="editor-handle" data-corner="nw"></span>
                     <span class="editor-handle" data-corner="ne"></span>
                     <span class="editor-handle" data-corner="sw"></span>
                     <span class="editor-handle" data-corner="se"></span>
+                  </div>
+                  <div id="editor-marquee" hidden aria-hidden="true"></div>
+                  <div id="editor-drop-marker" hidden aria-hidden="true"></div>
+                  <div id="editor-guide-x" class="editor-guide" hidden aria-hidden="true"></div>
+                  <div id="editor-guide-y" class="editor-guide" hidden aria-hidden="true"></div>
+                  <textarea id="editor-inline-text" aria-label="Edit text on canvas" data-i18n-attributes="aria-label" rows="2" hidden></textarea>
+                  <div id="editor-photo-crop" role="group" aria-label="Crop photo" data-i18n-attributes="aria-label" tabindex="0" hidden>
+                    <canvas id="editor-photo-image" role="img" aria-label="Black and white photo" data-i18n-attributes="aria-label"></canvas>
+                    <div id="editor-photo-mask" aria-hidden="true"><div></div></div>
+                    <div id="editor-photo-selection" aria-hidden="true">
+                      <span class="editor-handle" data-corner="nw"></span>
+                      <span class="editor-handle" data-corner="ne"></span>
+                      <span class="editor-handle" data-corner="sw"></span>
+                      <span class="editor-handle" data-corner="se"></span>
+                    </div>
                   </div>
                 </div>
               </div>

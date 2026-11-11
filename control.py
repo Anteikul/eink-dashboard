@@ -15,7 +15,7 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs
 
 from device_settings import find_places, write_private
-from layout_editor import MAX_DIMENSION, MAX_DRAWINGS, MAX_WIDGETS, PANEL_SIZE, editor_schema, validate_layout
+from layout_editor import MAX_DIMENSION, MAX_DRAWINGS, MAX_WIDGETS, PANEL_SIZE, editor_schema, panel_bounds, validate_layout
 from photo_import import PHOTO_SIZE, PHOTO_UPLOAD_LIMIT, prepare_photo
 from spotify_playback import SpotifyPlayback
 
@@ -133,7 +133,7 @@ class PanelState:
 
 
 def start_server(host, port, state, settings, reload_settings, *, wifi=None, layout_preview=None, spotify=None,
-                 updater=None):
+                 updater=None, rotation=None):
     assets = Path(__file__).with_name('web')
     routes = {
         '/': ('index.html', 'text/html; charset=utf-8'),
@@ -168,7 +168,12 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
     photo_lock = threading.Lock()
 
     def panel_status():
-        return {**state.status(), 'language': settings.values['language']}
+        status = state.status()
+        screen = status['mode'] if status['mode'] != 'auto' else status['page'] or 'dashboard'
+        return {**status, 'language': settings.values['language'], 'activeLayout': settings.active_layout(screen)}
+
+    def display_rotation():
+        return settings.values['rotation'] if rotation is None else rotation
 
     def update_status():
         return updater.status() if updater is not None else {'state': 'unavailable', 'version': None}
@@ -217,7 +222,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             self.json(403, {'error': BAD_CODE})
             return False
 
-        def layout_png(self, screen, layout, size, *, geometry=None):
+        def layout_png(self, screen, layout, size, *, geometry=None, panel=False):
             if layout_preview is None:
                 from dashboard import render_layout_preview
             else:
@@ -228,6 +233,8 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 options['size'] = size
             if not preferences['weather_enabled']:
                 options['weather_enabled'] = False
+            if panel:
+                options['rotation'] = display_rotation()
             return render_layout_preview(screen, layout, state.theme, preferences['language'],
                                          preferences['units'], **options)
 
@@ -277,7 +284,10 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             elif path == '/api/layouts':
                 if self.setup_access():
                     size, layouts = settings.layout_state
-                    self.json(200, {**editor_schema(size), 'layouts': layouts})
+                    angle = display_rotation()
+                    panel = {'width': PANEL_SIZE[0], 'height': PANEL_SIZE[1], 'rotation': angle,
+                             'bounds': panel_bounds(size, angle)}
+                    self.json(200, {**editor_schema(size), 'layouts': layouts, 'panel': panel})
             elif path == '/api/layout-library':
                 if self.setup_access():
                     params = parse_qs(query, keep_blank_values=True)
@@ -293,7 +303,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                             layout = settings.get_layout_library(screen, name, size=size)['layout'] if name else None
                             if layout is None:
                                 layout = editor_schema(size)['defaults'][screen]
-                            self.reply(200, 'image/png', self.layout_png(screen, layout, size))
+                            self.reply(200, 'image/png', self.layout_png(screen, layout, size, panel=True))
                         else:
                             self.json(200, settings.get_layout_library(
                                 screen, name, details=params.get('details') == ['1'], size=size))
@@ -396,18 +406,17 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     return
                 if self.path == '/api/layouts':
                     screen = payload['screen']
-                    layout = settings.save_layout(screen, payload['layout'], expected_size=payload.get('displaySize'))
+                    layout = settings.save_layout(screen, payload['layout'], expected_size=payload.get('displaySize'),
+                                                  name=payload.get('libraryName'))
                     self.json(200, {'screen': screen, 'layout': layout})
                     return
                 if self.path == '/api/layout-library/apply':
                     screen, name = payload['screen'], payload['name']
-                    size = settings.layout_state[0]
                     try:
-                        layout = settings.get_layout_library(screen, name, size=size)['layout'] if name is not None else None
+                        settings.apply_layout(screen, name)
                     except KeyError:
                         self.json(404, {'error': 'That saved layout no longer exists.'})
                         return
-                    settings.save_layout(screen, layout, expected_size=size)
                     state.set_mode(screen)
                     self.json(200, panel_status())
                     return

@@ -11,8 +11,11 @@
   const tabs = [...editor.querySelectorAll('[role=tab]')];
   const stage = element('editor-stage');
   const canvasArea = element('editor-canvas-area');
+  const panelFrame = element('editor-panel-frame');
   const preview = element('editor-image');
-  const frame = preview.getContext('2d');
+  const output = preview.getContext('2d');
+  const canvas = document.createElement('canvas');
+  const frame = canvas.getContext('2d');
   const drawing = document.createElement('canvas');
   const eraseSurface = document.createElement('canvas');
   const eraseContext = eraseSurface.getContext('2d');
@@ -34,7 +37,7 @@
     canvas.width = photo.w;
     canvas.height = photo.h;
     paintInk(canvas, decodeInk(photo.bitmap), 255);
-  });
+  }, {point: canvasPoint, direction: canvasDirection});
   const tools = element('editor-tools');
   const toolbar = element('editor-toolbar');
   const history = element('editor-history');
@@ -146,17 +149,17 @@
 
   function positionHistory() {
     const area = canvasArea.getBoundingClientRect();
-    if (!area.width || !area.height) return;
+    if (!schema || !area.width || !area.height) return;
     const extraRow = toolbar.hasAttribute('data-history-row') ? toolbar.offsetHeight - tools.offsetHeight : 0;
-    const widthInOneRow = Math.min(area.width,
-      (area.height + extraRow) * preview.width / preview.height);
+    const {width, height} = schema.panel;
+    const widthInOneRow = Math.min(area.width, (area.height + extraRow) * width / height);
     toolbar.toggleAttribute('data-history-row', (widthInOneRow - tools.offsetWidth) / 2 < history.offsetWidth + 2);
-    history.style.marginInlineEnd = Math.max(0, area.right - stage.getBoundingClientRect().right) + 'px';
+    history.style.marginInlineEnd = Math.max(0, area.right - panelFrame.getBoundingClientRect().right) + 'px';
   }
 
   const historyObserver = new ResizeObserver(positionHistory);
   historyObserver.observe(canvasArea);
-  historyObserver.observe(stage);
+  historyObserver.observe(panelFrame);
 
   function icon(type) {
     const ns = 'http://www.w3.org/2000/svg';
@@ -410,7 +413,7 @@
     atlas?.close();
     atlas = undefined;
     tiles.clear();
-    if (!keepFrame) frame.clearRect(0, 0, preview.width, preview.height);
+    if (!keepFrame) output.clearRect(0, 0, preview.width, preview.height);
   }
 
   function tileFor(layer) {
@@ -463,6 +466,16 @@
       }
     }
     if (drag?.bytes && !drag.erase) frame.drawImage(drawing, 0, 0);
+
+    const {rotation, bounds: [x, y, w, h]} = schema.panel;
+    const [width, height] = rotation % 180 ? [h, w] : [w, h];
+    output.imageSmoothingEnabled = false;
+    output.drawImage(atlas, 0, 0, 1, 1, 0, 0, preview.width, preview.height);
+    output.save();
+    output.translate(x + w / 2, y + h / 2);
+    output.rotate(rotation * Math.PI / 180);
+    output.drawImage(canvas, -width / 2, -height / 2, width, height);
+    output.restore();
   }
 
   function decodeInk(bitmap) {
@@ -873,7 +886,7 @@
       // Reuse the finished thumbnail while the editable layer preview arrives.
       clearPreview(true);
       const img = card.querySelector('img');
-      if (img.complete && img.naturalWidth) frame.drawImage(img, 0, 0, schema.width, schema.height);
+      if (img.complete && img.naturalWidth) output.drawImage(img, 0, 0);
       const draft = current();
       draft.selection = -1;
       setDraft(layout, true);
@@ -968,12 +981,21 @@
         const visible = draft.layout ?? data.defaults[name];
         draft.selection = Math.min(draft.selection, visible.length - 1);
       }
-      for (const canvas of [preview, drawing, eraseSurface]) {
-        canvas.width = data.width;
-        canvas.height = data.height;
+      for (const surface of [canvas, drawing, eraseSurface]) {
+        surface.width = data.width;
+        surface.height = data.height;
       }
-      stage.style.aspectRatio = data.width + ' / ' + data.height;
-      editor.style.setProperty('--display-ratio', data.width / data.height);
+      const {width, height, rotation, bounds: [x, y, w, h]} = data.panel;
+      const quarterTurn = rotation % 180 !== 0;
+      preview.width = width;
+      preview.height = height;
+      editor.style.setProperty('--display-ratio', width / height);
+      stage.style.setProperty('--rotation', rotation + 'deg');
+      stage.toggleAttribute('data-quarter-turn', quarterTurn);
+      stage.style.left = (x + w / 2) / width * 100 + '%';
+      stage.style.top = (y + h / 2) / height * 100 + '%';
+      stage.style.width = (quarterTurn ? h : w) / width * 100 + '%';
+      stage.style.height = (quarterTurn ? w : h) / height * 100 + '%';
       element('editor-resolution').textContent = data.width + ' × ' + data.height + ' px';
       for (const draft of Object.values(drafts)) {
         if (draft.message === badCode) draft.message = '';
@@ -1177,12 +1199,19 @@
     setDraft(next, true, false);
   }
 
-  function canvasPoint(event) {
-    const {left, top, width, height} = stage.getBoundingClientRect();
-    return {
-      x: (event.clientX - left) / width * schema.width,
-      y: (event.clientY - top) / height * schema.height,
-    };
+  function canvasDirection(x, y) {
+    switch (schema.panel.rotation) {
+      case 90: return [y, -x];
+      case 180: return [-x, -y];
+      case 270: return [-y, x];
+      default: return [x, y];
+    }
+  }
+
+  function canvasPoint(event, target = stage, canvasWidth = schema.width, canvasHeight = schema.height) {
+    const {left, top, width, height} = target.getBoundingClientRect();
+    const [x, y] = canvasDirection((event.clientX - left) / width - .5, (event.clientY - top) / height - .5);
+    return {x: (x + .5) * canvasWidth, y: (y + .5) * canvasHeight};
   }
 
   function updateMarquee(from, to) {
@@ -1386,7 +1415,7 @@
     const widget = layers()[index];
     if (tool !== 'select' || widget?.type !== 'text' || textEditing) return;
     selectWidget(index);
-    const {width, height} = stage.getBoundingClientRect();
+    const {clientWidth: width, clientHeight: height} = stage;
     const box = controlBounds(widget);
     const w = Math.min(schema.width, Math.max(box.w, 80 / width * schema.width));
     const h = Math.min(schema.height, Math.max(box.h, 40 / height * schema.height));
@@ -1400,7 +1429,7 @@
     inlineText.select();
   }
 
-  function styleInlineText(widget, width = stage.getBoundingClientRect().width) {
+  function styleInlineText(widget, width = stage.clientWidth) {
     inlineText.style.fontSize = clamp(widget.size * (widget.placement?.scaleY ?? 1) * width / schema.width, 16, 38) + 'px';
     inlineText.style.fontFamily = widget.font.startsWith('mono') ? 'var(--mono)' : '';
     inlineText.style.fontWeight = widget.font.endsWith('bold') ? '700' : '';
@@ -1606,7 +1635,7 @@
         (!hitbox && (event.target !== stage || !selectedIndices().length))) return;
     event.preventDefault();
     const step = event.shiftKey ? 10 : 1;
-    const [dx, dy] = offset.map(value => value * step);
+    const [dx, dy] = canvasDirection(offset[0] * step, offset[1] * step);
     if (group.length && (!hitbox || group.includes(Number(hitbox.dataset.index)))) moveGroup(dx, dy);
     else {
       if (hitbox) selectWidget(Number(hitbox.dataset.index));
@@ -1852,8 +1881,10 @@
     const side = button.dataset.canvasAlign;
     const horizontal = ['left', 'center', 'right'].indexOf(side);
     const vertical = ['top', 'middle', 'bottom'].indexOf(side);
-    const x = horizontal >= 0 ? Math.round((schema.width - box.w) * horizontal / 2) : box.x;
-    const y = vertical >= 0 ? Math.round((schema.height - box.h) * vertical / 2) : box.y;
+    const [axisX, axisY] = canvasDirection(Number(horizontal >= 0), Number(vertical >= 0));
+    const alignment = Math.max(horizontal, vertical) - 1;
+    const x = axisX ? Math.round((schema.width - box.w) * (axisX * alignment + 1) / 2) : box.x;
+    const y = axisY ? Math.round((schema.height - box.h) * (axisY * alignment + 1) / 2) : box.y;
     if (current().group.length) moveGroup(x - box.x, y - box.y);
     else moveWidget(x - box.x, y - box.y);
   });
@@ -1965,6 +1996,8 @@
     const draft = current();
     if (!hasChanges(draft) || savingScreen || librarySelection || drag || paletteDrag || layerDrag) return;
     const payload = {screen, layout: draft.layout, displaySize: displaySize()};
+    const saved = draft.librarySaved;
+    if (saved?.name && JSON.stringify(saved.layout) === JSON.stringify(draft.layout)) payload.libraryName = saved.name;
     savingScreen = screen;
     draft.message = 'Saving layout…';
     updateStatus();

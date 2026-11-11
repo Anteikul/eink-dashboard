@@ -1,4 +1,4 @@
-function createPhotoCrop(surface, button, paint) {
+function createPhotoCrop(surface, button, paint, coordinates) {
   const image = surface.querySelector('#editor-photo-image');
   let edit;
   let drag;
@@ -43,11 +43,9 @@ function createPhotoCrop(surface, button, paint) {
   surface.ownerDocument.addEventListener('click', closeOutside, true);
 
   function point(event) {
-    const {left, top, width, height} = surface.getBoundingClientRect();
-    return [
-      clamp(Math.round((event.clientX - left) / width * edit.photo.w), 0, edit.photo.w),
-      clamp(Math.round((event.clientY - top) / height * edit.photo.h), 0, edit.photo.h),
-    ];
+    const {w, h} = edit.photo;
+    const {x, y} = coordinates.point(event, surface, w, h);
+    return [clamp(Math.round(x), 0, w), clamp(Math.round(y), 0, h)];
   }
 
   function moveCrop([left, top, w, h], dx, dy) {
@@ -106,13 +104,17 @@ function createPhotoCrop(surface, button, paint) {
       button.focus({preventScroll: true});
       return;
     }
-    const dx = Number(event.key === 'ArrowRight') - Number(event.key === 'ArrowLeft');
-    const dy = Number(event.key === 'ArrowDown') - Number(event.key === 'ArrowUp');
-    if (!dx && !dy) return;
+    const x = Number(event.key === 'ArrowRight') - Number(event.key === 'ArrowLeft');
+    const y = Number(event.key === 'ArrowDown') - Number(event.key === 'ArrowUp');
+    if (!x && !y) return;
     event.preventDefault();
     event.stopPropagation();
-    if (event.shiftKey) resizeCrop(edit.crop, 'se', dx, dy);
-    else moveCrop(edit.crop, dx, dy);
+    const [dx, dy] = coordinates.direction(x, y);
+    if (event.shiftKey) {
+      const [right, bottom] = coordinates.direction(1, 1);
+      const corner = (bottom > 0 ? 's' : 'n') + (right > 0 ? 'e' : 'w');
+      resizeCrop(edit.crop, corner, dx, dy);
+    } else moveCrop(edit.crop, dx, dy);
   });
   return {open, close, changed, get active() { return Boolean(edit); }};
 }
