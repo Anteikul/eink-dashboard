@@ -55,6 +55,16 @@ with TemporaryDirectory() as directory:
     assert updater.status() == {'state': 'restarting', 'version': old}
 
 with TemporaryDirectory() as directory:
+    store = UpdateStore(Path(directory))
+    restarted = Event()
+    updater = Updater(store, old, restarted.set)
+    with patch('updates.latest_version', return_value=new), patch('updates.is_ahead', return_value=True), \
+            patch('updates.prepare_release', side_effect=EOFError('Download interrupted')):
+        updater.check_and_prepare(False)
+    assert updater.status() == {'state': 'failed', 'version': old}
+    assert not store.pending.exists() and not restarted.is_set()
+
+with TemporaryDirectory() as directory:
     root = Path(directory)
     store = UpdateStore(root)
     root.joinpath('dashboard.py').write_text('from pathlib import Path\nPath("old-started").touch()\n')

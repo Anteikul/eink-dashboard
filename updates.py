@@ -157,8 +157,8 @@ class Updater:
             write_private(self.store.pending, version + '\n')
             self.set_state('restarting')
             self.restart()
-        except (OSError, KeyError, TypeError, ValueError, tarfile.TarError, subprocess.SubprocessError) as error:
-            print(f'Update failed: {error}', flush=True)
+        except Exception as error:
+            print(f'Update failed ({type(error).__name__}): {error}', flush=True)
             self.set_state('failed')
 
 
