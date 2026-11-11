@@ -5,6 +5,7 @@ cd "$(dirname "$0")"
 check_dependencies() {
     command -v crontab >/dev/null && command -v flock >/dev/null &&
         command -v ip >/dev/null && command -v authbind >/dev/null &&
+        command -v heif-thumbnailer >/dev/null &&
         command -v avahi-publish-address >/dev/null && [ -r /etc/avahi/avahi-daemon.conf ] &&
         python3 -c 'import lgpio, numpy, requests; from PIL import Image, ImageFont'
 }
@@ -38,9 +39,13 @@ fi
 
 if ! check_dependencies >/dev/null 2>&1 || [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]; then
     sudo apt-get update
+    heif_packages=heif-thumbnailer
+    if apt-cache show libheif-plugin-libde265 >/dev/null 2>&1; then
+        heif_packages="$heif_packages libheif-plugin-libde265"
+    fi
     sudo apt-get install -y --no-install-recommends python3-lgpio python3-pil python3-numpy \
         python3-requests fonts-dejavu-core ca-certificates tzdata cron iproute2 util-linux authbind \
-        avahi-daemon avahi-utils
+        avahi-daemon avahi-utils $heif_packages
 fi
 if [ ! -w /dev/gpiochip0 ]; then
     printf 'Run sudo usermod -aG gpio %s to enable GPIO, then sign in again.\n' "$(id -un)" >&2

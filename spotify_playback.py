@@ -105,6 +105,7 @@ class SpotifyPlayback:
     def __init__(self, credentials_path, credentials_lock=None):
         self.credentials_path = credentials_path
         self.credentials_lock = credentials_lock or threading.Lock()
+        self.request_lock = threading.Lock()
         self.credentials = json.loads(credentials_path.read_text(encoding='utf-8'))
         self.access_token = ''
         self.expires = 0
@@ -142,17 +143,18 @@ class SpotifyPlayback:
         self.expires = time.monotonic() + int(payload['expires_in']) - 45
 
     def request_json(self, url, timeout):
-        for attempt in range(2):
-            if time.monotonic() >= self.expires:
-                self.renew()
-            request = Request(url, headers={'Authorization': f'Bearer {self.access_token}'})
-            try:
-                with urlopen(request, timeout=timeout) as response:
-                    return {} if response.status == 204 else json.load(response)
-            except HTTPError as error:
-                if error.code != 401 or attempt:
-                    raise
-                self.expires = 0
+        with self.request_lock:
+            for attempt in range(2):
+                if time.monotonic() >= self.expires:
+                    self.renew()
+                request = Request(url, headers={'Authorization': f'Bearer {self.access_token}'})
+                try:
+                    with urlopen(request, timeout=timeout) as response:
+                        return {} if response.status == 204 else json.load(response)
+                except HTTPError as error:
+                    if error.code != 401 or attempt:
+                        raise
+                    self.expires = 0
 
     def read(self):
         return playing_track(self.request_json(PLAYBACK_URL, 8))

@@ -25,6 +25,7 @@ Open the pencil in the dashboard header to visit the full-page editor. One sign-
 
 - Clocks include 12-hour and 24-hour formats, seconds, stacked digits, an analog face, and custom patterns such as `HH.mm.ss` or `h:mm A`. Use brackets for literal text, as in `[Time] HH:mm`. You can also add your own text or a divider.
 - Dates include localized weekday and month names, ISO, dotted and slash formats, or a custom pattern such as `[Today] dddd, D MMMM YYYY`.
+- Import photos from the widget palette or drop a file onto the canvas. JPEG, PNG, HEIC/HEIF, WebP, GIF, BMP and TIFF are supported up to 16 MB. The editor converts them to black and white, then lets you crop the result and reopen the crop later.
 - Weather can show only the icon, only the temperature, or both side by side or stacked.
 - Playback can show album art, track and artist text, a progress indicator, or elapsed and remaining time.
 
@@ -52,7 +53,7 @@ While the setup hotspot is active, restart the Pi to give its saved networks ano
 2. Enter your **Client ID** in the dashboard and select **Prepare sign-in**. Open Spotify from the link and approve access to playback and the queue.
 3. Copy the full URL from the browser's address bar after Spotify redirects you. Paste it into **Redirect URL** and select **Finish connecting**. The browser may show a connection error at 127.0.0.1. The address bar still contains the information needed to finish setup.
 
-The clock and weather work without Spotify. Once connected, the Pi checks playback, prepares covers for upcoming tracks, and caches them on disk. You can disconnect the account in the browser. [Spotify OAuth](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow)
+The clock and weather work without Spotify. Once connected, the Pi checks playback, prepares covers for upcoming tracks, and caches them on disk. Settings shows a check mark after a successful Spotify API request. You can repeat the check or disconnect the account there. [Spotify OAuth](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow)
 
 ## Wiring
 

@@ -8,6 +8,7 @@ from math import cos, pi, sin, tau
 from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 from music_screen import fit_lines, font
+from photo_import import PHOTO_SIZE, PHOTO_UPLOAD_LIMIT
 
 WIDTH, HEIGHT = 250, 122
 PANEL_SIZE = WIDTH, HEIGHT
@@ -75,6 +76,8 @@ COMMON = (
                                        ('temperature-only', 'Temperature only')),
                 (169, 17, 74, 78), size=27, face='bold', align='center'),
     _definition('text', 'Custom text', WRAPPING, (12, 10, 134, 35), text='Your text'),
+    _definition('photo', 'Photo', (('fit', 'Fit'), ('fill', 'Fill')),
+                (12, 13, 112, 96), text_style=False),
     _definition('divider', 'Divider', (('horizontal', 'Horizontal'), ('vertical', 'Vertical')),
                 (12, 63, 120, 1), text_style=False),
 )
@@ -105,6 +108,7 @@ def editor_schema(size=PANEL_SIZE):
         'height': size[1],
         'maxWidgets': MAX_WIDGETS,
         'maxDrawings': MAX_DRAWINGS,
+        'photoMaxBytes': PHOTO_UPLOAD_LIMIT,
         'defaults': {
             'dashboard': [dashboard['clock']['template'].copy(), dashboard['date']['template'].copy(),
                           {**dashboard['divider']['template'], 'variant': 'vertical',
@@ -221,6 +225,21 @@ def validate_layout(screen, layout, size=PANEL_SIZE):
             w, h = mask.get('w'), mask.get('h')
             _validate_box(0, 0, w, h, (MAX_DIMENSION, MAX_DIMENSION))
             widget['mask'] = {'w': w, 'h': h, 'bitmap': _validate_bitmap(mask.get('bitmap'), w, h)}
+        if widget['type'] == 'photo':
+            photo = supplied.get('photo')
+            if not isinstance(photo, dict):
+                raise ValueError('Import a photo first.')
+            w, h = photo.get('w'), photo.get('h')
+            _validate_box(0, 0, w, h, (PHOTO_SIZE, PHOTO_SIZE))
+            widget['photo'] = {'w': w, 'h': h, 'bitmap': _validate_bitmap(photo.get('bitmap'), w, h)}
+            crop = supplied.get('crop', [0, 0, w, h])
+            if not isinstance(crop, (list, tuple)) or len(crop) != 4:
+                raise ValueError('Choose a valid crop inside the photo.')
+            try:
+                _validate_box(*crop, size=(w, h))
+            except ValueError as error:
+                raise ValueError('Choose a valid crop inside the photo.') from error
+            widget['crop'] = list(crop)
         normalized.append(widget)
     if len(normalized) - drawings > MAX_WIDGETS:
         raise ValueError(f'Use up to {MAX_WIDGETS} widgets per layout.')
@@ -484,10 +503,10 @@ def _icon_mask(name):
     return icon
 
 
-def _contain(image, w, h):
+def _contain(image, w, h, resample=Image.Resampling.NEAREST):
     scale = min(w / image.width, h / image.height)
     size = max(1, round(image.width * scale)), max(1, round(image.height * scale))
-    return image.resize(size, Image.Resampling.NEAREST)
+    return image.resize(size, resample)
 
 
 def _draw_icon(mask, name, box, align='center'):
@@ -608,11 +627,21 @@ def _widget_layers(layout, now, language, weather, units, track, cover, progress
             yield (0, 0), _drawing_mask(widget['bitmap'], widget.get('w', size[0]), widget.get('h', size[1])), False
             continue
         w, h = widget['w'], widget['h']
-        if kind == 'cover':
+        if kind in ('cover', 'photo'):
+            source = cover
+            resample = Image.Resampling.NEAREST
+            if kind == 'photo':
+                photo = widget['photo']
+                x, y, crop_w, crop_h = widget['crop']
+                source = _drawing_mask(photo['bitmap'], photo['w'], photo['h'])
+                source = source.crop((x, y, x + crop_w, y + crop_h)).convert('L')
+                resample = Image.Resampling.LANCZOS
             art = None
-            if cover is not None:
-                art = (ImageOps.fit(cover, (w, h), Image.Resampling.NEAREST)
-                       if widget['variant'] == 'fill' else _contain(cover, w, h))
+            if source is not None:
+                art = (ImageOps.fit(source, (w, h), resample)
+                       if widget['variant'] == 'fill' else _contain(source, w, h, resample))
+                if kind == 'photo':
+                    art = art.convert('1')
             offset = ((w - art.width) // 2, (h - art.height) // 2) if art is not None else (0, 0)
             yield offset, _apply_erasure(widget, art, offset, art=True), True
             continue

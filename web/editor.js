@@ -26,6 +26,14 @@
   const retry = element('editor-preview-retry');
   const widgetList = element('editor-widgets');
   const palette = element('editor-palette');
+  const photoFile = element('editor-photo-file');
+  const cropButton = element('editor-crop-photo');
+  const photoDialog = element('editor-photo-dialog');
+  const photoCrop = createPhotoCrop(photoDialog, (canvas, photo) => {
+    canvas.width = photo.w;
+    canvas.height = photo.h;
+    paintInk(canvas, decodeInk(photo.bitmap), 255);
+  });
   const tools = element('editor-tools');
   const toolbar = element('editor-toolbar');
   const history = element('editor-history');
@@ -77,6 +85,7 @@
     title: 'M3 7h10m-10 5h6m-6 5h6m5-9v10a3 3 0 1 1-3-3h3m0-7 7-3v4l-7 3',
     artist: 'M16 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-2a8 5 0 0 1 16 0v2Z',
     cover: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM3 17l6-6 4 4 3-3 5 5M16 8h.01',
+    photo: 'M4 5h10m-10 0a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-8M3 17l5-5 4 4 3-3 6 6M18 3v8m-4-4h8',
     progress: 'M3 9h18v6H3Zm0 3h11',
     'playback-time': 'M4 4h16v16H4Zm5 5 6 3-6 3Z',
     drawing: 'm4 15 10-10 4 4L8 19l-5 1 1-5Zm10-10 2-2a1.5 1.5 0 0 1 2 0l3 3a1.5 1.5 0 0 1 0 2l-2 2M13 21h8',
@@ -91,6 +100,7 @@
   let widgetButtons = [];
   let drag;
   let paletteDrag;
+  let photoPoint;
   let layerDrag;
   let textEditing;
   let tool = 'select';
@@ -146,12 +156,17 @@
     return svg;
   }
 
-  async function request(path, {payload, signal, fallback} = {}) {
+  async function request(path, {payload, file, signal, fallback} = {}) {
     const options = {signal};
     if (payload !== undefined) {
       options.headers = {'Content-Type': 'application/json'};
       options.method = 'POST';
       options.body = JSON.stringify(payload);
+    }
+    if (file) {
+      options.headers = {'Content-Type': 'application/octet-stream'};
+      options.method = 'POST';
+      options.body = file;
     }
     const response = await fetch(path, options);
     if (!response.ok) {
@@ -193,7 +208,7 @@
       button.type = 'button';
       button.className = 'editor-icon';
       button.dataset.widget = item.type;
-      button.setAttribute('aria-label', translate(item.label));
+      button.setAttribute('aria-label', translate(item.type === 'photo' ? 'Import photo' : item.label));
       button.append(icon(item.type));
       return button;
     }));
@@ -229,6 +244,7 @@
 
     element('editor-selected-widget').textContent = widgetLabel(widget, current().selection);
     element('editor-variant-label').hidden = item.variants.length === 0;
+    cropButton.hidden = widget.type !== 'photo';
     element('editor-text-style').hidden = !textStyle;
     element('editor-text-label').hidden = widget.type !== 'text';
     const customFormat = item.customFormat && widget.variant === 'custom';
@@ -1172,8 +1188,7 @@
     return box;
   }
 
-  function widgetAt(item, point) {
-    const {w, h} = item.template;
+  function widgetAt({w, h}, point) {
     return snapPosition({
       x: clamp(Math.round(point.x - w / 2), 0, schema.width - w),
       y: clamp(Math.round(point.y - h / 2), 0, schema.height - h),
@@ -1185,9 +1200,10 @@
     return x >= 0 && y >= 0 && x < schema.width && y < schema.height;
   }
 
-  function addWidget(item, point) {
+  function addWidget(item, point, overrides) {
     if (widgets().length >= schema.maxWidgets) return;
-    const widget = {...item.template, ...(point && widgetAt(item, point))};
+    const template = {...item.template, ...overrides};
+    const widget = {...template, ...(point && widgetAt(template, point))};
     if (widget.type === 'text') widget.text = translate(widget.text);
     const layout = [...layers(), widget];
     current().selection = layout.length - 1;
@@ -1195,6 +1211,42 @@
     setTool('select');
     showGuides();
     hitboxes.at(-1).focus({preventScroll: true});
+  }
+
+  function pickWidget(item, point) {
+    if (item.type === 'photo') {
+      photoPoint = point;
+      photoFile.click();
+    } else {
+      addWidget(item, point);
+    }
+  }
+
+  function importPhoto(file, point) {
+    if (!file || widgets().length >= schema.maxWidgets) return;
+    if (!file.size || file.size > schema.photoMaxBytes) {
+      setText(previewStatus, 'Choose an image file up to 16 MB.');
+      return;
+    }
+    const destination = point ?? {x: schema.width / 2, y: schema.height / 2};
+    photoCrop.open({
+      load: async signal => {
+        try {
+          const response = await request('/api/photo-import', {file, signal, fallback: 'Could not import the photo.'});
+          return await response.json();
+        } catch (error) {
+          if (error.message === badCode) showAccessError(error.message);
+          throw error;
+        }
+      },
+      onApply: (photo, crop) => {
+        const [, , width, height] = crop;
+        const scale = Math.min(schema.width * .75 / width, schema.height * .75 / height);
+        const w = Math.max(1, Math.round(width * scale));
+        const h = Math.max(1, Math.round(height * scale));
+        addWidget(definition('photo'), destination, {w, h, photo, crop});
+      },
+    });
   }
 
   function reorder(index, target) {
@@ -1502,7 +1554,7 @@
   palette.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-widget]');
     if (event.detail === 0 && button && !drag && !paletteDrag && !layerDrag) {
-      addWidget(definition(button.dataset.widget));
+      pickWidget(definition(button.dataset.widget));
     }
   });
   palette.addEventListener('pointerdown', (event) => {
@@ -1522,7 +1574,7 @@
     if (!paletteDrag.moved) return;
     const point = canvasPoint(event);
     dropMarker.hidden = !insideCanvas(point);
-    if (!dropMarker.hidden) position(dropMarker, widgetAt(paletteDrag.item, point));
+    if (!dropMarker.hidden) position(dropMarker, widgetAt(paletteDrag.item.template, point));
     else showGuides();
   });
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) {
@@ -1534,10 +1586,36 @@
       showGuides();
       if (event.type !== 'pointerup') return;
       const point = canvasPoint(event);
-      if (insideCanvas(point)) addWidget(item, point);
-      else if (!moved && button.contains(document.elementFromPoint(event.clientX, event.clientY))) addWidget(item);
+      if (insideCanvas(point)) pickWidget(item, point);
+      else if (!moved && button.contains(document.elementFromPoint(event.clientX, event.clientY))) pickWidget(item);
     });
   }
+  photoFile.addEventListener('change', () => {
+    const file = photoFile.files[0];
+    photoFile.value = '';
+    importPhoto(file, photoPoint);
+    photoPoint = undefined;
+  });
+  cropButton.addEventListener('click', () => {
+    const layer = layers()[current().selection];
+    if (layer?.type === 'photo') {
+      photoCrop.open({
+        photo: layer.photo, crop: layer.crop,
+        onApply: (_photo, crop) => {
+          if (crop.some((value, index) => value !== layer.crop[index])) editWidget({crop});
+        },
+      });
+    }
+  });
+  stage.addEventListener('dragover', event => {
+    if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+  });
+  stage.addEventListener('drop', event => {
+    const file = event.dataTransfer.files[0];
+    if (!file) return;
+    event.preventDefault();
+    importPhoto(file, canvasPoint(event));
+  });
 
   tools.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-tool]');
@@ -1562,7 +1640,7 @@
     });
   }
   editor.addEventListener('keydown', (event) => {
-    if (content.hidden || event.isComposing || event.target.matches('input, textarea, select')) return;
+    if (photoDialog.open || content.hidden || event.isComposing || event.target.matches('input, textarea, select')) return;
     const selected = selectedIndices();
     if ((event.key === 'Delete' || event.key === 'Backspace') &&
         selected.length && !drag && !layerDrag && !paletteDrag) {
@@ -1577,7 +1655,7 @@
     }
   });
   window.addEventListener('keydown', (event) => {
-    if (content.hidden || event.isComposing || !(event.ctrlKey || event.metaKey) ||
+    if (photoDialog.open || content.hidden || event.isComposing || !(event.ctrlKey || event.metaKey) ||
         event.key.toLowerCase() !== 'z' || event.target.isContentEditable ||
         event.target.matches?.('input, textarea, select')) return;
     event.preventDefault();

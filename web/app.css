@@ -98,6 +98,8 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .setup [hidden] { display: none !important; }
 .setup-form { display: grid; gap: 8px; margin: 14px 0; }
 .spotify-setup .setup-form { margin: 0; }
+.spotify-check-result { display: flex; align-items: center; gap: 6px; }
+#spotify-verified { width: 19px; height: 19px; fill: none; stroke: var(--focus); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .setup-form h3 { margin: 9px 0 0; font-size: 14px; }
 .setup-form p, #setup-status { margin: 2px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 #setup-status:empty { display: none; }
@@ -158,9 +160,9 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   display: grid;
   flex: 1;
   min-height: 0;
-  grid-template-columns: clamp(142px, 13vw, 172px) minmax(0, 1fr) 246px;
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas: "palette canvas inspector" "layers canvas inspector";
+  grid-template-columns: 108px minmax(0, 1fr) 246px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "palette canvas inspector" "palette canvas layers";
   gap: clamp(12px, 2vw, 22px);
 }
 .editor-preview {
@@ -343,7 +345,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-canvas-alignment button { width: 34px; }
 .editor-canvas-alignment button:nth-child(4) { margin-left: 4px; }
 .editor-canvas-alignment button:nth-child(n+3)::after { inset-inline: auto 0; }
-#editor-palette { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+#editor-palette { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
 #editor-palette .editor-icon { width: 100%; }
 #editor-palette button { cursor: grab; touch-action: none; }
 #editor-palette button:active { cursor: grabbing; }
@@ -388,7 +390,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-message:empty { margin: 0; }
 .editor-preview-status { display: flex; align-items: center; gap: 8px; }
 .editor-widgets { grid-area: layers; display: flex; flex-direction: column; align-self: start; min-width: 0; min-height: 0; max-height: 100%; }
-#editor-widgets { display: grid; gap: 6px; min-height: 0; overflow: auto; overscroll-behavior: contain; margin: 6px 0 0; padding: 3px; list-style: none; }
+#editor-widgets { display: grid; gap: 6px; min-height: 0; max-height: min(168px, 24dvh); overflow: auto; overscroll-behavior: contain; margin: 6px 0 0; padding: 3px; list-style: none; }
 #editor-widgets:empty { display: none; }
 #editor-widgets li { position: relative; }
 #editor-widgets button { width: 100%; min-height: 34px; gap: 8px; padding: 4px 8px; border-color: var(--line); text-align: left; cursor: grab; }
@@ -495,11 +497,38 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 }
 #editor-library-status { flex: none; }
 
+#editor-photo-dialog { width: min(540px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 18px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+#editor-photo-dialog::backdrop { background: rgb(0 0 0 / .56); }
+#editor-photo-dialog form { margin: 0; gap: 10px; }
+#editor-photo-status:empty { display: none; }
+#editor-photo-controls { display: grid; gap: 8px; }
+#editor-photo-surface {
+  position: relative;
+  width: min(100%, calc(min(44dvh, 360px) * var(--photo-ratio)));
+  margin-inline: auto;
+  overflow: hidden;
+  background: #000;
+  cursor: crosshair;
+  touch-action: none;
+}
+#editor-photo-image { display: block; width: 100%; height: auto; image-rendering: pixelated; pointer-events: none; }
+#editor-photo-selection {
+  position: absolute;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / .5);
+  pointer-events: none;
+}
+.editor-photo-geometry { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.editor-photo-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 6px; }
+.editor-photo-actions button, #editor-crop-photo { border-color: var(--line); }
+#editor-photo-apply { background: var(--accent); color: #1e251f; }
+
 @media (max-width: 800px) and (orientation: portrait), (max-width: 600px) {
   .editor-grid {
-    grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr);
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr);
     grid-template-rows: auto minmax(0, 1.55fr) minmax(0, 1fr);
-    grid-template-areas: "palette palette" "canvas canvas" "layers inspector";
+    grid-template-areas: "palette palette" "canvas canvas" "inspector layers";
     gap: 8px;
   }
   .editor-palette { display: flex; align-items: center; gap: 9px; min-width: 0; }
@@ -507,6 +536,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   #editor-palette .editor-icon { width: 44px; }
   .editor-inspector { padding: 0; }
   .editor-widgets { padding: 6px; }
+  #editor-widgets { max-height: none; }
   #editor-widgets button { gap: 4px; padding-inline: 4px; }
   #editor-widgets svg, #editor-widgets .editor-grip { width: 16px; height: 16px; }
 }

@@ -110,6 +110,8 @@ with TemporaryDirectory() as folder:
         assert get('/api/settings', DEFAULTS, origin='http://other.example')[0] == 403
         status, data = get('/api/settings')
         assert status == 200 and data['settings'] == DEFAULTS and not data['spotifyConnected']
+        assert get('/api/spotify/check', {})[0] == 409
+        assert get('/api/spotify/check', {}, code='wrong')[0] == 403
         selected = {**DEFAULTS, 'location': 'London', 'latitude': 51.5,
                     'longitude': -0.12, 'timezone': 'Europe/London', 'rotation': 0,
                     'units': 'fahrenheit'}
@@ -156,6 +158,11 @@ with TemporaryDirectory() as folder:
         assert status == 200 and data['spotifyConnected'] and 'fake-token' not in json.dumps(data)
         assert b'code_verifier=' in exchange.call_args.args[0].data
         assert settings.credentials.stat().st_mode & 0o777 == 0o600
+        with patch('control.SpotifyPlayback') as playback:
+            playback.return_value.read.return_value = None
+            assert get('/api/spotify/check', {}) == (200, {'verified': True})
+            playback.return_value.read.side_effect = HTTPError('https://api.spotify.com', 403, '', {}, None)
+            assert get('/api/spotify/check', {})[0] == 502
         assert get('/api/spotify/finish', {'callback': callback})[0] == 400
         assert get('/api/spotify/disconnect', {})[1]['spotifyConnected'] is False
         assert not settings.credentials.exists()

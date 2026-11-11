@@ -6,6 +6,10 @@ const setupStatus = document.querySelector('#setup-status');
 const signIn = document.querySelector('#settings-sign-in');
 const deviceStatus = document.querySelector('#device-status');
 const spotifyActionStatus = document.querySelector('#spotify-action-status');
+const spotifyCheck = document.querySelector('#spotify-check');
+const spotifyVerified = document.querySelector('#spotify-verified');
+const spotifyCheckStatus = document.querySelector('#spotify-check-status');
+const spotifyCheckButton = document.querySelector('#spotify-check-button');
 const city = document.querySelector('#city');
 const cityStatus = document.querySelector('#city-status');
 const places = document.querySelector('#places');
@@ -20,6 +24,7 @@ let foundPlaces = [];
 let selectedPlace = -1;
 let placeTimer;
 let placeRequest;
+let spotifyCheckRequest;
 
 languageSelect.addEventListener('change', async () => {
   const status = document.querySelector('#language-status');
@@ -94,7 +99,34 @@ function showSpotify(data) {
   spotifyForm.hidden = data.spotifyConnected;
   if (data.spotifyConnected) finishForm.hidden = true;
   disconnect.hidden = !data.spotifyConnected;
+  spotifyCheckRequest?.abort();
+  spotifyCheck.hidden = !data.spotifyConnected;
+  spotifyVerified.hidden = true;
+  spotifyCheckButton.disabled = false;
+  if (data.spotifyConnected) verifySpotify();
 }
+
+async function verifySpotify() {
+  const controller = new AbortController();
+  spotifyCheckRequest = controller;
+  spotifyCheckButton.disabled = true;
+  spotifyVerified.hidden = true;
+  setText(spotifyCheckStatus, 'Checking Spotify API…');
+  try {
+    const result = await api('/api/spotify/check', {}, controller.signal);
+    if (!result.verified) throw new Error('Could not verify Spotify API.');
+    if (!controller.signal.aborted) {
+      spotifyVerified.hidden = false;
+      setText(spotifyCheckStatus, 'Spotify API verified.');
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) setText(spotifyCheckStatus, error.message);
+  } finally {
+    if (spotifyCheckRequest === controller) spotifyCheckButton.disabled = false;
+  }
+}
+
+spotifyCheckButton.addEventListener('click', verifySpotify);
 
 localNameForm.addEventListener('submit', async (event) => {
   event.preventDefault();

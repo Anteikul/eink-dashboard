@@ -89,6 +89,13 @@
           <section class="setup-form settings-card spotify-setup" aria-labelledby="spotify-title">
             <h3 id="spotify-title" data-i18n>Spotify</h3>
             <p id="spotify-status" data-i18n></p>
+            <div id="spotify-check" hidden>
+              <p class="spotify-check-result" role="status">
+                <svg id="spotify-verified" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="m5 12 4 4L19 6"/></svg>
+                <span id="spotify-check-status"></span>
+              </p>
+              <button id="spotify-check-button" type="button" data-i18n>Check Spotify API</button>
+            </div>
             <form id="spotify-form" class="setup-form">
               <p data-i18n>In the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify Developer Dashboard</a> select Web API and add this address to Redirect URIs.</p>
               <code id="redirect-uri"></code>

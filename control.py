@@ -18,11 +18,15 @@ from urllib.parse import parse_qs
 
 from device_settings import find_places
 from layout_editor import MAX_DIMENSION, MAX_DRAWINGS, MAX_WIDGETS, PANEL_SIZE, editor_schema, validate_layout
+from photo_import import PHOTO_SIZE, PHOTO_UPLOAD_LIMIT, prepare_photo
+from spotify_playback import SpotifyPlayback
 
 THEMES = ('light', 'dark')
 LAYOUT_ROUTES = ('/api/layouts', '/api/layout-preview', '/api/layout-library')
 MAX_BITMAP_BYTES = ((MAX_DIMENSION + 7) // 8) * MAX_DIMENSION
-MAX_LAYOUT_BYTES = 4 * ((MAX_BITMAP_BYTES + 2) // 3) * (MAX_DRAWINGS + MAX_WIDGETS) + 128 * 1024
+MAX_PHOTO_BITMAP_BYTES = ((PHOTO_SIZE + 7) // 8) * PHOTO_SIZE
+MAX_LAYOUT_BYTES = (4 * ((MAX_BITMAP_BYTES + 2) // 3) * (MAX_DRAWINGS + MAX_WIDGETS)
+                    + 4 * ((MAX_PHOTO_BITMAP_BYTES + 2) // 3) * MAX_WIDGETS + 128 * 1024)
 PROTECTED_PAGES = ('/settings', '/editor')
 SESSION_COOKIE = 'eink_session'
 SESSION_AGE = 8 * 60 * 60
@@ -122,7 +126,7 @@ class PanelState:
                     'revision': self.revision, 'trackUrl': self.track_url}
 
 
-def start_server(host, port, state, settings, reload_settings, *, wifi=None, layout_preview=None):
+def start_server(host, port, state, settings, reload_settings, *, wifi=None, layout_preview=None, spotify=None):
     assets = Path(__file__).with_name('web')
     routes = {
         '/': ('index.html', 'text/html; charset=utf-8'),
@@ -134,6 +138,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
         '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),
         '/locale.js': ('locale.js', 'text/javascript; charset=utf-8'),
         '/editor.js': ('editor.js', 'text/javascript; charset=utf-8'),
+        '/photo-crop.js': ('photo-crop.js', 'text/javascript; charset=utf-8'),
         '/unlock.js': ('unlock.js', 'text/javascript; charset=utf-8'),
     }
     if wifi is not None:
@@ -148,8 +153,9 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             for url, (filename, kind) in routes.items()}
     admin_routes = {'/api/settings', '/api/setup-code', '/api/local-name', '/api/places', '/api/spotify/start',
                     '/api/spotify/finish', '/api/spotify/disconnect', '/api/layouts', '/api/layout-preview',
-                    '/api/layout-library'}
+                    '/api/layout-library', '/api/photo-import', '/api/spotify/check'}
     allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {'/api/theme', '/api/language', '/api/unlock'}
+    photo_lock = threading.Lock()
 
     def panel_status():
         return {**state.status(), 'language': settings.values['language']}
@@ -298,6 +304,13 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     return
             try:
                 size = int(self.headers.get('Content-Length', '0'))
+                if self.path == '/api/photo-import':
+                    if not 0 < size <= PHOTO_UPLOAD_LIMIT or self.headers.get_content_type() != 'application/octet-stream':
+                        raise ValueError('Choose an image file up to 16 MB.')
+                    with photo_lock:
+                        photo = prepare_photo(self.rfile.read(size))
+                    self.json(200, photo)
+                    return
                 limit = MAX_LAYOUT_BYTES if self.path in LAYOUT_ROUTES else 8192
                 if not 0 < size <= limit or self.headers.get_content_type() != 'application/json':
                     raise ValueError('Invalid request.')
@@ -370,6 +383,14 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     return
                 if self.path == '/api/spotify/start':
                     self.json(200, {'url': settings.authorize(payload['clientId'])})
+                    return
+                if self.path == '/api/spotify/check':
+                    if not settings.credentials.is_file():
+                        self.json(409, {'error': 'Connect Spotify first.'})
+                        return
+                    playback = spotify if spotify is not None else SpotifyPlayback(settings.credentials, settings.lock)
+                    playback.read()
+                    self.json(200, {'verified': True})
                     return
                 if self.path == '/api/settings':
                     settings.save(payload)

@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from control import PanelState, start_server
 from dashboard import fit_panel, pack
@@ -34,6 +34,15 @@ with TemporaryDirectory() as folder:
         except HTTPError as error:
             return error.code, error.read()
 
+    def import_photo(data, code=None):
+        headers = {'X-Setup-Code': settings.code if code is None else code,
+                   'Content-Type': 'application/octet-stream', 'Origin': base}
+        try:
+            with urlopen(Request(base + '/api/photo-import', data=data, headers=headers), timeout=5) as reply:
+                return reply.status, json.load(reply)
+        except HTTPError as error:
+            return error.code, json.load(error)
+
     try:
         status, page = request('/editor')
         assert status == 200 and b'<main id="layout-editor">' in page
@@ -45,6 +54,32 @@ with TemporaryDirectory() as folder:
         schema = json.loads(data)
         assert schema['layouts'] == {'dashboard': None, 'playback': None}
         assert (schema['width'], schema['height']) == (250, 122)
+        source = Image.new('RGB', (16, 8), 'black')
+        ImageDraw.Draw(source).rectangle((8, 0, 15, 7), fill='white')
+        for format in ('JPEG', 'PNG', 'GIF', 'BMP', 'TIFF'):
+            with io.BytesIO() as image:
+                source.save(image, format=format)
+                status, photo = import_photo(image.getvalue())
+                assert status == 200 and (photo['w'], photo['h']) == (16, 8)
+        assert import_photo(b'not an image')[0] == 400
+        assert import_photo(b'not an image', code='wrong')[0] == 403
+        photo_option = next(item for item in schema['widgets']['dashboard'] if item['type'] == 'photo')
+        photo_widget = {**photo_option['template'], 'x': 4, 'y': 8, 'w': 8, 'h': 8,
+                        'photo': photo, 'crop': [0, 0, 8, 8]}
+        status, png = request('/api/layout-preview', {'screen': 'dashboard', 'layout': [photo_widget]})
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            assert preview.getpixel((7, 11)) == 0 and preview.getpixel((3, 11)) == 255
+        flipped = {**photo_widget, 'crop': [8, 0, 8, 8]}
+        status, png = request('/api/layout-preview', {'screen': 'dashboard', 'layout': [flipped]})
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            assert preview.getpixel((7, 11)) == 255
+        assert request('/api/layout-preview', {'screen': 'dashboard',
+                       'layout': [{**photo_widget, 'crop': [9, 0, 8, 8]}]})[0] == 400
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [photo_widget]})[0] == 200
+        assert DeviceSettings(root).layouts['dashboard'] == [photo_widget]
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': None})[0] == 200
         for page in schema['layouts']:
             for layout in (None, schema['defaults'][page]):
                 status, png = request('/api/layout-preview', {'screen': page, 'layout': layout})
@@ -55,6 +90,8 @@ with TemporaryDirectory() as folder:
             for option in schema['widgets'][page]:
                 for variant in option['variants']:
                     widget = {**option['template'], 'variant': variant['value']}
+                    if option['type'] == 'photo':
+                        widget['photo'] = photo
                     status, png = request('/api/layout-preview', {'screen': page, 'layout': [widget]})
                     assert status == 200, (page, option['type'], variant, png)
                     assert png.startswith(b'\x89PNG\r\n\x1a\n')
