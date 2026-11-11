@@ -174,9 +174,16 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-palette { grid-area: palette; }
 .editor-inspector {
   grid-area: inspector;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   min-width: 0;
   min-height: 0;
   padding: 2px 5px 8px;
+  overflow: hidden;
+}
+.editor-widget-settings {
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -368,8 +375,8 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-message { margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
 .editor-message:empty { margin: 0; }
 .editor-preview-status { display: flex; align-items: center; gap: 8px; }
-.editor-widgets { margin-bottom: 10px; }
-#editor-widgets { display: grid; gap: 4px; max-height: min(168px, 24dvh); overflow: auto; margin: 6px 0 9px; padding: 3px; list-style: none; }
+.editor-widgets { display: flex; flex-direction: column; flex: none; min-height: 0; max-height: 45%; margin-top: auto; }
+#editor-widgets { display: grid; gap: 4px; min-height: 0; max-height: min(168px, 24dvh); overflow: auto; margin: 6px 0 0; padding: 3px; list-style: none; }
 #editor-widgets:empty { display: none; }
 #editor-widgets li { position: relative; }
 #editor-widgets button { width: 100%; min-height: 34px; gap: 8px; padding: 4px 8px; border-color: var(--line); text-align: left; cursor: grab; }
@@ -486,7 +493,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   #editor-palette { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 0; }
   .editor-inspector {
     display: grid;
-    grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
     grid-template-rows: minmax(0, 1fr);
     gap: 8px;
     border-top: 1px solid var(--line);
@@ -494,9 +501,8 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
     overflow: hidden;
   }
   .editor-inspector > div { min-width: 0; min-height: 0; }
-  .editor-inspector .editor-widgets { display: flex; flex-direction: column; margin-bottom: 0; }
-  #editor-widgets { min-height: 0; max-height: none; }
-  .editor-widget-settings { overflow: auto; overscroll-behavior: contain; }
+  .editor-widgets { max-height: none; margin-top: 0; }
+  #editor-widgets { max-height: none; }
   #editor-library { grid-column: 1 / -1; }
 }
 
