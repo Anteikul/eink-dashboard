@@ -290,7 +290,7 @@ def validate_layout(screen, layout, size=PANEL_SIZE):
     return normalized
 
 
-def resize_layer(layer, source_size, target_size):
+def resize_layer(layer, source_size, target_size, *, offset=(0, 0)):
     source_w, source_h = source_size
     target_w, target_h = target_size
     scale_x, scale_y = target_w / source_w, target_h / source_h
@@ -300,7 +300,8 @@ def resize_layer(layer, source_size, target_size):
     top = min(target_h - 1, round(y * scale_y))
     width = max(1, round((x + w) * scale_x) - left)
     height = max(1, round((y + h) * scale_y) - top)
-    resized = {**layer, 'x': left, 'y': top, 'w': width, 'h': height}
+    offset_x, offset_y = offset
+    resized = {**layer, 'x': left + offset_x, 'y': top + offset_y, 'w': width, 'h': height}
     if layer['type'] == 'drawing':
         pixels = _drawing_mask(layer['bitmap'], w, h).resize((width, height), Image.Resampling.NEAREST)
         resized['bitmap'] = b64encode(pixels.tobytes()).decode()
@@ -308,11 +309,11 @@ def resize_layer(layer, source_size, target_size):
         resized['size'] = min(60, max(8, round(layer['size'] * min(scale_x, scale_y))))
         if 'placement' in layer:
             placement = layer['placement']
-            resized['placement'] = {**placement,
-                                    'x': min(target_w - 1, round(placement['x'] * scale_x)),
-                                    'y': min(target_h - 1, round(placement['y'] * scale_y))}
+            x = min(target_w - 1, round(placement['x'] * scale_x))
+            y = min(target_h - 1, round(placement['y'] * scale_y))
+            resized['placement'] = {**placement, 'x': x + offset_x, 'y': y + offset_y}
             if 'referenceWidth' in placement:
-                available = target_w - resized['placement']['x']
+                available = target_w - x
                 resized['placement']['referenceWidth'] = min(available, max(1, round(placement['referenceWidth'] * scale_x)))
         if layer['type'] == 'divider':
             scale, limit = (scale_x, width) if layer['variant'] == 'vertical' else (scale_y, height)
@@ -325,6 +326,11 @@ def resize_layer(layer, source_size, target_size):
 def resize_layout(layout, source_size, target_size):
     if layout is None or source_size == target_size:
         return layout
+    source_w, source_h = source_size
+    target_w, target_h = target_size
+    if (source_w - source_h) * (target_w - target_h) < 0:
+        x, y, width, height = panel_bounds(source_size, target_size)
+        return [resize_layer(layer, source_size, (width, height), offset=(x, y)) for layer in layout]
     return [resize_layer(layer, source_size, target_size) for layer in layout]
 
 

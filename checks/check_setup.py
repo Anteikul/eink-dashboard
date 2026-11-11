@@ -160,7 +160,8 @@ with TemporaryDirectory() as folder:
                  'idle_interval': 12, 'hotspot_delay': 45, 'queue_prefetch': False,
                  'weather_enabled': False, 'playback_enabled': False, 'rotation': 90}
         assert get('/api/settings', tuned)[0] == 200
-        assert DeviceSettings(root).values == tuned and Weather(tuned).interval == 240
+        assert DeviceSettings(root).values == {**tuned, 'display_width': 122, 'display_height': 250}
+        assert Weather(tuned).interval == 240
         assert render(datetime(2026, 11, 9), (10, 0, True), weather_enabled=False) == render(
             datetime(2026, 11, 9), (-10, 60, False), weather_enabled=False)
         assert get('/api/settings', selected)[0] == 200

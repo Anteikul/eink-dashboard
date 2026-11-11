@@ -17,6 +17,7 @@ let reading = false;
 let change = 0;
 let loadingLayouts = false;
 let activeLayout;
+let selectedLayouts = {};
 
 image.addEventListener('load', () => {
   bezel.toggleAttribute('data-portrait', image.naturalHeight > image.naturalWidth);
@@ -26,21 +27,28 @@ image.addEventListener('load', () => {
 
 function showActiveLayout() {
   if (!activeLayout) return;
-  const {screen, kind, name} = activeLayout;
+  const {kind, name} = activeLayout;
   const title = name ?? translate(kind === 'default' ? 'Default layout' : 'Custom layout');
   activeLayoutLabel.textContent = '· ' + title;
   activeLayoutLabel.hidden = false;
   for (const section of layoutSections) {
+    const selection = selectedLayouts[section.dataset.screen];
+    let matched = false;
     for (const button of section.querySelectorAll('button[data-layout]')) {
-      const selected = section.dataset.screen === screen && kind !== 'custom' && button.dataset.layout === (name ?? '');
+      const selected = Boolean(selection && selection.kind !== 'custom' && button.dataset.layout === (selection.name ?? ''));
+      matched ||= selected;
       button.setAttribute('aria-pressed', String(selected));
     }
+    const current = section.querySelector('[data-current-layout]');
+    current.hidden = !selection || matched;
+    if (!current.hidden) current.textContent = selection.name ?? translate('Custom layout');
   }
 }
 
 function show(data) {
   applyLanguage(data.language);
   activeLayout = data.activeLayout;
+  selectedLayouts = data.selectedLayouts ?? {};
   showActiveLayout();
   const applied = data.appliedTheme === data.theme && data.page && (data.mode === 'auto' || data.page === data.mode);
   trackLink.hidden = !data.trackUrl;

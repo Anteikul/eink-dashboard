@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import parse_qs
 
-from device_settings import find_places, write_private
+from device_settings import LAYOUT_SCREENS, find_places, write_private
 from layout_editor import (
     MAX_DIMENSION, MAX_DRAWINGS, MAX_WIDGETS, PANEL_SIZE, editor_schema, panel_bounds, panel_view_size, validate_layout,
 )
@@ -172,7 +172,9 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
     def panel_status():
         status = state.status()
         screen = status['mode'] if status['mode'] != 'auto' else status['page'] or 'dashboard'
-        return {**status, 'language': settings.values['language'], 'activeLayout': settings.active_layout(screen)}
+        selected = {page: settings.active_layout(page) for page in LAYOUT_SCREENS}
+        return {**status, 'language': settings.values['language'],
+                'activeLayout': selected[screen], 'selectedLayouts': selected}
 
     def display_rotation():
         return settings.values['rotation'] if rotation is None else rotation

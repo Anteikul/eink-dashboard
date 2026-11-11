@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from layout_editor import PANEL_SIZE, resize_layout, validate_display_size, validate_layout
+from layout_editor import PANEL_SIZE, resize_layer, resize_layout, validate_display_size, validate_layout
 from local_name import HOSTNAME
 from spotify_playback import IDLE_INTERVAL, PLAYING_INTERVAL, TOKEN_URL
 from wifi_setup import GRACE
@@ -58,10 +58,10 @@ def library_entry(value):
     return value['layout'], saved_at if isinstance(saved_at, str) else None
 
 
-def library_layout(screen, entry, size):
+def library_layout(screen, entry):
     layout, _ = library_entry(entry)
     source = validate_display_size(entry.get('size', PANEL_SIZE)) if isinstance(entry, dict) else PANEL_SIZE
-    return resize_layout(validate_layout(screen, layout, source), source, size)
+    return source, validate_layout(screen, layout, source)
 
 
 def library_listing(entries, *, details=False):
@@ -117,12 +117,15 @@ def validate_settings(payload):
     for key, (minimum, maximum) in SETTING_RANGES.items():
         if type(result[key]) is not int or not minimum <= result[key] <= maximum:
             raise ValueError('Check the refresh intervals and Wi-Fi setup delay.')
-    display_size(result)
+    result['display_width'], result['display_height'] = display_size(result)
     return result
 
 
-def display_size(values):
-    return validate_display_size((values['display_width'], values['display_height']))
+def display_size(values, rotation=None):
+    width, height = validate_display_size((values['display_width'], values['display_height']))
+    angle = values['rotation'] if rotation is None else rotation
+    portrait = angle in (90, 270)
+    return (height, width) if portrait != (width < height) else (width, height)
 
 
 def validate_local_hostname(hostname):
@@ -135,7 +138,7 @@ def validate_local_hostname(hostname):
 
 
 class DeviceSettings:
-    def __init__(self, directory):
+    def __init__(self, directory, *, rotation=None):
         self.path = directory / '.settings.json'
         self.layouts_path = directory / '.layouts.json'
         self.library_path = directory / '.layout-library.json'
@@ -143,9 +146,10 @@ class DeviceSettings:
         self.credentials = directory / '.spotify.json'
         self.lock = threading.Lock()
         self.pending = None
+        self.rotation_override = rotation
         self.values = validate_settings({**DEFAULTS, **json.loads(self.path.read_text())}) if self.path.is_file() else DEFAULTS.copy()
         self._stored_layouts = self.load_layouts()
-        size = display_size(self.values)
+        size = display_size(self.values, self.rotation_override)
         self.layout_state = size, self.layouts_at(size)
         if not self.code_path.exists():
             write_private(self.code_path, secrets.token_urlsafe(18) + '\n')
@@ -183,11 +187,16 @@ class DeviceSettings:
                 if layout is not None:
                     for name, entry in candidates.items():
                         try:
-                            if library_layout(screen, entry, size) == layout:
-                                matches.append(name)
+                            source, saved_layout = library_layout(screen, entry)
+                            adapted = resize_layout(saved_layout, source, size)
+                            if adapted != layout and source != size and saved_layout is not None:
+                                # Earlier versions scaled the two axes independently across orientations.
+                                adapted = [resize_layer(layer, source, size) for layer in saved_layout]
+                            if adapted == layout:
+                                matches.append((source, saved_layout, name))
                         except (KeyError, TypeError, ValueError):
                             continue
-                layouts[screen] = size, layout, matches[0] if len(matches) == 1 else None
+                layouts[screen] = matches[0] if len(matches) == 1 else (size, layout, None)
             return layouts
         except FileNotFoundError:
             pass
@@ -219,27 +228,32 @@ class DeviceSettings:
             size = self.require_display_size(expected_size)
             layout = validate_layout(screen, layout, size)
             selected = self._stored_layouts[screen][2] if layout == self.layouts[screen] else None
+            source, stored_layout = size, layout
             if name is not None:
                 name = layout_name(name)
                 try:
-                    if layout == self.get_layout_library(screen, name, size=size)['layout']:
+                    library_size, library_content = library_layout(screen, self.read_library()[screen][name])
+                    if layout == resize_layout(library_content, library_size, size):
                         selected = name
+                        source, stored_layout = library_size, library_content
                 except KeyError:
                     pass
             if layout != self.layouts[screen] or selected != self._stored_layouts[screen][2]:
-                self._write_layout(screen, size, layout, selected)
+                self._write_layout(screen, source, stored_layout, selected)
         return layout
 
     def apply_layout(self, screen, name):
+        if screen not in LAYOUT_SCREENS:
+            raise ValueError('Choose Dashboard or Playback.')
         with self.lock:
-            size = self.layout_state[0]
-            if name is not None:
-                name = layout_name(name)
-                layout = self.get_layout_library(screen, name, size=size)['layout']
-            else:
-                layout = validate_layout(screen, None, size)
-            if layout != self.layouts[screen] or name != self._stored_layouts[screen][2]:
-                self._write_layout(screen, size, layout, name)
+            if name is None:
+                if self.layouts[screen] is not None or self._stored_layouts[screen][2] is not None:
+                    self._write_layout(screen, self.layout_state[0], None, None)
+                return
+            name = layout_name(name)
+            source, layout = library_layout(screen, self.read_library()[screen][name])
+            if (source, layout, name) != self._stored_layouts[screen]:
+                self._write_layout(screen, source, layout, name)
 
     def _write_layout(self, screen, size, layout, name):
         current_size, layouts = self.layout_state
@@ -273,7 +287,8 @@ class DeviceSettings:
             return library_listing(entries, details=details)
         entry = entries[layout_name(name)]
         size = self.layout_state[0] if size is None else size
-        return {'layout': library_layout(screen, entry, size)}
+        source, layout = library_layout(screen, entry)
+        return {'layout': resize_layout(layout, source, size)}
 
     def edit_layout_library(self, screen, name, layout, *, delete=False, expected_size=None):
         if screen not in LAYOUT_SCREENS:
@@ -329,7 +344,7 @@ class DeviceSettings:
                 'language': self.values['language'], 'local_name': self.values['local_name'],
                 'local_hostname': self.values['local_hostname'], 'password_required': self.values['password_required'],
             })
-            size = display_size(values)
+            size = display_size(values, self.rotation_override)
             layout_state = self.layout_state if size == self.layout_state[0] else (size, self.layouts_at(size))
             self.write_values(values)
             self.layout_state = layout_state

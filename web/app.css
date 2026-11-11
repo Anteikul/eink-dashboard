@@ -91,6 +91,8 @@ h2 { font-size: 15px; margin: 0; font-weight: 680; }
 #quick-layout-options[hidden], #quick-layout-status:empty { display: none; }
 .quick-layouts h3 { margin: 0 0 5px; color: var(--muted); font-size: 13px; }
 .quick-layouts button { width: 100%; min-height: 36px; padding: 6px 8px; text-align: left; overflow-wrap: anywhere; }
+.quick-layouts button[data-current-layout] { cursor: default; opacity: 1; }
+.quick-layouts button[data-current-layout][hidden] { display: none; }
 #quick-layout-status { margin: 0 12px 10px; color: var(--muted); font-size: 13px; }
 #mode-controls { flex-wrap: wrap; }
 #mode-controls button { flex: 1 0 auto; justify-content: center; }

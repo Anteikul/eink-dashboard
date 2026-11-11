@@ -527,7 +527,7 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             parser.exit(1, 'Dashboard already running.\n')
-        settings = DeviceSettings(DATA_FOLDER)
+        settings = DeviceSettings(DATA_FOLDER, rotation=args.rotation)
         rotation = settings.values['rotation'] if args.rotation is None else args.rotation
         restart = run(rotation, args.seconds, args.listen, args.port, settings, args.wifi_setup)
     if restart:

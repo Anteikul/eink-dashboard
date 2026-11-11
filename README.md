@@ -17,11 +17,11 @@ The installer uses `sudo` for missing packages and enables startup on boot. Leav
 
 Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Below the preview, choose **Automatic**, **Dashboard**, or **Playback**, and a light or dark theme. Automatic mode follows Spotify when automatic switching is enabled. Playback mode keeps the playback layout visible while Spotify is idle. The Pi remembers the selected mode after a restart.
 
-Open **Saved layouts** below the preview to apply a design with one click. Choosing a design also switches the display to its Dashboard or Playback screen. Sign in with the device setup code if the web password is enabled.
+Open **Saved layouts** below the preview to apply a design with one click. The list marks the current design for each screen. Choosing a design also switches the display to its Dashboard or Playback screen. Sign in with the device setup code if the web password is enabled.
 
 The gear opens **Settings** at `/settings`, where you can choose English or Czech. Unlock **Device setup** with the code printed by the installer to change location, display options, weather and Spotify intervals, and Wi-Fi setup timing. In **Web password**, you can change the code or let anyone who can reach the web interface open the settings and editor. Turn the password requirement back on to use the current code again. To recover the code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
 
-Under **Display**, choose a rotation of 0°, 90°, 180°, or 270°. The main page and editor show an upright preview in landscape or portrait. For a layout that fills the display at 90° or 270°, set the canvas to 122 × 250 px.
+Under **Display**, choose a rotation of 0°, 90°, 180°, or 270°. The canvas dimensions follow the orientation automatically. The default canvas is 250 × 122 px in landscape and 122 × 250 px in portrait.
 
 Opening Settings checks the repository's `main` branch on GitHub. When a newer version is available, select **Update** to download it and restart the dashboard. If the new version cannot start, the Pi returns to the previous version. Device settings, Wi-Fi, Spotify credentials, and saved layouts stay in the installation folder. **Check for updates** runs the check again. Use `install.sh` for system packages and the optional Wi-Fi helper.
 

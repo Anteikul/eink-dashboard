@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageOps
 from control import PanelState, start_server
 from dashboard import fit_panel, pack
 from device_settings import DeviceSettings
-from layout_editor import clock_has_seconds, content_key, format_clock, format_date, render_custom
+from layout_editor import clock_has_seconds, content_key, format_clock, format_date, render_custom, resize_layer
 
 
 with TemporaryDirectory() as folder:
@@ -57,6 +57,8 @@ with TemporaryDirectory() as folder:
         assert schema['panel'] == {'rotation': 180, 'width': 250, 'height': 122, 'bounds': [0, 0, 250, 122]}
         assert json.loads(request('/api/state', code='')[1])['activeLayout'] == {
             'screen': 'dashboard', 'kind': 'default', 'name': None}
+        assert json.loads(request('/api/state', code='')[1])['selectedLayouts'] == {
+            page: {'screen': page, 'kind': 'default', 'name': None} for page in ('dashboard', 'playback')}
         source = Image.new('RGB', (16, 8), 'black')
         ImageDraw.Draw(source).rectangle((8, 0, 15, 7), fill='white')
         for format in ('JPEG', 'PNG', 'GIF', 'BMP', 'TIFF'):
@@ -298,6 +300,12 @@ with TemporaryDirectory() as folder:
         status, applied = request(apply, {'screen': 'playback', 'name': 'Hudba'})
         assert status == 200 and json.loads(applied)['mode'] == 'playback'
         assert settings.layouts == {'dashboard': None, 'playback': custom}
+        assert request(apply, selection)[0] == 200
+        assert json.loads(request('/api/state', code='')[1])['selectedLayouts'] == {
+            'dashboard': {'screen': 'dashboard', 'kind': 'saved', 'name': 'Moje plocha'},
+            'playback': {'screen': 'playback', 'kind': 'saved', 'name': 'Hudba'},
+        }
+        assert request(apply, {'screen': 'dashboard', 'name': None})[0] == 200
         delete = {'screen': 'dashboard', 'name': 'Moje plocha', 'delete': True}
         assert request(library, delete)[0] == 200
         assert request(entry)[0] == 404
@@ -393,23 +401,46 @@ with TemporaryDirectory() as folder:
         assert request('/api/settings', original)[0] == 200
         assert settings.layouts['dashboard'] == layout
         assert settings.get_layout_library('dashboard', 'Starší')['layout'] == custom
+        assert DeviceSettings(root, rotation=90).layout_state[0] == (122, 250)
+        settings.path.write_text(json.dumps({**original, 'rotation': 90}))
+        upgraded = DeviceSettings(root)
+        assert upgraded.layout_state[0] == (122, 250)
+        assert upgraded.layouts['dashboard'][1]['y'] == 107
         thumbnails = {}
         for rotation in (0, 90, 180, 270):
             assert request('/api/settings', {**original, 'rotation': rotation})[0] == 200
             portrait = rotation in (90, 270)
             width, height = (122, 250) if portrait else (250, 122)
-            bounds = [0, 95, 122, 60] if portrait else [0, 0, 250, 122]
-            assert json.loads(request('/api/layouts')[1])['panel'] == {
-                'rotation': rotation, 'width': width, 'height': height, 'bounds': bounds}
+            schema = json.loads(request('/api/layouts')[1])
+            assert (schema['width'], schema['height']) == (width, height)
+            assert schema['panel'] == {
+                'rotation': rotation, 'width': width, 'height': height, 'bounds': [0, 0, width, height]}
             status, png = request(listing + '&name=Star%C5%A1%C3%AD&thumbnail=1')
             assert status == 200
             with Image.open(io.BytesIO(png)) as thumbnail:
                 assert thumbnail.size == (width, height) and thumbnail.getextrema() == (0, 255)
             thumbnails[rotation] = png
         assert thumbnails[0] == thumbnails[180] and thumbnails[90] == thumbnails[270]
-        assert request('/api/settings', enlarged)[0] == 200
+        portrait_edges = {'screen': 'dashboard', 'displaySize': [122, 250],
+                          'layout': [{**dot, 'x': 0, 'y': 0}, {**dot, 'x': 121, 'y': 249}]}
+        assert request('/api/layouts', portrait_edges)[0] == 200
+        status, png = request('/api/layout-preview', portrait_edges)
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            assert preview.getpixel((0, 0)) == preview.getpixel((121, 249)) == 0
+        assert request('/api/settings', {**enlarged, 'rotation': 270})[0] == 200
+        assert settings.layout_state[0] == (183, 375)
         assert request(apply, {'screen': 'dashboard', 'name': 'Starší'})[0] == 200
         assert settings.layouts['dashboard'] == settings.get_layout_library('dashboard', 'Starší')['layout']
+        assert request('/api/settings', original)[0] == 200
+        assert DeviceSettings(root).layouts['dashboard'] == custom
+        old_selection = json.loads(settings.layouts_path.read_text())
+        old_selection['sizes']['dashboard'] = [122, 250]
+        old_selection['dashboard'] = [resize_layer(widget, (250, 122), (122, 250)) for widget in custom]
+        settings.layouts_path.write_text(json.dumps(old_selection))
+        upgraded = DeviceSettings(root)
+        assert upgraded.active_layout('dashboard')['name'] == 'Starší'
+        assert upgraded.layouts['dashboard'] == custom
 
         square = bytearray(100 * 100)
         fitted = fit_panel(square, (100, 100), 'light')
