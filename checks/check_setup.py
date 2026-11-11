@@ -4,6 +4,8 @@ from http.cookiejar import CookieJar
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Event
+from time import sleep
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener, urlopen
@@ -13,14 +15,19 @@ from control import SESSION_AGE, PanelState, start_server, valid_session
 from dashboard import Weather, render, screen_content
 from datetime import datetime
 from device_settings import DEFAULTS, DeviceSettings, REDIRECT_URI, SPOTIFY_SCOPE
+from updates import UpdateStore, Updater
 
 
 with TemporaryDirectory() as folder:
     root = Path(folder)
     settings = DeviceSettings(root)
     calls = []
+    update_store = UpdateStore(root)
+    update_restart = Event()
+    current_revision, new_revision = 'a' * 40, 'b' * 40
+    updater = Updater(update_store, current_revision, update_restart.set)
     server = start_server('127.0.0.1', 0, PanelState(root / 'theme.txt'),
-                          settings, lambda: calls.append('reload'))
+                          settings, lambda: calls.append('reload'), updater=updater)
     base = f'http://127.0.0.1:{server.server_port}'
 
     def get(path, body=None, code=None, origin=base, host=None):
@@ -118,10 +125,22 @@ with TemporaryDirectory() as folder:
         assert get('/api/update', {}, code='')[0] == 403
         assert get('/api/update', {}, origin='http://other.example')[0] == 403
         assert get('/api/update', {'retry': 'yes'})[0] == 400
-        assert get('/api/update', {}) == (200, {'state': 'unavailable', 'version': None})
         assert get('/api/update/install', {'version': 'b' * 40}, code='')[0] == 403
         assert get('/api/update/install', {'version': 'b' * 40}, origin='http://other.example')[0] == 403
         assert get('/api/update/install', {})[0] == 400
+        with patch('updates.latest_version', return_value=new_revision), patch('updates.is_ahead', return_value=True), \
+                patch('updates.prepare_release') as prepare:
+            assert get('/api/update', {'retry': True})[0] == 200
+            for _ in range(30):
+                _, status = get('/api/update')
+                if status['state'] == 'available':
+                    break
+                sleep(.05)
+            assert status == {'state': 'available', 'version': current_revision, 'availableVersion': new_revision}
+            assert not prepare.called and not update_store.pending.exists() and not update_restart.is_set()
+            assert get('/api/update/install', {'version': 'c' * 40})[0] == 400
+            assert get('/api/update/install', {'version': new_revision})[0] == 200
+            assert update_restart.wait(5) and prepare.call_count == 1
         assert get('/api/settings', DEFAULTS, origin='http://other.example')[0] == 403
         status, data = get('/api/settings')
         assert status == 200 and data['settings'] == DEFAULTS and not data['spotifyConnected']
