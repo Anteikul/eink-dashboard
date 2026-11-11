@@ -256,8 +256,7 @@ with TemporaryDirectory() as folder:
             status, thumbnail_png = request(path + '&thumbnail=1')
             logical_status, logical_png = request('/api/layout-preview', {'screen': 'dashboard', 'layout': preview_layout})
             assert status == logical_status == 200
-            with Image.open(io.BytesIO(thumbnail_png)) as thumbnail, Image.open(io.BytesIO(logical_png)) as logical:
-                assert thumbnail.tobytes() == logical.transpose(Image.Transpose.ROTATE_180).tobytes()
+            assert thumbnail_png == logical_png
         assert (root / '.layout-library.json').stat().st_mode & 0o777 == 0o600
         assert settings.layouts == {'dashboard': None, 'playback': []}
         apply = library + '/apply'
@@ -394,10 +393,20 @@ with TemporaryDirectory() as folder:
         assert request('/api/settings', original)[0] == 200
         assert settings.layouts['dashboard'] == layout
         assert settings.get_layout_library('dashboard', 'Starší')['layout'] == custom
-        for rotation in (90, 270):
+        thumbnails = {}
+        for rotation in (0, 90, 180, 270):
             assert request('/api/settings', {**original, 'rotation': rotation})[0] == 200
+            portrait = rotation in (90, 270)
+            width, height = (122, 250) if portrait else (250, 122)
+            bounds = [0, 95, 122, 60] if portrait else [0, 0, 250, 122]
             assert json.loads(request('/api/layouts')[1])['panel'] == {
-                'rotation': rotation, 'width': 250, 'height': 122, 'bounds': [95, 0, 60, 122]}
+                'rotation': rotation, 'width': width, 'height': height, 'bounds': bounds}
+            status, png = request(listing + '&name=Star%C5%A1%C3%AD&thumbnail=1')
+            assert status == 200
+            with Image.open(io.BytesIO(png)) as thumbnail:
+                assert thumbnail.size == (width, height) and thumbnail.getextrema() == (0, 255)
+            thumbnails[rotation] = png
+        assert thumbnails[0] == thumbnails[180] and thumbnails[90] == thumbnails[270]
         assert request('/api/settings', enlarged)[0] == 200
         assert request(apply, {'screen': 'dashboard', 'name': 'Starší'})[0] == 200
         assert settings.layouts['dashboard'] == settings.get_layout_library('dashboard', 'Starší')['layout']

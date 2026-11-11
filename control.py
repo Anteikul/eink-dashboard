@@ -15,7 +15,9 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs
 
 from device_settings import find_places, write_private
-from layout_editor import MAX_DIMENSION, MAX_DRAWINGS, MAX_WIDGETS, PANEL_SIZE, editor_schema, panel_bounds, validate_layout
+from layout_editor import (
+    MAX_DIMENSION, MAX_DRAWINGS, MAX_WIDGETS, PANEL_SIZE, editor_schema, panel_bounds, panel_view_size, validate_layout,
+)
 from photo_import import PHOTO_SIZE, PHOTO_UPLOAD_LIMIT, prepare_photo
 from spotify_playback import SpotifyPlayback
 
@@ -285,8 +287,9 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 if self.setup_access():
                     size, layouts = settings.layout_state
                     angle = display_rotation()
-                    panel = {'width': PANEL_SIZE[0], 'height': PANEL_SIZE[1], 'rotation': angle,
-                             'bounds': panel_bounds(size, angle)}
+                    view_size = panel_view_size(angle)
+                    panel = {'width': view_size[0], 'height': view_size[1], 'rotation': angle,
+                             'bounds': panel_bounds(size, view_size)}
                     self.json(200, {**editor_schema(size), 'layouts': layouts, 'panel': panel})
             elif path == '/api/layout-library':
                 if self.setup_access():

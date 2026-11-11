@@ -47,17 +47,19 @@ MONTHS_LONG = {
 MONTHS_SHORT_CS = ('led', 'úno', 'bře', 'dub', 'kvě', 'čer', 'čvc', 'srp', 'zář', 'říj', 'lis', 'pro')
 
 
-def panel_bounds(size, rotation):
-    """Return the fitted layout's rectangle in panel coordinates."""
-    width, height = size[::-1] if rotation in (90, 270) else size
-    if width * HEIGHT > height * WIDTH:
-        width, height = WIDTH, round(height / width * WIDTH)
+def panel_view_size(rotation):
+    return PANEL_SIZE[::-1] if rotation in (90, 270) else PANEL_SIZE
+
+
+def panel_bounds(size, view_size):
+    """Return the fitted layout's rectangle in upright preview coordinates."""
+    width, height = size
+    view_width, view_height = view_size
+    if width * view_height > height * view_width:
+        width, height = view_width, round(height / width * view_width)
     else:
-        width, height = round(width / height * HEIGHT), HEIGHT
-    x, y = (WIDTH - width) // 2, (HEIGHT - height) // 2
-    if rotation == 180:
-        x, y = WIDTH - width - x, HEIGHT - height - y
-    return x, y, width, height
+        width, height = round(width / height * view_height), view_height
+    return (view_width - width) // 2, (view_height - height) // 2, width, height
 
 
 def _definition(kind, label, variants, box, *, size=16, face='regular', align='left',

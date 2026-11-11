@@ -1,4 +1,4 @@
-function createPhotoCrop(surface, button, paint, coordinates) {
+function createPhotoCrop(surface, button, paint, canvasPoint) {
   const image = surface.querySelector('#editor-photo-image');
   let edit;
   let drag;
@@ -44,7 +44,7 @@ function createPhotoCrop(surface, button, paint, coordinates) {
 
   function point(event) {
     const {w, h} = edit.photo;
-    const {x, y} = coordinates.point(event, surface, w, h);
+    const {x, y} = canvasPoint(event, surface, w, h);
     return [clamp(Math.round(x), 0, w), clamp(Math.round(y), 0, h)];
   }
 
@@ -104,17 +104,13 @@ function createPhotoCrop(surface, button, paint, coordinates) {
       button.focus({preventScroll: true});
       return;
     }
-    const x = Number(event.key === 'ArrowRight') - Number(event.key === 'ArrowLeft');
-    const y = Number(event.key === 'ArrowDown') - Number(event.key === 'ArrowUp');
-    if (!x && !y) return;
+    const dx = Number(event.key === 'ArrowRight') - Number(event.key === 'ArrowLeft');
+    const dy = Number(event.key === 'ArrowDown') - Number(event.key === 'ArrowUp');
+    if (!dx && !dy) return;
     event.preventDefault();
     event.stopPropagation();
-    const [dx, dy] = coordinates.direction(x, y);
-    if (event.shiftKey) {
-      const [right, bottom] = coordinates.direction(1, 1);
-      const corner = (bottom > 0 ? 's' : 'n') + (right > 0 ? 'e' : 'w');
-      resizeCrop(edit.crop, corner, dx, dy);
-    } else moveCrop(edit.crop, dx, dy);
+    if (event.shiftKey) resizeCrop(edit.crop, 'se', dx, dy);
+    else moveCrop(edit.crop, dx, dy);
   });
   return {open, close, changed, get active() { return Boolean(edit); }};
 }

@@ -20,8 +20,8 @@ from zoneinfo import ZoneInfo
 from control import PanelState, preview_png, start_server
 from device_settings import DEFAULTS, ROTATIONS, DeviceSettings, write_private
 from layout_editor import (
-    PANEL_SIZE, clock_has_seconds, content_key, editor_schema, panel_bounds, preview_weather, render_custom,
-    render_layer_atlas,
+    PANEL_SIZE, clock_has_seconds, content_key, editor_schema, panel_bounds, panel_view_size, preview_weather,
+    render_custom, render_layer_atlas,
 )
 from local_name import LocalName
 from spotify_playback import SpotifyPlayback, Track
@@ -121,25 +121,31 @@ def display_page(mode, playing, automatic_playback):
     return 'playback' if playing and automatic_playback else 'dashboard'
 
 
-def fit_panel(pixels, size, theme, *, rotation=0):
-    if size == PANEL_SIZE and rotation in (0, 180):
-        return pixels[::-1] if rotation == 180 else pixels
+def fit_preview(pixels, size, theme, view_size):
+    if size == view_size:
+        return pixels
     from PIL import Image
 
     source = Image.frombytes('L', size, bytes(pixels))
-    if rotation == 90:
-        source = source.transpose(Image.Transpose.ROTATE_270)
-    elif rotation == 270:
-        source = source.transpose(Image.Transpose.ROTATE_90)
-    x, y, width, height = panel_bounds(size, rotation)
+    x, y, width, height = panel_bounds(size, view_size)
     resized = source.resize((width, height), Image.Resampling.NEAREST)
-    if rotation == 180:
-        resized = resized.transpose(Image.Transpose.ROTATE_180)
-    if resized.size == PANEL_SIZE:
+    if resized.size == view_size:
         return bytearray(resized.tobytes())
-    panel = Image.new('L', PANEL_SIZE, int(theme == 'light'))
+    panel = Image.new('L', view_size, int(theme == 'light'))
     panel.paste(resized, (x, y))
     return bytearray(panel.tobytes())
+
+
+def fit_panel(pixels, size, theme, *, rotation=0):
+    view_size = panel_view_size(rotation)
+    pixels = fit_preview(pixels, size, theme, view_size)
+    if rotation in (0, 180):
+        return pixels[::-1] if rotation == 180 else pixels
+    from PIL import Image
+
+    image = Image.frombytes('L', view_size, bytes(pixels))
+    transpose = Image.Transpose.ROTATE_270 if rotation == 90 else Image.Transpose.ROTATE_90
+    return bytearray(image.transpose(transpose).tobytes())
 
 
 def render_layout_preview(screen, layout, theme, language, units, *, layers=False, size=PANEL_SIZE,
@@ -170,8 +176,9 @@ def render_layout_preview(screen, layout, theme, language, units, *, layers=Fals
     else:
         pixels = render(now, weather, theme, units, language, weather_enabled=weather_enabled)
     if rotation is not None:
-        pixels = fit_panel(pixels, size, theme, rotation=rotation)
-        size = PANEL_SIZE
+        view_size = panel_view_size(rotation)
+        pixels = fit_preview(pixels, size, theme, view_size)
+        size = view_size
     return preview_png(pixels, *size)
 
 
@@ -292,6 +299,7 @@ class Weather:
 def run(rotation, duration, listen, port, settings, wifi_setup=False):
     from panel import VerifiedEPD, epdconfig
 
+    view_size = panel_view_size(rotation)
     stop = threading.Event()
     reload_requested = threading.Event()
 
@@ -438,8 +446,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 screen = render_music(track, theme, cover, filled)
             else:
                 screen = render(now, current_weather, theme, units, language, weather_enabled=weather_enabled)
-            screen = fit_panel(screen, size if layout is not None else PANEL_SIZE, theme, rotation=rotation)
-            pixels = pack(screen, 0)
+            preview = fit_preview(screen, size if layout is not None else PANEL_SIZE, theme, view_size)
+            pixels = pack(fit_panel(preview, view_size, theme, rotation=rotation), 0)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.
             full = (displayed_page != page or displayed_music != music
@@ -480,7 +488,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             if showing_join and join_until is None:
                 join_until = time.monotonic() + JOIN_CONFIRM_SECONDS
             if not hotspot and (server or network):
-                state.publish(theme, preview_png(screen, WIDTH, HEIGHT), track.url if track else None, page=page)
+                state.publish(theme, preview_png(preview, *view_size), track.url if track else None, page=page)
             if ready:
                 write_private(Path(ready), 'ready\n')
                 ready = None

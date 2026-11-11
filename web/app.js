@@ -2,6 +2,7 @@ const controls = [...document.querySelectorAll('fieldset[data-control]')];
 const buttons = controls.flatMap(group => [...group.querySelectorAll('button')]);
 const status = document.querySelector('#status');
 const image = document.querySelector('#preview');
+const bezel = image.closest('.bezel');
 const placeholder = document.querySelector('#placeholder');
 const trackLink = document.querySelector('#track-link');
 const layoutPicker = document.querySelector('#saved-layouts');
@@ -18,6 +19,7 @@ let loadingLayouts = false;
 let activeLayout;
 
 image.addEventListener('load', () => {
+  bezel.toggleAttribute('data-portrait', image.naturalHeight > image.naturalWidth);
   placeholder.hidden = true;
   image.hidden = false;
 });
