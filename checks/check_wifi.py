@@ -51,6 +51,13 @@ assert hotspot and len(hotspot.password) == 8
 frame = render_wifi(hotspot)
 assert len(frame) == WIDTH * HEIGHT and set(frame) == {0, 1}
 
+delayed = NetworkSetup(Radio(), delay=45)
+delayed.step(0, stop)
+delayed.step(44, stop)
+assert delayed.link.hotspot is None
+delayed.step(45, stop)
+assert delayed.link.hotspot is not None
+
 radio.connection = (None, None)
 network.step(61.1, stop)
 assert len(radio.started) == 1, 'Do not interrupt an external connection attempt'

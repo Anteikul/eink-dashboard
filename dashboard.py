@@ -18,7 +18,7 @@ from urllib.request import urlopen
 from zoneinfo import ZoneInfo
 
 from control import PanelState, preview_png, start_server
-from device_settings import DeviceSettings
+from device_settings import DEFAULTS, DeviceSettings
 from layout_editor import PANEL_SIZE, clock_has_seconds, content_key, editor_schema, render_custom, render_layer_atlas
 from local_name import LocalName
 from spotify_playback import SpotifyPlayback, Track
@@ -60,12 +60,14 @@ def label(image, x, baseline, text, style, *, centered=False):
         x += advance
 
 
-def screen_content(now, weather, units='celsius', language='en'):
+def screen_content(now, weather, units='celsius', language='en', *, weather_enabled=True):
     if language == 'cs':
         day = f'{WEEKDAYS_CS[now.weekday()]} {now.day}. {now.month}. {now.year}'
     else:
         day = f'{WEEKDAYS[now.weekday()]} {now.day} {MONTHS[now.month - 1]} {now.year}'
-    if weather is None:
+    if not weather_enabled:
+        temperature, icon = '', None
+    elif weather is None:
         temperature, icon = '—', None
     else:
         degrees, code, is_day = weather
@@ -75,11 +77,13 @@ def screen_content(now, weather, units='celsius', language='en'):
     return now.strftime('%H:%M'), day, temperature, icon
 
 
-def render(now, weather, theme='light', units='celsius', language='en'):
-    clock, day, temperature, icon = screen_content(now, weather, units, language)
+def render(now, weather, theme='light', units='celsius', language='en', *, weather_enabled=True):
+    clock, day, temperature, icon = screen_content(now, weather, units, language,
+                                                   weather_enabled=weather_enabled)
     image = bytearray(b'\x01' * (WIDTH * HEIGHT))
-    for y in range(30, 95):
-        image[y * WIDTH + 161] = 0
+    if weather_enabled:
+        for y in range(30, 95):
+            image[y * WIDTH + 161] = 0
     label(image, 10, 69, clock, 'clock')
     label(image, 12, 92, day, 'date')
     label(image, 206, 84, temperature, 'temperature', centered=True)
@@ -118,14 +122,15 @@ def fit_panel(pixels, size, theme):
     return bytearray(panel.tobytes())
 
 
-def render_layout_preview(screen, layout, theme, language, units, *, layers=False, size=PANEL_SIZE):
+def render_layout_preview(screen, layout, theme, language, units, *, layers=False, size=PANEL_SIZE,
+                          weather_enabled=True):
     from io import BytesIO
     from music_screen import progress_pixels, render_music
 
     now = datetime(2026, 11, 10, 14, 38, 27)
     weather = (16 if units == 'celsius' else 61, 2, True)
     music = screen == 'playback'
-    sample = {'weather': weather, 'units': units, 'size': size}
+    sample = {'weather': weather, 'units': units, 'size': size, 'weather_enabled': weather_enabled}
     if music:
         sample.update(track=Track('preview', 'Night Drive', 'The Midnight'), cover=sample_cover(),
                       progress=0.42, duration_ms=242_000)
@@ -142,7 +147,7 @@ def render_layout_preview(screen, layout, theme, language, units, *, layers=Fals
         track, cover, progress = (sample[key] for key in ('track', 'cover', 'progress'))
         pixels = render_music(track, theme, cover, progress_pixels(progress, cover))
     else:
-        pixels = render(now, weather, theme, units, language)
+        pixels = render(now, weather, theme, units, language, weather_enabled=weather_enabled)
     return preview_png(pixels, *size)
 
 
@@ -231,13 +236,15 @@ def changed_regions(previous, pixels):
     return regions
 
 
-def needs_full_refresh(displayed_theme, theme, partial_count, *, advancing=False):
-    return displayed_theme != theme or (partial_count >= 5 and not advancing)
+def needs_full_refresh(displayed_theme, theme, partial_count, *, advancing=False,
+                       after=DEFAULTS['full_refresh_after']):
+    return displayed_theme != theme or (partial_count >= after and not advancing)
 
 
 class Weather:
     def __init__(self, config):
         self.current = None
+        self.interval = config.get('weather_interval', DEFAULTS['weather_interval']) * 60
         query = urlencode({
             'latitude': config['latitude'], 'longitude': config['longitude'],
             'temperature_unit': config['units'], 'current': 'temperature_2m,weather_code,is_day',
@@ -252,7 +259,7 @@ class Weather:
                 self.current = (round(current['temperature_2m']), int(current['weather_code']),
                                 bool(current['is_day']))
                 print(f'Weather: {current["temperature_2m"]}, code {self.current[1]}', flush=True)
-                stop.wait(900)
+                stop.wait(self.interval)
             except (OSError, KeyError, ValueError, TypeError) as error:
                 print(f'Weather update failed: {error}', flush=True)
                 stop.wait(60)
@@ -274,14 +281,19 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     timezone = ZoneInfo(config['timezone'])
     units = config['units']
     weather = Weather(config)
-    threading.Thread(target=weather.poll, args=(stop,), daemon=True).start()
+    weather_enabled = config['weather_enabled']
+    if weather_enabled:
+        threading.Thread(target=weather.poll, args=(stop,), daemon=True).start()
     credentials = settings.credentials
     spotify = None
-    if credentials.is_file():
+    if config['playback_enabled'] and credentials.is_file():
         from music_screen import prepare_cover, progress_pixels, render_music
 
         spotify = SpotifyPlayback(credentials, settings.lock)
-        threading.Thread(target=spotify.poll, args=(stop, prepare_cover), daemon=True).start()
+        threading.Thread(target=spotify.poll, args=(stop, prepare_cover), kwargs={
+            'playing_interval': config['playing_interval'], 'idle_interval': config['idle_interval'],
+            'prefetch': config['queue_prefetch'],
+        }, daemon=True).start()
     panel = VerifiedEPD()
     counts = {'full': 0, 'partial': 0}
     deadline = time.monotonic() + duration if duration else float('inf')
@@ -299,7 +311,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     partial_count = 0
     previous = None
     state = PanelState(FOLDER / 'theme.txt')
-    network = NetworkSetup(password_file=FOLDER / '.hotspot-password') if wifi_setup else None
+    network = (NetworkSetup(password_file=FOLDER / '.hotspot-password', delay=config['hotspot_delay'])
+               if wifi_setup else None)
     if network:
         threading.Thread(target=network.poll, args=(stop,), daemon=True).start()
     active_link = Link(listen)
@@ -319,7 +332,9 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                     server = start_server(link.address, port, state, settings, reload_settings,
                                           wifi=network if hotspot else None, layout_preview=render_layout_preview)
                 active_link = link
-            local_name.update(link.address if server and not hotspot and settings.values['local_name'] else None)
+            preferences = settings.values
+            local_name.update(link.address if server and not hotspot and preferences['local_name'] else None,
+                              preferences['local_hostname'])
             now = datetime.now(timezone)
             theme = state.theme
             language = settings.values['language']
@@ -351,7 +366,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 content = (theme, joined.address, seconds, language)
             elif layout is not None:
                 widgets = content_key(layout, now, current_weather, track, cover, progress,
-                                      duration_ms=duration_ms, units=units, language=language)
+                                      duration_ms=duration_ms, units=units, language=language,
+                                      weather_enabled=weather_enabled)
                 content = (theme, language, size, layout, track, widgets)
                 advancing = displayed_layout == layout and (
                     (music and displayed_music and displayed_track == track)
@@ -370,7 +386,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                     advancing = filled > previous_fill
                 content = (*music_view, filled)
             else:
-                content = (theme, *screen_content(now, current_weather, units, language))
+                content = (theme, *screen_content(now, current_weather, units, language,
+                                                  weather_enabled=weather_enabled))
             if content == last_content:
                 stop.wait(min(1 - now.microsecond / 1_000_000, deadline - time.monotonic()))
                 continue
@@ -381,18 +398,20 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 screen = render_joined(joined.address, seconds, theme, language)
             elif layout is not None:
                 screen = render_custom(layout, now, theme, language, weather=current_weather, units=units,
-                                       track=track, cover=cover, progress=progress, duration_ms=duration_ms, size=size)
+                                       track=track, cover=cover, progress=progress, duration_ms=duration_ms, size=size,
+                                       weather_enabled=weather_enabled)
                 screen = fit_panel(screen, size, theme)
             elif music:
                 screen = render_music(track, theme, cover, filled)
             else:
-                screen = render(now, current_weather, theme, units, language)
+                screen = render(now, current_weather, theme, units, language, weather_enabled=weather_enabled)
             pixels = pack(screen, rotation)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.
             full = (displayed_music != music or displayed_layout != layout or displayed_size != size
                     or displayed_hotspot != hotspot or displayed_join != showing_join
-                    or needs_full_refresh(displayed_theme, theme, partial_count, advancing=advancing))
+                    or needs_full_refresh(displayed_theme, theme, partial_count, advancing=advancing,
+                                          after=config['full_refresh_after']))
             if full:
                 if panel.init() != 0:
                     raise RuntimeError('Display initialisation failed')
@@ -410,9 +429,9 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                     continue
                 panel.display_regions(pixels, regions)
                 partial_count += 1
-                size = sum((region.last_row - region.first_row + 1)
-                           * (region.last_byte - region.first_byte + 1) for region in regions)
-                detail = f'partial ({len(regions)} regions, {size}/{len(pixels)} bytes per plane)'
+                bytes_changed = sum((region.last_row - region.first_row + 1)
+                                    * (region.last_byte - region.first_byte + 1) for region in regions)
+                detail = f'partial ({len(regions)} regions, {bytes_changed}/{len(pixels)} bytes per plane)'
             previous = pixels
             displayed_theme = theme
             displayed_music = music

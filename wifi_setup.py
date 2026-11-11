@@ -73,8 +73,9 @@ class Link:
 
 
 class NetworkSetup:
-    def __init__(self, radio=None, password_file=None):
+    def __init__(self, radio=None, password_file=None, *, delay=GRACE):
         self.radio = radio if radio is not None else NetworkManagerRadio()
+        self.delay = delay
         self.fixed_password = None
         if password_file is not None and password_file.is_file():
             self.fixed_password = password_file.read_text().strip()
@@ -136,7 +137,7 @@ class NetworkSetup:
         self.joined = None
         if self.disconnected_at is None:
             self.disconnected_at = now
-        if not restore_hotspot and connection != AP_UUID and now - self.disconnected_at < GRACE:
+        if not restore_hotspot and connection != AP_UUID and now - self.disconnected_at < self.delay:
             return
         if self.hotspot is None:
             suffix = ''.join(secrets.choice(AP_ALPHABET) for _ in range(4))

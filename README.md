@@ -15,9 +15,9 @@ cd "$HOME" &&
 
 The installer uses `sudo` for missing packages and enables startup on boot. Leave the installation folder in place. To update a ZIP installation, rerun the same block in the same account and restart the Pi. If you cloned the repository, update and run `sh install.sh` in that checkout.
 
-Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Light and dark themes are below the preview. Use the gear to choose English or Czech. Unlock **Device setup** with the code printed by the installer to change location, time zone, temperature units, rotation, Spotify access, or the setup code itself. To recover the current code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
+Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Light and dark themes are below the preview. The gear opens **Settings** at `/settings`, where you can choose English or Czech. Unlock **Device setup** with the code printed by the installer to change location, display options, weather and Spotify intervals, and Wi-Fi setup timing. You can also change the setup code there. To recover the current code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
 
-You can also open `http://eink.local/` on the same network. To stop publishing that name, unlock **Device setup** and turn off **Use eink.local**. If the page was open by name, it switches to the Pi's IP address. The setup hotspot uses the address shown on the e-paper display.
+You can also open `http://eink.local/` on the same network. To change the name or turn it off, unlock **Device setup** and use **Local address**. If you change or disable the name while using it, Settings reopens at the Pi's IP address. The setup hotspot uses the address shown on the e-paper display.
 
 ### Build your own screens
 
@@ -29,7 +29,7 @@ Open the pencil in the dashboard header to visit the full-page editor and enter 
 
 Use **Draw** to sketch freehand with a mouse, pen, or finger. Each pen stroke creates its own layer. The eraser clears pixels from both drawings and widgets. Drag layers in the **Layers** panel to reorder them. The top row is frontmost. In **Select** mode, drag from an empty part of the canvas to select several layers, then move, align, or delete them together. Double-click custom text to edit it on the canvas. Press **Enter** to finish editing or **Shift+Enter** for a new line. Use **Ctrl+Z** and **Ctrl+Shift+Z** for undo and redo, or **⌘Z** and **⌘Shift+Z** on Mac.
 
-The canvas uses sample data and the same widget renderer as the display. Under **Location and display**, set its width and height in pixels and choose a city from the suggestions to fill its coordinates and time zone. The 250 × 122 panel scales the canvas to fit without stretching it. Saved designs retain their original canvas dimensions. Use the save icon to apply the current screen on the Pi. **Start blank** clears the current draft and **Reset to default** restores the built-in screen when applied.
+The canvas uses sample data and the same widget renderer as the display. Set its width and height under **Display**. Under **Location and weather**, choose a city from the suggestions to fill its coordinates and time zone. The 250 × 122 panel scales the canvas to fit without stretching it. Saved designs retain their original canvas dimensions. Use the save icon to apply the current screen on the Pi. **Start blank** clears the current draft and **Reset to default** restores the built-in screen when applied.
 
 The folder icon opens the layout library for the current screen. Save the canvas under a name to keep a reusable copy on the Pi. The list shows a thumbnail and the save date for each design. Click a design to see it on the canvas. The locked **Default layout** entry restores the built-in screen. Use **Apply to display** to put the current layout on the e-paper screen.
 
@@ -37,7 +37,7 @@ The folder icon opens the layout library for the current screen. Save the canvas
 
 Run `sh install.sh --wifi-setup` to enable or update the optional Wi-Fi setup feature. This installs a system service that can configure the Pi's built-in `wlan0` interface. The dashboard account can request the two supported Wi-Fi operations through a private local socket.
 
-When the Pi has no saved Wi-Fi connection available for about 30 seconds, it starts a temporary hotspot. The e-paper screen shows a Wi-Fi icon, the hotspot name, an eight-character password, and the address `http://10.42.0.1/`. To use the same password each time, store your own eight digits in `.hotspot-password` in the installation directory, set the file permissions to `600`, and restart the Pi.
+When the Pi has no saved Wi-Fi connection available, it starts a temporary hotspot after the delay set under **Wi-Fi setup**. The default is 30 seconds. The e-paper screen shows a Wi-Fi icon, the hotspot name, an eight-character password, and the address `http://10.42.0.1/`. To use the same password each time, store your own eight digits in `.hotspot-password` in the installation directory, set the file permissions to `600`, and restart the Pi.
 
 1. On your phone, join the **EinkSetup** network shown on the display. Stay connected if the phone says the network has no internet.
 2. Open `http://10.42.0.1/` and enter the name and password of the 2.4 GHz network the Pi should join. Leave the password empty for an open network.

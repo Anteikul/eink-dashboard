@@ -8,7 +8,6 @@
   <link rel="stylesheet" href="/app.css">
   <script src="/locale.js" defer></script>
   <script src="/app.js" defer></script>
-  <script src="/setup.js" defer></script>
 </head>
 <body>
   <main>
@@ -19,12 +18,12 @@
           <a id="open-editor" href="/editor" aria-label="Edit layouts" title="Edit layouts" data-i18n-attributes="aria-label title">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4m-14 6 4 4M16 4l1-1a1.4 1.4 0 0 1 2 0l2 2a1.4 1.4 0 0 1 0 2l-1 1"/></svg>
           </a>
-          <button id="open-settings" type="button" aria-label="Settings" data-i18n-attributes="aria-label" aria-haspopup="dialog" aria-controls="settings-dialog" data-i18n>
+          <a id="open-settings" href="/settings" aria-label="Settings" title="Settings" data-i18n-attributes="aria-label title">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M10 3h4l.5 2.5 1.3.7 2.4-.8 2 3.5-1.9 1.7v1.5l1.9 1.7-2 3.5-2.4-.8-1.3.7L14 20h-4l-.5-2.8-1.3-.7-2.4.8-2-3.5 1.9-1.7v-1.5L3.8 8.9l2-3.5 2.4.8 1.3-.7z"/>
               <circle cx="12" cy="11.5" r="3"/>
             </svg>
-          </button>
+          </a>
         </div>
       </div>
     </header>
@@ -51,87 +50,6 @@
       </fieldset>
     </section>
     <p id="status" role="status" data-i18n>Connecting to the display…</p>
-    <dialog id="settings-dialog" aria-labelledby="dialog-title">
-      <div class="dialog-heading">
-        <h2 id="dialog-title" data-i18n>Settings</h2>
-        <form method="dialog">
-          <button type="submit" autofocus data-i18n>Close</button>
-        </form>
-      </div>
-      <div class="language-setting">
-        <label for="language" data-i18n>Language</label>
-        <select id="language" disabled>
-          <option value="en" lang="en">English</option>
-          <option value="cs" lang="cs">Čeština</option>
-        </select>
-        <p id="language-status" role="status" data-i18n></p>
-      </div>
-      <section class="setup" aria-labelledby="setup-title">
-        <h2 id="setup-title" data-i18n>Device setup</h2>
-        <form id="unlock-form" class="setup-form">
-          <label for="setup-code" data-i18n>Setup code</label>
-          <div class="setup-row">
-            <input id="setup-code" type="password" autocomplete="off" required>
-            <button type="submit" data-i18n>Unlock</button>
-          </div>
-        </form>
-        <p id="setup-status" role="status" data-i18n></p>
-        <div id="setup-fields" hidden>
-          <div class="setup-form">
-            <h3 data-i18n>Local address</h3>
-            <label class="checkbox-setting" data-i18n><input id="local-name" type="checkbox"> Use eink.local</label>
-            <p data-i18n>Open the dashboard by name from the same local network. The Pi's IP address also works.</p>
-            <p id="local-name-status" role="status"></p>
-          </div>
-          <form id="device-form" class="setup-form">
-            <h3 data-i18n>Location and display</h3>
-            <div class="city-search">
-              <label for="city" data-i18n>City</label>
-              <input id="city" name="location" required maxlength="120" autocomplete="off"
-                role="combobox" aria-autocomplete="list" aria-controls="places" aria-expanded="false">
-              <ul id="places" role="listbox" aria-label="Suggested cities" data-i18n-attributes="aria-label" hidden></ul>
-              <p id="city-status" role="status"></p>
-            </div>
-            <div class="setup-grid">
-              <label data-i18n>Latitude<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
-              <label data-i18n>Longitude<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
-              <label data-i18n>Time zone<input name="timezone" placeholder="Europe/Prague" required></label>
-              <label data-i18n>Temperature units<select name="units"><option value="celsius">°C</option><option value="fahrenheit">°F</option></select></label>
-              <label data-i18n>Rotation<select name="rotation"><option value="0">0°</option><option value="180">180°</option></select></label>
-              <label data-i18n>Display width (px)<input name="display_width" type="number" min="32" max="400" step="1" required></label>
-              <label data-i18n>Display height (px)<input name="display_height" type="number" min="32" max="400" step="1" required></label>
-            </div>
-            <button type="submit" data-i18n>Save settings</button>
-          </form>
-          <section class="setup-form spotify-setup" aria-labelledby="spotify-title">
-            <h3 id="spotify-title" data-i18n>Spotify</h3>
-            <p id="spotify-status" data-i18n></p>
-            <form id="spotify-form" class="setup-form">
-              <p data-i18n>In the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify Developer Dashboard</a> select Web API and add this address to Redirect URIs.</p>
-              <code id="redirect-uri"></code>
-              <label data-i18n>Client ID<input name="clientId" pattern="[a-fA-F0-9]{32}" autocomplete="off" required></label>
-              <button type="submit" data-i18n>Prepare sign-in</button>
-            </form>
-            <form id="spotify-finish" class="setup-form" hidden>
-              <a id="spotify-auth" class="setup-link" data-i18n target="_blank" rel="noopener noreferrer">Open Spotify and authorize access</a>
-              <p data-i18n>After approving access, copy the full address from the new tab and paste it here. The browser may show a connection error at 127.0.0.1. The address bar still contains the information needed to finish setup.</p>
-              <label data-i18n>Redirect URL<textarea name="callback" rows="3" autocomplete="off" required></textarea></label>
-              <button type="submit" data-i18n>Finish connecting</button>
-            </form>
-            <button id="spotify-disconnect" type="button" hidden data-i18n>Disconnect Spotify</button>
-          </section>
-          <form id="setup-code-form" class="setup-form">
-            <h3 data-i18n>Change setup code</h3>
-            <p id="setup-code-help" data-i18n>Use 8–64 letters, numbers, or symbols without spaces.</p>
-            <label data-i18n>New setup code<input type="password" name="newCode" pattern="[!-~]{8,64}" required autocomplete="new-password" aria-describedby="setup-code-help"></label>
-            <label data-i18n>Confirm new code<input type="password" name="confirmCode" required autocomplete="new-password"></label>
-            <button type="submit" data-i18n>Save new code</button>
-            <p id="setup-code-status" role="status"></p>
-          </form>
-        </div>
-      </section>
-      <p class="weather-credit" data-i18n>Weather data from <a href="https://open-meteo.com/">Open‑Meteo</a></p>
-    </dialog>
   </main>
 </body>
 </html>

@@ -322,7 +322,7 @@ def _playback_time(progress, duration_ms, variant):
     return f'{elapsed} / {remaining}'
 
 
-def _widget_content(widget, now, weather, track, cover, progress, duration_ms, units, language):
+def _widget_content(widget, now, weather, track, cover, progress, duration_ms, units, language, weather_enabled):
     kind = widget['type']
     if kind == 'drawing':
         return None
@@ -332,7 +332,7 @@ def _widget_content(widget, now, weather, track, cover, progress, duration_ms, u
     if kind == 'date':
         return _date(now, variant, language)
     if kind == 'weather':
-        return _temperature_and_icon(now, variant, weather, units, language)
+        return _temperature_and_icon(now, variant, weather, units, language) if weather_enabled else None
     if kind == 'text':
         return widget['text']
     if kind in ('title', 'artist'):
@@ -347,11 +347,11 @@ def _widget_content(widget, now, weather, track, cover, progress, duration_ms, u
 
 
 def content_key(layout, now, weather, track, cover, progress, *, duration_ms=0,
-                units='celsius', language='en'):
+                units='celsius', language='en', weather_enabled=True):
     """Return the dynamic values that can change the rendered pixels."""
     progress = min(1.0, max(0.0, progress))
     return tuple(_widget_content(widget, now, weather, track, cover, progress, duration_ms,
-                                 units, language) for widget in layout)
+                                 units, language, weather_enabled) for widget in layout)
 
 
 def _face(widget, size):
@@ -554,12 +554,16 @@ def _apply_erasure(widget, layer, offset=(0, 0), *, art=False):
     return ImageChops.logical_and(layer, visible)
 
 
-def _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size):
+def _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size,
+                   weather_enabled):
     """Yield a widget's offset, pixel data and whether it is opaque art."""
     values = content_key(layout, now, weather, track, cover, progress, duration_ms=duration_ms,
-                         units=units, language=language)
+                         units=units, language=language, weather_enabled=weather_enabled)
     for widget, value in zip(layout, values):
         kind = widget['type']
+        if kind == 'weather' and value is None:
+            yield (0, 0), None, False
+            continue
         if kind == 'drawing':
             yield (0, 0), _drawing_mask(widget['bitmap'], widget.get('w', size[0]), widget.get('h', size[1])), False
             continue
@@ -588,11 +592,12 @@ def _widget_layers(layout, now, language, weather, units, track, cover, progress
 
 
 def render_custom(layout, now, theme, language, *, weather=None, units='celsius', track=None,
-                  cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE):
+                  cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE, weather_enabled=True):
     """Draw widgets back to front, using their boxes to clip every layer."""
     foreground = int(theme == 'dark')
     image = Image.new('1', size, 1 - foreground)
-    layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size)
+    layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size,
+                            weather_enabled)
     for widget, ((dx, dy), layer, opaque) in zip(layout, layers):
         if layer is None:
             continue
@@ -606,14 +611,15 @@ def render_custom(layout, now, theme, language, *, weather=None, units='celsius'
 
 
 def render_layer_atlas(layout, now, theme, language, *, weather=None, units='celsius', track=None,
-                       cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE):
+                       cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE, weather_enabled=True):
     """Put independent transparent widgets in fixed slots below one background pixel."""
     foreground = 255 if theme == 'dark' else 0
     background = 255 - foreground
     width, height = size
     atlas = Image.new('RGBA', (width, 1 + height * len(layout)))
     atlas.putpixel((0, 0), (background, background, background, 255))
-    layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size)
+    layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size,
+                            weather_enabled)
     for index, ((x, y), layer, opaque) in enumerate(layers):
         if layer is None:
             continue

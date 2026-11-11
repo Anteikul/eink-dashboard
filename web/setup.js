@@ -1,11 +1,11 @@
-const openSettings = document.querySelector('#open-settings');
-const settingsDialog = document.querySelector('#settings-dialog');
 const unlockForm = document.querySelector('#unlock-form');
 const deviceForm = document.querySelector('#device-form');
 const spotifyForm = document.querySelector('#spotify-form');
 const finishForm = document.querySelector('#spotify-finish');
 const setupFields = document.querySelector('#setup-fields');
 const setupStatus = document.querySelector('#setup-status');
+const deviceStatus = document.querySelector('#device-status');
+const spotifyActionStatus = document.querySelector('#spotify-action-status');
 const city = document.querySelector('#city');
 const cityStatus = document.querySelector('#city-status');
 const places = document.querySelector('#places');
@@ -13,18 +13,14 @@ const disconnect = document.querySelector('#spotify-disconnect');
 const setupCodeForm = document.querySelector('#setup-code-form');
 const setupCodeStatus = document.querySelector('#setup-code-status');
 const localName = document.querySelector('#local-name');
+const localHostname = document.querySelector('#local-hostname');
+const localNameForm = document.querySelector('#local-name-form');
 const localNameStatus = document.querySelector('#local-name-status');
 let setupCode = '';
 let foundPlaces = [];
 let selectedPlace = -1;
 let placeTimer;
 let placeRequest;
-
-openSettings.addEventListener('click', () => settingsDialog.showModal());
-settingsDialog.addEventListener('close', () => {
-  clearPlaces();
-  openSettings.focus();
-});
 
 languageSelect.addEventListener('change', async () => {
   const status = document.querySelector('#language-status');
@@ -56,26 +52,37 @@ async function api(path, payload, signal) {
   return data;
 }
 
-async function action(work) {
-  setText(setupStatus, '');
+async function action(work, status = setupStatus) {
+  setText(status, '');
   try {
     await work();
   } catch (error) {
-    setText(setupStatus, error.message);
+    setText(status, error.message);
   }
 }
 
 function fillDevice(settings) {
   for (const [key, value] of Object.entries(settings)) {
     const field = deviceForm.elements.namedItem(key);
-    if (field) field.value = value;
+    if (field?.type === 'checkbox') field.checked = value;
+    else if (field) field.value = value;
   }
 }
 
 function showSettings(data) {
   clearPlaces();
   fillDevice(data.settings);
-  if (!localName.disabled) localName.checked = data.settings.local_name;
+  for (const [key, [min, max]] of Object.entries(data.ranges)) {
+    const field = deviceForm.elements.namedItem(key);
+    field.min = min;
+    field.max = max;
+  }
+  localName.checked = data.settings.local_name;
+  localHostname.value = data.settings.local_hostname;
+  showSpotify(data);
+}
+
+function showSpotify(data) {
   document.querySelector('#redirect-uri').textContent = data.redirectUri;
   setText(document.querySelector('#spotify-status'), data.spotifyConnected
     ? 'Your account is connected.' : 'Connect your Spotify account to show music.');
@@ -84,23 +91,25 @@ function showSettings(data) {
   disconnect.hidden = !data.spotifyConnected;
 }
 
-localName.addEventListener('change', async () => {
-  const enabled = localName.checked;
-  localName.disabled = true;
+localNameForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = localNameForm.querySelector('button');
+  button.disabled = true;
   setText(localNameStatus, '');
   try {
-    const data = await api('/api/local-name', {enabled});
+    const data = await api('/api/local-name', {enabled: localName.checked, hostname: localHostname.value});
     localName.checked = data.enabled;
-    if (!data.enabled && window.location.hostname === 'eink.local') {
-      window.location.replace(data.ipUrl);
+    localHostname.value = data.hostname;
+    const host = window.location.hostname;
+    if (host.endsWith('.local') && (!data.enabled || host !== data.hostname)) {
+      window.location.replace(new URL('/settings', data.ipUrl));
       return;
     }
     setText(localNameStatus, data.enabled ? 'Local address enabled.' : 'Local address disabled.');
   } catch (error) {
-    localName.checked = !enabled;
     setText(localNameStatus, error.message);
   } finally {
-    localName.disabled = false;
+    button.disabled = false;
   }
 });
 
@@ -203,12 +212,14 @@ deviceForm.addEventListener('submit', (event) => {
   event.preventDefault();
   action(async () => {
     const form = Object.fromEntries(new FormData(deviceForm));
-    for (const key of ['latitude', 'longitude', 'rotation', 'display_width', 'display_height']) {
-      form[key] = Number(form[key]);
-    }
-    showSettings(await api('/api/settings', form));
-    setText(setupStatus, 'Settings saved. The display will refresh shortly.');
-  });
+    for (const field of deviceForm.querySelectorAll('input[type="number"]')) form[field.name] = field.valueAsNumber;
+    for (const field of deviceForm.querySelectorAll('input[type="checkbox"]')) form[field.name] = field.checked;
+    form.rotation = Number(form.rotation);
+    const data = await api('/api/settings', form);
+    clearPlaces();
+    fillDevice(data.settings);
+    setText(deviceStatus, 'Settings saved. The display will refresh shortly.');
+  }, deviceStatus);
 });
 
 spotifyForm.addEventListener('submit', (event) => {
@@ -218,26 +229,26 @@ spotifyForm.addEventListener('submit', (event) => {
     document.querySelector('#spotify-auth').href = data.url;
     finishForm.hidden = false;
     document.querySelector('#spotify-auth').focus();
-  });
+  }, spotifyActionStatus);
 });
 
 finishForm.addEventListener('submit', (event) => {
   event.preventDefault();
   action(async () => {
-    showSettings(await api('/api/spotify/finish', {callback: finishForm.elements.callback.value}));
+    showSpotify(await api('/api/spotify/finish', {callback: finishForm.elements.callback.value}));
     finishForm.reset();
     disconnect.focus();
-    setText(setupStatus, 'Spotify connected. The display will refresh shortly.');
-  });
+    setText(spotifyActionStatus, 'Spotify connected. The display will refresh shortly.');
+  }, spotifyActionStatus);
 });
 
 disconnect.addEventListener('click', () => action(async () => {
-  showSettings(await api('/api/spotify/disconnect', {}));
+  showSpotify(await api('/api/spotify/disconnect', {}));
   finishForm.reset();
   finishForm.hidden = true;
   spotifyForm.elements.clientId.focus();
-  setText(setupStatus, 'Spotify disconnected.');
-}));
+  setText(spotifyActionStatus, 'Spotify disconnected.');
+}, spotifyActionStatus));
 
 setupCodeForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -260,3 +271,8 @@ setupCodeForm.addEventListener('submit', async (event) => {
     button.disabled = false;
   }
 });
+
+api('/api/state').then(data => {
+  applyLanguage(data.language);
+  document.documentElement.dataset.theme = data.appliedTheme || data.theme;
+}).catch(error => setText(document.querySelector('#language-status'), error.message));

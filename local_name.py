@@ -8,13 +8,15 @@ HOSTNAME = 'eink.local'
 class LocalName:
     def __init__(self):
         self.address = None
+        self.hostname = HOSTNAME
         self.publisher = None
         self.retry_at = 0
 
-    def update(self, address):
-        if address != self.address:
+    def update(self, address, hostname=HOSTNAME):
+        if (address, hostname) != (self.address, self.hostname):
             self.close()
             self.address = address
+            self.hostname = hostname
             self.retry_at = 0
         if not address or (self.publisher and self.publisher.poll() is None):
             return
@@ -24,11 +26,11 @@ class LocalName:
         self.retry_at = now + 15
         try:
             self.publisher = subprocess.Popen(
-                ['avahi-publish-address', '--no-reverse', HOSTNAME, address],
+                ['avahi-publish-address', '--no-reverse', hostname, address],
                 stdin=subprocess.DEVNULL,
             )
         except OSError as error:
-            print(f'Could not publish {HOSTNAME}: {error}', flush=True)
+            print(f'Could not publish {hostname}: {error}', flush=True)
 
     def close(self):
         publisher, self.publisher = self.publisher, None

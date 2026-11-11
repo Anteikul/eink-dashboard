@@ -14,7 +14,6 @@ from urllib.parse import parse_qs
 
 from device_settings import find_places
 from layout_editor import MAX_DIMENSION, MAX_DRAWINGS, MAX_WIDGETS, PANEL_SIZE, editor_schema, validate_layout
-from local_name import HOSTNAME
 
 THEMES = ('light', 'dark')
 LAYOUT_ROUTES = ('/api/layouts', '/api/layout-preview', '/api/layout-library')
@@ -94,6 +93,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
     routes = {
         '/': ('index.html', 'text/html; charset=utf-8'),
         '/editor': ('editor.html', 'text/html; charset=utf-8'),
+        '/settings': ('settings.html', 'text/html; charset=utf-8'),
         '/app.css': ('app.css', 'text/css; charset=utf-8'),
         '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
         '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),
@@ -158,6 +158,8 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             options = {'layers': True} if layers else {}
             if size != PANEL_SIZE:
                 options['size'] = size
+            if not preferences['weather_enabled']:
+                options['weather_enabled'] = False
             return render_layout_preview(screen, layout, state.theme, preferences['language'],
                                          preferences['units'], **options)
 
@@ -165,8 +167,13 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             request_host = self.headers.get('Host', '').lower()
             if request_host in ip_hosts:
                 return authority
-            if wifi is None and settings.values['local_name'] and request_host in local_hosts:
-                return local_authority
+            config = settings.values
+            if wifi is None and config['local_name']:
+                hostname = config['local_hostname']
+                explicit = f'{hostname}:{server.server_port}'
+                local_authority = hostname if server.server_port == 80 else explicit
+                if request_host in (local_authority, explicit):
+                    return local_authority
             return None
 
         def do_GET(self):
@@ -260,8 +267,8 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     self.json(200, panel_status())
                     return
                 if self.path == '/api/local-name':
-                    settings.set_local_name(payload['enabled'])
-                    self.json(200, {'enabled': settings.values['local_name'], 'ipUrl': f'http://{authority}'})
+                    enabled, hostname = settings.set_local_name(payload['enabled'], payload.get('hostname'))
+                    self.json(200, {'enabled': enabled, 'hostname': hostname, 'ipUrl': f'http://{authority}'})
                     return
                 if self.path == '/api/setup-code':
                     if settings.change_code(self.headers.get('X-Setup-Code', ''), payload['newCode']):
@@ -328,9 +335,6 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
     explicit_authority = f'{host}:{server.server_port}'
     authority = host if server.server_port == 80 else explicit_authority
     ip_hosts = {authority, explicit_authority}
-    explicit_local = f'{HOSTNAME}:{server.server_port}'
-    local_authority = HOSTNAME if server.server_port == 80 else explicit_local
-    local_hosts = {local_authority, explicit_local}
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f'Control page: http://{authority}', flush=True)
     return server

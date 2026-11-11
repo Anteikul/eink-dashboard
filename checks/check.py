@@ -15,6 +15,8 @@ assert needs_full_refresh(None, 'light', 0)
 assert needs_full_refresh('light', 'dark', 0)
 assert not needs_full_refresh('dark', 'dark', 4)
 assert needs_full_refresh('dark', 'dark', 5)
+assert not needs_full_refresh('dark', 'dark', 5, after=12)
+assert needs_full_refresh('dark', 'dark', 12, after=12)
 
 for rotation, turn in ((0, Image.Transpose.ROTATE_90), (180, Image.Transpose.ROTATE_270)):
     expected = Image.frombytes('L', (250, 122), bytes(p * 255 for p in before)).convert('1').transpose(turn)

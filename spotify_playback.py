@@ -15,6 +15,7 @@ TOKEN_URL = 'https://accounts.spotify.com/api/token'
 PLAYBACK_URL = 'https://api.spotify.com/v1/me/player/currently-playing'
 QUEUE_URL = 'https://api.spotify.com/v1/me/player/queue'
 SPOTIFY_ID = re.compile(r'[A-Za-z0-9]{22}')
+PLAYING_INTERVAL, IDLE_INTERVAL = 5, 8
 
 
 @dataclass(frozen=True)
@@ -108,11 +109,12 @@ class SpotifyPlayback:
         self.access_token = ''
         self.expires = 0
         self.latest = (None, 0)
+        self.maximum_age = 40
 
     @property
     def current(self):
         prepared, timestamp = self.latest
-        return prepared if time.monotonic() - timestamp < 40 else None
+        return prepared if time.monotonic() - timestamp < self.maximum_age else None
 
     def renew(self):
         request = Request(
@@ -158,18 +160,20 @@ class SpotifyPlayback:
     def read_next(self, current):
         return queue_tracks(self.request_json(QUEUE_URL, 2), current)
 
-    def poll(self, stop, prepare_cover):
+    def poll(self, stop, prepare_cover, *, playing_interval=PLAYING_INTERVAL, idle_interval=IDLE_INTERVAL,
+             prefetch=True):
+        self.maximum_age = max(40, playing_interval + 20)
         known = False
         previous_playback = None
         end_checks = 0
-        queue_allowed = True
+        queue_allowed = prefetch
         queue_checked = False
         cover_worker = None
         while not stop.is_set():
             try:
                 playback = self.read()
                 track = playback.track if playback else None
-                delay = 5 if track else 8
+                delay = playing_interval if track else idle_interval
                 previous_track = previous_playback.track if previous_playback else None
                 changed = not known or track != previous_track
                 if changed:

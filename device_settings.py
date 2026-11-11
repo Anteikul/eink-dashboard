@@ -17,14 +17,25 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from layout_editor import PANEL_SIZE, resize_layout, validate_display_size, validate_layout
-from spotify_playback import TOKEN_URL
+from local_name import HOSTNAME
+from spotify_playback import IDLE_INTERVAL, PLAYING_INTERVAL, TOKEN_URL
+from wifi_setup import GRACE
 
 DEFAULTS = {
     'location': 'Prague', 'latitude': 50.0755, 'longitude': 14.4378,
     'timezone': 'Europe/Prague', 'units': 'celsius', 'rotation': 180, 'language': 'en',
     'local_name': True,
     'display_width': PANEL_SIZE[0], 'display_height': PANEL_SIZE[1],
+    'weather_enabled': True, 'weather_interval': 15, 'full_refresh_after': 5,
+    'playback_enabled': True, 'playing_interval': PLAYING_INTERVAL, 'idle_interval': IDLE_INTERVAL,
+    'queue_prefetch': True, 'local_hostname': HOSTNAME, 'hotspot_delay': GRACE,
 }
+SETTING_RANGES = {
+    'weather_interval': (1, 60), 'full_refresh_after': (1, 60),
+    'playing_interval': (1, 120), 'idle_interval': (1, 120), 'hotspot_delay': (5, 300),
+}
+EXTRA_SETTINGS = (*SETTING_RANGES, 'display_width', 'display_height',
+                  'weather_enabled', 'playback_enabled', 'queue_prefetch')
 LANGUAGES = ('en', 'cs')
 REDIRECT_URI = 'http://127.0.0.1:8765/callback'
 SPOTIFY_SCOPE = 'user-read-currently-playing user-read-playback-state'
@@ -92,12 +103,28 @@ def validate_settings(payload):
         raise ValueError('Choose English or Czech.')
     if type(result['local_name']) is not bool:
         raise ValueError('Choose whether to use the local address.')
+    result['local_hostname'] = validate_local_hostname(result['local_hostname'])
+    for key in ('weather_enabled', 'playback_enabled', 'queue_prefetch'):
+        if type(result[key]) is not bool:
+            raise ValueError('Check the on/off settings.')
+    for key, (minimum, maximum) in SETTING_RANGES.items():
+        if type(result[key]) is not int or not minimum <= result[key] <= maximum:
+            raise ValueError('Check the refresh intervals and Wi-Fi setup delay.')
     display_size(result)
     return result
 
 
 def display_size(values):
     return validate_display_size((values['display_width'], values['display_height']))
+
+
+def validate_local_hostname(hostname):
+    if not isinstance(hostname, str):
+        raise ValueError('Use a local name such as eink.local.')
+    name = hostname.strip().lower().removesuffix('.local')
+    if not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', name):
+        raise ValueError('Use a local name such as eink.local.')
+    return name + '.local'
 
 
 class DeviceSettings:
@@ -220,25 +247,29 @@ class DeviceSettings:
 
     def status(self):
         return {'settings': self.values, 'spotifyConnected': self.credentials.is_file(),
-                'redirectUri': REDIRECT_URI}
+                'redirectUri': REDIRECT_URI, 'ranges': SETTING_RANGES}
 
     def save(self, payload):
         with self.lock:
             values = validate_settings({
-                'display_width': self.values['display_width'], 'display_height': self.values['display_height'],
-                **payload, 'language': self.values['language'], 'local_name': self.values['local_name'],
+                **{key: self.values[key] for key in EXTRA_SETTINGS}, **payload,
+                'language': self.values['language'], 'local_name': self.values['local_name'],
+                'local_hostname': self.values['local_hostname'],
             })
             size = display_size(values)
             layout_state = self.layout_state if size == self.layout_state[0] else (size, self.layouts_at(size))
             self.write_values(values)
             self.layout_state = layout_state
 
-    def set_local_name(self, enabled):
+    def set_local_name(self, enabled, hostname=None):
         if type(enabled) is not bool:
             raise ValueError('Choose whether to use the local address.')
         with self.lock:
-            if self.values['local_name'] != enabled:
-                self.write_values({**self.values, 'local_name': enabled})
+            name = self.values['local_hostname'] if hostname is None else validate_local_hostname(hostname)
+            values = {**self.values, 'local_name': enabled, 'local_hostname': name}
+            if values != self.values:
+                self.write_values(values)
+            return enabled, name
 
     def set_language(self, language):
         if language not in LANGUAGES:

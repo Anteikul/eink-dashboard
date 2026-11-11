@@ -60,11 +60,17 @@ h2 { font-size: 15px; margin: 0; font-weight: 680; }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-dialog { width: min(580px, calc(100% - 28px)); max-height: calc(100% - 28px); padding: clamp(16px, 5vw, 26px); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 13px; overscroll-behavior: contain; }
-dialog::backdrop { background: rgb(20 25 20 / .6); }
-.dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-.dialog-heading h2 { font-size: 22px; }
-.dialog-heading button { border-color: var(--line); }
+.settings-page { max-width: 1100px; }
+.settings-header { display: flex; align-items: center; gap: 14px; }
+.settings-header h1 { font-size: clamp(36px, 7vw, 64px); }
+.settings-page #unlock-form { max-width: 400px; }
+.settings-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); gap: 14px; }
+.settings-cards .settings-card { margin: 0; padding: 16px; align-content: start; gap: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.settings-cards .settings-card h3 { margin: 0; }
+.settings-card .setup-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); }
+.settings-save { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.settings-save button { background: var(--accent); color: #1e251f; }
+.settings-card [role=status]:empty, .settings-save [role=status]:empty { display: none; }
 .settings { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px 18px; margin-top: 18px; }
 .language-setting { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 14px; }
 .language-setting select { min-height: 40px; padding: 6px 9px; font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 5px; }
@@ -80,8 +86,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 #status { min-height: 1.5em; margin: 12px 0 0; color: var(--muted); font-size: 13px; }
 #status:empty { min-height: 0; margin: 0; }
-.weather-credit { margin: 16px 0 0; color: var(--muted); font-size: 12px; }
-.weather-credit a { color: inherit; text-underline-offset: 3px; }
 
 .setup { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 18px; }
 .setup [hidden] { display: none !important; }

@@ -39,7 +39,12 @@ with TemporaryDirectory() as folder:
     try:
         with urlopen(base) as response:
             html = response.read().decode()
-        assert html.index('data-theme="light"') < html.index('<dialog')
+        assert 'data-theme="light"' in html and 'href="/settings"' in html and '<dialog' not in html
+        assert 'id="device-form"' not in html
+        with urlopen(base + '/settings') as response:
+            page = response.read().decode()
+        assert 'id="device-form"' in page and 'href="/"' in page
+        assert 'name="weather_interval"' in page and 'name="playing_interval"' in page
         alias = f'eink.local:{server.server_port}'
         alias_origin = f'http://{alias}'
         assert get('/api/state', host=alias)[0] == 200
@@ -47,12 +52,21 @@ with TemporaryDirectory() as folder:
         assert get('/api/theme', {'theme': 'light'}, host=alias, origin=base)[0] == 403
         assert get('/api/local-name', {'enabled': False}, code='wrong')[0] == 403
         assert get('/api/local-name', {'enabled': False}, host=alias, origin=alias_origin) == (
-            200, {'enabled': False, 'ipUrl': base})
+            200, {'enabled': False, 'hostname': 'eink.local', 'ipUrl': base})
         assert DeviceSettings(root).values['local_name'] is False
         assert get('/api/state', host=alias)[0] == 400
         assert get('/api/state')[0] == 200
         assert get('/api/local-name', {'enabled': True})[0] == 200
         assert get('/api/state', host=alias)[0] == 200
+        assert get('/api/local-name', {'enabled': True, 'hostname': 'not.example.com'})[0] == 400
+        status, result = get('/api/local-name', {'enabled': True, 'hostname': ' Desk-Eink '})
+        assert status == 200 and result['hostname'] == 'desk-eink.local'
+        renamed = f'desk-eink.local:{server.server_port}'
+        assert get('/api/state', host=alias)[0] == 400
+        assert get('/api/state', host=renamed)[0] == 200
+        assert DeviceSettings(root).values['local_hostname'] == 'desk-eink.local'
+        assert get('/api/local-name', {'enabled': True, 'hostname': 'eink.local'},
+                   host=renamed, origin=f'http://{renamed}')[0] == 200
         assert get('/api/settings', code='wrong')[0] == 403
         assert get('/api/settings', DEFAULTS, origin='http://other.example')[0] == 403
         status, data = get('/api/settings')
@@ -62,6 +76,15 @@ with TemporaryDirectory() as folder:
                     'units': 'fahrenheit'}
         assert get('/api/settings', {**selected, 'timezone': 'fake'})[0] == 400
         assert get('/api/settings', {**selected, 'latitude': 91})[0] == 400
+        assert get('/api/settings', {**selected, 'weather_interval': 0})[0] == 400
+        assert get('/api/settings', {**selected, 'queue_prefetch': 1})[0] == 400
+        tuned = {**selected, 'weather_interval': 4, 'full_refresh_after': 20, 'playing_interval': 2,
+                 'idle_interval': 12, 'hotspot_delay': 45, 'queue_prefetch': False,
+                 'weather_enabled': False, 'playback_enabled': False}
+        assert get('/api/settings', tuned)[0] == 200
+        assert DeviceSettings(root).values == tuned and Weather(tuned).interval == 240
+        assert render(datetime(2026, 11, 9), (10, 0, True), weather_enabled=False) == render(
+            datetime(2026, 11, 9), (-10, 60, False), weather_enabled=False)
         assert get('/api/settings', selected)[0] == 200
         assert DeviceSettings(root).values == selected
         assert get('/api/language', {'language': 'invalid'}, code='')[0] == 400
@@ -97,7 +120,7 @@ with TemporaryDirectory() as folder:
         assert get('/api/spotify/finish', {'callback': callback})[0] == 400
         assert get('/api/spotify/disconnect', {})[1]['spotifyConnected'] is False
         assert not settings.credentials.exists()
-        assert len(calls) == 4
+        assert len(calls) == 5
         original_code = settings.code
         assert get('/api/setup-code', {'newCode': 'short'})[0] == 400
         assert get('/api/setup-code', {'newCode': 'new-setup-code'}, code='wrong')[0] == 403

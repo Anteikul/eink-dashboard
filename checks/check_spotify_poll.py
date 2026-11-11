@@ -8,7 +8,7 @@ first = Track('01Txvu3dNthhldq8oR0Pae', 'First', 'Artist')
 second = Track('629DixmZGHc7ILtEntuiWE', 'Second', 'Artist')
 
 
-def observed_waits(responses, queue_requests=None):
+def observed_waits(responses, queue_requests=None, **settings):
     count = len(responses)
     responses = iter(responses)
     waits = []
@@ -42,7 +42,7 @@ def observed_waits(responses, queue_requests=None):
 
     spotify.read_next = read_next
     with patch('spotify_playback.time.monotonic', side_effect=lambda: now):
-        spotify.poll(Stop(), lambda _: None)
+        spotify.poll(Stop(), lambda _: None, **settings)
     return waits
 
 
@@ -63,6 +63,10 @@ assert observed_waits([
     (first, 100_000, 98_000), (second, 100_000, 76_000),
 ], queue_requests) == [5, 5, 5, 2, 5]
 assert queue_requests == [(first.id, 10), (second.id, 27)]
+queue_requests.clear()
+assert observed_waits([(first, 100_000, 60_000), None], queue_requests,
+                      playing_interval=3, idle_interval=11, prefetch=False) == [3, 11]
+assert queue_requests == []
 queued_item = {'id': second.id, 'type': 'track', 'name': second.title,
                'artists': [{'name': second.artist}]}
 assert queue_tracks({'currently_playing': {'id': first.id}, 'queue': [queued_item] * 3}, first) == (second, second)
