@@ -37,6 +37,7 @@ SETTING_RANGES = {
 EXTRA_SETTINGS = (*SETTING_RANGES, 'display_width', 'display_height',
                   'weather_enabled', 'playback_enabled', 'queue_prefetch')
 LANGUAGES = ('en', 'cs')
+ROTATIONS = (0, 90, 180, 270)
 REDIRECT_URI = 'http://127.0.0.1:8765/callback'
 SPOTIFY_SCOPE = 'user-read-currently-playing user-read-playback-state'
 LAYOUT_SCREENS = ('dashboard', 'playback')
@@ -97,7 +98,7 @@ def validate_settings(payload):
     except (ValueError, ZoneInfoNotFoundError, TypeError) as error:
         raise ValueError('Enter a valid time zone such as Europe/Prague.') from error
     if (result['units'] not in ('celsius', 'fahrenheit')
-            or type(result['rotation']) is not int or result['rotation'] not in (0, 180)):
+            or type(result['rotation']) is not int or result['rotation'] not in ROTATIONS):
         raise ValueError('Check the temperature units and rotation.')
     if result['language'] not in LANGUAGES:
         raise ValueError('Choose English or Czech.')

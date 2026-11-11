@@ -155,9 +155,10 @@ with TemporaryDirectory() as folder:
         assert get('/api/settings', {**selected, 'latitude': 91})[0] == 400
         assert get('/api/settings', {**selected, 'weather_interval': 0})[0] == 400
         assert get('/api/settings', {**selected, 'queue_prefetch': 1})[0] == 400
+        assert get('/api/settings', {**selected, 'rotation': 45})[0] == 400
         tuned = {**selected, 'weather_interval': 4, 'full_refresh_after': 20, 'playing_interval': 2,
                  'idle_interval': 12, 'hotspot_delay': 45, 'queue_prefetch': False,
-                 'weather_enabled': False, 'playback_enabled': False}
+                 'weather_enabled': False, 'playback_enabled': False, 'rotation': 90}
         assert get('/api/settings', tuned)[0] == 200
         assert DeviceSettings(root).values == tuned and Weather(tuned).interval == 240
         assert render(datetime(2026, 11, 9), (10, 0, True), weather_enabled=False) == render(
@@ -235,7 +236,9 @@ with TemporaryDirectory() as folder:
             assert error.code == 302 and error.headers['Location'] == '/#saved-layouts'
         else:
             raise AssertionError('Unlock did not return to the saved layouts picker')
-        assert get('/api/settings', selected, code='')[1]['settings']['password_required'] is False
+        portrait_settings = {**selected, 'rotation': 270, 'display_width': 122, 'display_height': 250}
+        assert get('/api/settings', portrait_settings, code='')[1]['settings']['password_required'] is False
+        assert DeviceSettings(root).values['rotation'] == 270
         assert get('/api/password-protection', {'required': True}, code='', origin='http://other.example')[0] == 403
         with post_from_browser('/api/password-protection', {'required': True}) as response:
             assert json.load(response) == {'required': True} and response.headers.get('Set-Cookie')

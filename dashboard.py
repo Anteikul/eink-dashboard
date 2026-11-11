@@ -18,7 +18,7 @@ from urllib.request import urlopen
 from zoneinfo import ZoneInfo
 
 from control import PanelState, preview_png, start_server
-from device_settings import DEFAULTS, DeviceSettings, write_private
+from device_settings import DEFAULTS, ROTATIONS, DeviceSettings, write_private
 from layout_editor import (
     PANEL_SIZE, clock_has_seconds, content_key, editor_schema, preview_weather, render_custom, render_layer_atlas,
 )
@@ -120,16 +120,23 @@ def display_page(mode, playing, automatic_playback):
     return 'playback' if playing and automatic_playback else 'dashboard'
 
 
-def fit_panel(pixels, size, theme):
-    if size == PANEL_SIZE:
-        return pixels
+def fit_panel(pixels, size, theme, *, rotation=0):
+    if size == PANEL_SIZE and rotation in (0, 180):
+        return pixels[::-1] if rotation == 180 else pixels
     from PIL import Image, ImageOps
 
     source = Image.frombytes('L', size, bytes(pixels))
+    if rotation == 90:
+        source = source.transpose(Image.Transpose.ROTATE_270)
+    elif rotation == 270:
+        source = source.transpose(Image.Transpose.ROTATE_90)
+    if source.size == PANEL_SIZE:
+        return bytearray(source.tobytes())
     resized = ImageOps.contain(source, PANEL_SIZE, Image.Resampling.NEAREST)
     panel = Image.new('L', PANEL_SIZE, int(theme == 'light'))
     panel.paste(resized, ((WIDTH - resized.width) // 2, (HEIGHT - resized.height) // 2))
-    return bytearray(panel.tobytes())
+    frame = bytearray(panel.tobytes())
+    return frame[::-1] if rotation == 180 else frame
 
 
 def render_layout_preview(screen, layout, theme, language, units, *, layers=False, size=PANEL_SIZE,
@@ -420,12 +427,12 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 screen = render_custom(layout, now, theme, language, weather=current_weather, units=units,
                                        track=track, cover=cover, progress=progress, duration_ms=duration_ms, size=size,
                                        weather_enabled=weather_enabled)
-                screen = fit_panel(screen, size, theme)
             elif music:
                 screen = render_music(track, theme, cover, filled)
             else:
                 screen = render(now, current_weather, theme, units, language, weather_enabled=weather_enabled)
-            pixels = pack(screen, rotation)
+            screen = fit_panel(screen, size if layout is not None else PANEL_SIZE, theme, rotation=rotation)
+            pixels = pack(screen, 0)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.
             full = (displayed_page != page or displayed_music != music
@@ -466,7 +473,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             if showing_join and join_until is None:
                 join_until = time.monotonic() + JOIN_CONFIRM_SECONDS
             if not hotspot and (server or network):
-                state.publish(theme, preview_png(screen, WIDTH, HEIGHT), track.url if track else None, page=page)
+                preview = screen[::-1] if rotation == 180 else screen
+                state.publish(theme, preview_png(preview, WIDTH, HEIGHT), track.url if track else None, page=page)
             if ready:
                 write_private(Path(ready), 'ready\n')
                 ready = None
@@ -490,7 +498,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--rotation', choices=(0, 180), type=int)
+    parser.add_argument('--rotation', choices=ROTATIONS, type=int)
     parser.add_argument('--seconds', type=int, default=90, help='Demo length, 0 runs until stopped')
     parser.add_argument('--listen', help='IPv4 address for the local control page')
     parser.add_argument('--port', type=int, default=80)

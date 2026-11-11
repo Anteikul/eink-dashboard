@@ -48,7 +48,12 @@
               <div class="setup-grid">
                 <label data-i18n>Display width (px)<input name="display_width" type="number" min="32" max="400" step="1" required></label>
                 <label data-i18n>Display height (px)<input name="display_height" type="number" min="32" max="400" step="1" required></label>
-                <label data-i18n>Rotation<select name="rotation"><option value="0">0°</option><option value="180">180°</option></select></label>
+                <label data-i18n>Rotation<select name="rotation">
+                  <option value="0">0°</option>
+                  <option value="90">90°</option>
+                  <option value="180">180°</option>
+                  <option value="270">270°</option>
+                </select></label>
                 <label data-i18n>Partial updates before a full refresh<input name="full_refresh_after" type="number" step="1" required></label>
               </div>
             </section>

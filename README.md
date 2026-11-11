@@ -21,6 +21,8 @@ Open **Saved layouts** below the preview to apply a design with one click. Choos
 
 The gear opens **Settings** at `/settings`, where you can choose English or Czech. Unlock **Device setup** with the code printed by the installer to change location, display options, weather and Spotify intervals, and Wi-Fi setup timing. In **Web password**, you can change the code or let anyone who can reach the web interface open the settings and editor. Turn the password requirement back on to use the current code again. To recover the code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
 
+Under **Display**, choose a rotation of 0°, 90°, 180°, or 270°. For a layout that fills the display at 90° or 270°, set the canvas to 122 × 250 px.
+
 Opening Settings checks the repository's `main` branch on GitHub. When a newer version is available, select **Update** to download it and restart the dashboard. If the new version cannot start, the Pi returns to the previous version. Device settings, Wi-Fi, Spotify credentials, and saved layouts stay in the installation folder. **Check for updates** runs the check again. Use `install.sh` for system packages and the optional Wi-Fi helper.
 
 You can also open `http://eink.local/` on the same network. To change the name or turn it off, unlock **Device setup** and use **Local address**. If you change or disable the name while using it, Settings reopens at the Pi's IP address. The setup hotspot uses the address shown on the e-paper display.
