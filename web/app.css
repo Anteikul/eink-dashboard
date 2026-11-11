@@ -187,6 +187,12 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   overflow: auto;
   overscroll-behavior: contain;
 }
+.editor-widget-settings:has(> h3:not([hidden])), .editor-widgets {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 3%, var(--paper));
+}
 .editor-canvas-area {
   display: grid;
   flex: 1;
