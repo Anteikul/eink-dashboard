@@ -22,7 +22,7 @@ BAR_RIGHT = 237
 @lru_cache(maxsize=64)
 def font(size, bold=False, *, mono=False):
     if mono:
-        name = 'DejaVuSansMono.ttf'
+        name = 'DejaVuSansMono-Bold.ttf' if bold else 'DejaVuSansMono.ttf'
         fallback = Path('/System/Library/Fonts/Menlo.ttc')
     else:
         name = 'DejaVuSans-Bold.ttf' if bold else 'DejaVuSans.ttf'
@@ -30,7 +30,7 @@ def font(size, bold=False, *, mono=False):
     for path in (FONTS / name, Path('/usr/share/fonts/truetype/dejavu') / name,
                  fallback):
         try:
-            return ImageFont.truetype(str(path), size)
+            return ImageFont.truetype(str(path), size, index=int(path == fallback and mono and bold))
         except OSError:
             continue
     return ImageFont.load_default(size=size)

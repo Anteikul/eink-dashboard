@@ -59,7 +59,7 @@
               <h3 id="editor-preview-title" data-i18n>Display canvas</h3>
               <span id="editor-resolution">250 × 122 px</span>
             </div>
-            <div class="editor-toolbar">
+            <div id="editor-toolbar" class="editor-toolbar">
               <div id="editor-tools" class="editor-tools" role="group" aria-label="Canvas tools" data-i18n-attributes="aria-label">
                 <button type="button" class="editor-icon" data-tool="select" aria-label="Select" data-i18n-attributes="aria-label" aria-pressed="true">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 3 14 10-7 1.5L8.5 21 5 3Z"/></svg>
@@ -74,11 +74,11 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h5v9a4 4 0 0 0 8 0V4h5v9a9 9 0 0 1-18 0V4Zm0 5h5m8 0h5"/></svg>
                 </button>
               </div>
-              <div class="editor-history">
-                <button id="editor-undo" class="editor-icon" type="button" aria-label="Undo" data-i18n-attributes="aria-label">
+              <div id="editor-history" class="editor-history">
+                <button id="editor-undo" class="editor-icon" type="button" aria-label="Undo" data-i18n-attributes="aria-label" aria-keyshortcuts="Control+Z Meta+Z">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5 4 10l5 5M4 10h10a6 6 0 0 1 6 6v3"/></svg>
                 </button>
-                <button id="editor-redo" class="editor-icon" type="button" aria-label="Redo" data-i18n-attributes="aria-label">
+                <button id="editor-redo" class="editor-icon" type="button" aria-label="Redo" data-i18n-attributes="aria-label" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5 5 5-5 5m5-5H10a6 6 0 0 0-6 6v3"/></svg>
                 </button>
               </div>
@@ -100,11 +100,27 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
                 </button>
               </div>
-              <div id="editor-font-options" class="editor-tool-size" hidden>
-                <label id="editor-font-size-label" class="editor-icon" for="editor-font-size" aria-label="Font size" data-i18n-attributes="aria-label">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 18 5-12 5 12M5 14h6m4-3h6m-3-3v6m-3 4h6"/></svg>
-                </label>
-                <input id="editor-font-size" type="number" min="8" max="60" step="1" aria-labelledby="editor-font-size-label">
+              <div id="editor-content-tools" class="editor-content-tools" hidden>
+                <div id="editor-font-options" class="editor-tool-size" hidden>
+                  <label class="editor-icon" for="editor-font-size" aria-label="Font size" data-i18n-attributes="aria-label">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 18 5-12 5 12M5 14h6m4-3h6m-3-3v6m-3 4h6"/></svg>
+                  </label>
+                  <input id="editor-font-size" type="number" min="8" max="60" step="1" aria-label="Font size" data-i18n-attributes="aria-label">
+                </div>
+                <button id="editor-bold" class="editor-icon" type="button" aria-label="Bold" data-i18n-attributes="aria-label" aria-pressed="false" hidden>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h6a4 4 0 0 1 0 8H7Zm0 8h7a4 4 0 0 1 0 8H7Z" stroke-width="2.5"/></svg>
+                </button>
+                <div id="editor-alignment" class="editor-alignment" role="group" aria-label="Align content within the layer" data-i18n-attributes="aria-label">
+                  <button type="button" class="editor-icon" data-align="left" aria-label="Align content left" data-i18n-attributes="aria-label" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></svg>
+                  </button>
+                  <button type="button" class="editor-icon" data-align="center" aria-label="Center content" data-i18n-attributes="aria-label" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 10h10M4 14h16M7 18h10"/></svg>
+                  </button>
+                  <button type="button" class="editor-icon" data-align="right" aria-label="Align content right" data-i18n-attributes="aria-label" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M10 10h10M4 14h16M10 18h10"/></svg>
+                  </button>
+                </div>
               </div>
               <div id="editor-canvas-alignment" class="editor-canvas-alignment" role="group" aria-label="Align layer to canvas" data-i18n-attributes="aria-label" hidden>
                 <button type="button" class="editor-icon" data-canvas-align="left" aria-label="Align layer left" data-i18n-attributes="aria-label">
@@ -127,9 +143,9 @@
                 </button>
               </div>
             </div>
-            <div class="editor-canvas-area">
+            <div id="editor-canvas-area" class="editor-canvas-area">
               <div class="bezel">
-                <div id="editor-stage" data-tool="select" aria-label="Display canvas" data-i18n-attributes="aria-label" role="group">
+                <div id="editor-stage" data-tool="select" tabindex="-1" aria-label="Display canvas" data-i18n-attributes="aria-label" role="group">
                   <canvas id="editor-image" width="250" height="122" role="img" aria-label="Sample e-ink frame" data-i18n-attributes="aria-label"></canvas>
                   <div id="editor-selection" hidden aria-hidden="true">
                     <span class="editor-handle" data-corner="nw"></span>
@@ -137,6 +153,7 @@
                     <span class="editor-handle" data-corner="sw"></span>
                     <span class="editor-handle" data-corner="se"></span>
                   </div>
+                  <div id="editor-marquee" hidden aria-hidden="true"></div>
                   <div id="editor-drop-marker" hidden aria-hidden="true"></div>
                   <div id="editor-guide-x" class="editor-guide" hidden aria-hidden="true"></div>
                   <div id="editor-guide-y" class="editor-guide" hidden aria-hidden="true"></div>
@@ -174,10 +191,14 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
                   </button>
                 </div>
-                <label class="editor-scale" for="editor-scale">
+                <label id="editor-scale-label" class="editor-scale" for="editor-scale">
                   <span data-i18n>Size (px)</span>
                   <input id="editor-scale" type="number" min="1" step="1">
                 </label>
+                <div id="editor-divider-settings" class="editor-geometry" hidden>
+                  <label data-i18n>Length (px)<input id="editor-divider-length" type="number" min="1" step="1"></label>
+                  <label data-i18n>Thickness (px)<input id="editor-divider-thickness" type="number" min="1" step="1"></label>
+                </div>
                 <details class="editor-precision">
                   <summary data-i18n>Position and dimensions</summary>
                   <div class="editor-geometry">
@@ -189,18 +210,7 @@
                 </details>
                 <label id="editor-variant-label" data-i18n>Variant<select data-property="variant"></select></label>
                 <div id="editor-text-style" class="editor-text-style">
-                  <label data-i18n>Font<select data-property="font"><option value="regular" data-i18n>Regular</option><option value="bold" data-i18n>Bold</option><option value="mono" data-i18n>Monospace</option></select></label>
-                  <div id="editor-alignment" class="editor-alignment" role="group" aria-label="Alignment" data-i18n-attributes="aria-label">
-                    <button type="button" class="editor-icon" data-align="left" aria-label="Align left" data-i18n-attributes="aria-label" aria-pressed="false">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></svg>
-                    </button>
-                    <button type="button" class="editor-icon" data-align="center" aria-label="Align center" data-i18n-attributes="aria-label" aria-pressed="false">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 10h10M4 14h16M7 18h10"/></svg>
-                    </button>
-                    <button type="button" class="editor-icon" data-align="right" aria-label="Align right" data-i18n-attributes="aria-label" aria-pressed="false">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M10 10h10M4 14h16M10 18h10"/></svg>
-                    </button>
-                  </div>
+                  <label data-i18n>Font<select data-property="font"><option value="regular" data-i18n>Regular</option><option value="bold" data-i18n>Bold</option><option value="mono" data-i18n>Monospace</option><option value="mono-bold" data-i18n>Bold monospace</option></select></label>
                 </div>
                 <label id="editor-text-label" data-i18n>Custom text<textarea rows="2" maxlength="240" data-property="text"></textarea></label>
               </div>

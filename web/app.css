@@ -178,6 +178,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   border-radius: 9px;
 }
 #editor-stage { position: relative; width: 100%; aspect-ratio: 250 / 122; overflow: hidden; background: #f9f9f4; user-select: none; }
+#editor-stage:focus { outline: none; }
 #editor-stage canvas {
   position: absolute;
   inset: 0;
@@ -208,7 +209,13 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   border: 0;
 }
 .editor-hitbox:active { cursor: grabbing; }
-#editor-selection, #editor-drop-marker {
+.editor-hitbox[data-thin]::before { content: ""; position: absolute; inset: -4px 0; }
+.editor-hitbox[data-thin="vertical"]::before { inset: 0 -4px; }
+#editor-stage[data-group][data-tool="select"] .editor-hitbox[aria-pressed=true] {
+  outline: 1px solid #297a4e;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .8);
+}
+#editor-selection, #editor-drop-marker, #editor-marquee {
   position: absolute;
   z-index: 3;
   pointer-events: none;
@@ -216,7 +223,8 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   outline-offset: -1px;
   box-shadow: inset 0 0 0 1px white;
 }
-#editor-drop-marker { outline-style: dashed; background: rgb(84 168 117 / .2); }
+#editor-drop-marker, #editor-marquee { outline-style: dashed; background: rgb(84 168 117 / .2); }
+#editor-marquee { z-index: 4; }
 .editor-guide {
   position: absolute;
   z-index: 4;
@@ -226,7 +234,9 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 }
 #editor-guide-x { inset-block: 0; width: 2px; transform: translateX(-1px); }
 #editor-guide-y { inset-inline: 0; height: 2px; transform: translateY(-1px); }
-#editor-selection[data-kind="drawing"] .editor-handle { display: none; }
+#editor-selection:is([data-kind="drawing"], [data-kind="group"]) .editor-handle,
+#editor-selection[data-thin="horizontal"] .editor-handle[data-corner^="s"],
+#editor-selection[data-thin="vertical"] .editor-handle[data-corner$="e"] { display: none; }
 #editor-inline-text {
   position: absolute;
   z-index: 5;
@@ -265,7 +275,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 #editor-stage:not([data-tool="select"]) { cursor: crosshair; touch-action: none; }
 #editor-stage:not([data-tool="select"]) .editor-hitbox { pointer-events: none; }
 .editor-tools, .editor-history, .editor-contextbar, .editor-brush-options,
-.editor-canvas-alignment, .editor-tool-size {
+.editor-canvas-alignment, .editor-tool-size, .editor-content-tools {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -276,8 +286,11 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   align-items: center;
   margin-bottom: 8px;
 }
-.editor-tools { grid-column: 2; justify-content: center; }
+.editor-tools { grid-column: 2; justify-self: center; justify-content: center; }
 .editor-history { grid-column: 3; justify-self: end; }
+.editor-toolbar[data-history-row] { row-gap: 4px; }
+.editor-toolbar[data-history-row] :is(.editor-tools, .editor-history) { grid-column: 1 / -1; }
+.editor-toolbar[data-history-row] .editor-history { grid-row: 2; }
 .editor-contextbar { justify-content: center; gap: 8px; height: 36px; margin-bottom: 8px; }
 .editor-brush-options { gap: 8px; }
 .editor-contextbar .editor-icon { min-height: 36px; }
@@ -293,6 +306,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   border-radius: 5px;
 }
 #editor-font-size { width: 3.4rem; }
+.editor-content-tools > button { width: 34px; }
 .editor-canvas-alignment button { width: 34px; }
 .editor-canvas-alignment button:nth-child(4) { margin-left: 4px; }
 .editor-canvas-alignment button:nth-child(n+3)::after { inset-inline: auto 0; }
@@ -371,7 +385,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-precision summary { padding: 7px 8px; font-size: 13px; cursor: pointer; }
 .editor-precision .editor-geometry { padding: 0 8px 8px; }
 .editor-geometry, .editor-text-style { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.editor-alignment { display: flex; grid-column: 1 / -1; gap: 4px; }
+.editor-alignment { display: flex; gap: 4px; }
 .editor-text-style > label { grid-column: 1 / -1; }
 .editor-alignment button { width: 36px; min-height: 34px; }
 .editor-status {
@@ -484,15 +498,27 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   .editor-toolbar .editor-tools .editor-icon { width: 36px; min-height: 40px; }
   .editor-history { gap: 3px; }
   .editor-toolbar .editor-history .editor-icon { width: 27px; min-height: 40px; }
-  .editor-contextbar { gap: 5px; }
-  .editor-canvas-alignment { gap: 3px; }
-  .editor-contextbar .editor-canvas-alignment .editor-icon { width: 26px; }
+  .editor-contextbar { gap: 3px; }
+  .editor-content-tools { gap: 2px; }
+  .editor-contextbar :is(.editor-alignment, .editor-canvas-alignment) { gap: 1px; }
+  .editor-contextbar :is(.editor-alignment, .editor-canvas-alignment) .editor-icon,
+  .editor-contextbar #editor-bold { width: 24px; }
+  .editor-canvas-alignment button:nth-child(4) { margin-left: 0; }
+  #editor-font-options label { display: none; }
+  #editor-font-size { width: 40px; padding-inline: 3px; appearance: textfield; }
+  #editor-font-size::-webkit-inner-spin-button { appearance: none; }
 }
 
-@container editor-preview (max-width: 275px) {
-  .editor-toolbar { row-gap: 4px; }
-  .editor-tools, .editor-history { grid-column: 1 / -1; }
-  .editor-history { grid-row: 2; }
+@container editor-preview (max-width: 500px) and (min-width: 391px) {
+  .editor-content-tools, .editor-contextbar { gap: 5px; }
+  .editor-contextbar :is(.editor-alignment, .editor-canvas-alignment) { gap: 3px; }
+  .editor-contextbar :is(.editor-alignment, .editor-canvas-alignment) .editor-icon,
+  .editor-contextbar #editor-bold { width: 29px; }
+  #editor-font-size { width: 3rem; }
+  #editor-font-options label { width: 20px; }
+}
+
+@container editor-preview (max-width: 294px) {
   .editor-contextbar { flex-wrap: wrap; height: 76px; align-content: center; }
 }
 

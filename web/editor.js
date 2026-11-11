@@ -9,12 +9,15 @@
   const panel = element('editor-panel');
   const tabs = [...editor.querySelectorAll('[role=tab]')];
   const stage = element('editor-stage');
+  const canvasArea = element('editor-canvas-area');
+  const bezel = stage.parentElement;
   const preview = element('editor-image');
   const frame = preview.getContext('2d');
   const drawing = document.createElement('canvas');
   const eraseSurface = document.createElement('canvas');
   const eraseContext = eraseSurface.getContext('2d');
   const selection = element('editor-selection');
+  const marquee = element('editor-marquee');
   const dropMarker = element('editor-drop-marker');
   const guides = {x: element('editor-guide-x'), y: element('editor-guide-y')};
   const magnet = element('editor-snap');
@@ -24,11 +27,15 @@
   const widgetList = element('editor-widgets');
   const palette = element('editor-palette');
   const tools = element('editor-tools');
+  const toolbar = element('editor-toolbar');
+  const history = element('editor-history');
   const brush = element('editor-brush');
   const brushOptions = element('editor-brush-options');
   const brushWidth = element('editor-brush-width');
   const fontOptions = element('editor-font-options');
   const fontSize = element('editor-font-size');
+  const contentTools = element('editor-content-tools');
+  const boldControl = element('editor-bold');
   const canvasAlignment = element('editor-canvas-alignment');
   const clearDrawing = element('editor-clear-drawing');
   const drawingProperties = element('editor-drawing-properties');
@@ -41,6 +48,9 @@
     [...properties.querySelectorAll('[data-property]')].map(field => [field.dataset.property, field]),
   );
   const scaleField = element('editor-scale');
+  const dividerSettings = element('editor-divider-settings');
+  const dividerLength = element('editor-divider-length');
+  const dividerThickness = element('editor-divider-thickness');
   const remove = element('editor-remove');
   const reset = element('editor-reset');
   const save = element('editor-save');
@@ -53,7 +63,7 @@
   const libraryList = element('editor-library-list');
   const libraryStatus = element('editor-library-status');
   const drafts = Object.fromEntries(tabs.map(tab => [
-    tab.dataset.screen, {saved: null, librarySaved: null, layout: null, selection: -1, message: '', undo: [], redo: []},
+    tab.dataset.screen, {saved: null, librarySaved: null, layout: null, selection: -1, group: [], message: '', undo: [], redo: []},
   ]));
   const arrows = {
     ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
@@ -105,9 +115,26 @@
   const definitions = () => schema.widgets[screen];
   const definition = (type) => definitions().find(widget => widget.type === type);
   const hasChanges = ({saved, layout}) => JSON.stringify(saved) !== JSON.stringify(layout);
+  const restoreLayout = draft => draft.librarySaved?.layout ?? null;
   const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
   const stride = width => Math.ceil(width / 8);
   const layerKey = ({x, y, ...appearance}) => JSON.stringify(appearance);
+  const selectedIndices = () => current().selection >= 0 ? [current().selection] : current().group;
+
+  function positionHistory() {
+    const area = canvasArea.getBoundingClientRect();
+    if (!area.width || !area.height) return;
+    const border = bezel.getBoundingClientRect().width - stage.getBoundingClientRect().width;
+    const extraRow = toolbar.hasAttribute('data-history-row') ? toolbar.offsetHeight - tools.offsetHeight : 0;
+    const widthInOneRow = Math.min(area.width,
+      (area.height + extraRow - border) * preview.width / preview.height + border);
+    toolbar.toggleAttribute('data-history-row', (widthInOneRow - tools.offsetWidth) / 2 < history.offsetWidth + 2);
+    history.style.marginInlineEnd = Math.max(0, area.right - bezel.getBoundingClientRect().right) + 'px';
+  }
+
+  const historyObserver = new ResizeObserver(positionHistory);
+  historyObserver.observe(canvasArea);
+  historyObserver.observe(bezel);
 
   function icon(type) {
     const ns = 'http://www.w3.org/2000/svg';
@@ -143,7 +170,9 @@
       const label = translate(tab.dataset.label);
       tab.setAttribute('aria-label', dirty ? label + ' (' + translate('Unapplied changes') + ')' : label);
     }
-    reset.disabled = current().layout === null;
+    const draft = current();
+    reset.disabled = JSON.stringify(draft.layout) === JSON.stringify(restoreLayout(draft));
+    reset.setAttribute('aria-label', translate(draft.librarySaved?.name ? 'Restore saved layout' : 'Reset to default'));
     blank.disabled = current().layout?.length === 0;
     clearDrawing.disabled = drawings().length === 0;
     undo.disabled = current().undo.length === 0;
@@ -189,7 +218,11 @@
     brushOptions.hidden = tool === 'select';
     brushWidth.hidden = tool !== 'draw';
     fontOptions.hidden = tool !== 'select' || !textStyle;
-    canvasAlignment.hidden = tool !== 'select' || !widget;
+    const iconOnly = widget?.type === 'weather' && widget.variant === 'icon-only';
+    contentTools.hidden = tool !== 'select' || !(textStyle || iconOnly);
+    boldControl.hidden = !textStyle;
+    if (textStyle) boldControl.setAttribute('aria-pressed', String(widget.font.endsWith('bold')));
+    canvasAlignment.hidden = tool !== 'select' || !selectedIndices().length;
     if (textStyle && fontSize.value !== String(widget.size)) fontSize.value = widget.size;
     properties.hidden = !widget || isDrawing;
     drawingProperties.hidden = !isDrawing;
@@ -209,7 +242,8 @@
 
     fields.x.max = schema.width - widget.w;
     fields.y.max = schema.height - widget.h;
-    fields.w.max = schema.width - widget.x;
+    fields.w.max = Math.min(schema.width - widget.x,
+      widget.type === 'divider' && widget.variant === 'vertical' ? schema.height : schema.width);
     fields.h.max = schema.height - widget.y;
     for (const [name, field] of Object.entries(fields)) {
       const value = String(widget[name] ?? '');
@@ -217,6 +251,17 @@
     }
     for (const button of alignment.children) {
       button.setAttribute('aria-pressed', String(widget.align === button.dataset.align));
+    }
+    const divider = widget.type === 'divider';
+    element('editor-scale-label').hidden = divider;
+    dividerSettings.hidden = !divider;
+    if (divider) {
+      const vertical = widget.variant === 'vertical';
+      dividerLength.max = vertical ? schema.height : schema.width;
+      dividerLength.value = vertical ? widget.h : widget.w;
+      dividerThickness.max = schema.height;
+      dividerThickness.value = Math.min(widget.thickness ?? 1, vertical ? widget.w : widget.h);
+      return;
     }
     const size = Math.max(widget.w, widget.h);
     scaleField.max = Math.floor(Math.min(
@@ -227,17 +272,33 @@
   }
 
   function updateSelection() {
+    const indices = selectedIndices();
+    stage.toggleAttribute('data-group', indices.length > 1);
     for (const [index, button] of widgetButtons.entries()) {
-      const selected = String(index === current().selection);
+      const selected = String(indices.includes(index));
       hitboxes[index]?.setAttribute('aria-pressed', selected);
       if (hitboxes[index]) hitboxes[index].tabIndex = tool === 'select' ? 0 : -1;
       button.setAttribute('aria-pressed', selected);
     }
-    const layer = layers()[current().selection];
-    selection.hidden = !layer || tool !== 'select';
-    selection.dataset.kind = layer?.type === 'drawing' ? 'drawing' : 'widget';
-    if (layer) position(selection, layer);
+    positionSelection(indices);
     updateInspector();
+  }
+
+  function selectionBounds(indices = selectedIndices(), layout = layers()) {
+    if (!indices.length) return null;
+    const boxes = indices.map(index => layout[index]);
+    const x = Math.min(...boxes.map(box => box.x));
+    const y = Math.min(...boxes.map(box => box.y));
+    return {x, y, w: Math.max(...boxes.map(box => box.x + box.w)) - x,
+      h: Math.max(...boxes.map(box => box.y + box.h)) - y};
+  }
+
+  function positionSelection(indices = selectedIndices()) {
+    const box = selectionBounds(indices);
+    const layer = layers()[current().selection];
+    selection.hidden = !box || tool !== 'select';
+    selection.dataset.kind = indices.length > 1 ? 'group' : layer?.type ?? '';
+    if (box) positionLayer(selection, layer ?? box);
   }
 
   function position(hitbox, {x, y, w, h}) {
@@ -245,6 +306,13 @@
     hitbox.style.top = (y / schema.height * 100) + '%';
     hitbox.style.width = (w / schema.width * 100) + '%';
     hitbox.style.height = (h / schema.height * 100) + '%';
+  }
+
+  function positionLayer(hitbox, layer) {
+    position(hitbox, layer);
+    const vertical = layer.variant === 'vertical';
+    if (layer.type === 'divider' && (vertical ? layer.w : layer.h) < 4) hitbox.dataset.thin = layer.variant;
+    else delete hitbox.dataset.thin;
   }
 
   function renderWidgets() {
@@ -259,7 +327,7 @@
       hitbox.className = 'editor-hitbox';
       hitbox.dataset.index = index;
       hitbox.setAttribute('aria-label', label);
-      position(hitbox, widget);
+      positionLayer(hitbox, widget);
       stage.append(hitbox);
       hitboxes.push(hitbox);
 
@@ -283,7 +351,13 @@
   }
 
   function selectWidget(index) {
-    current().selection = index;
+    selectLayers(index < 0 ? [] : [index]);
+  }
+
+  function selectLayers(indices) {
+    const draft = current();
+    draft.selection = indices.length === 1 ? indices[0] : -1;
+    draft.group = indices.length > 1 ? indices : [];
     updateSelection();
   }
 
@@ -306,7 +380,7 @@
       const fallback = drag?.index === index && drag.origin ? tiles.get(layerKey(drag.origin)) : undefined;
       const tile = tiles.get(layerKey(widget)) ?? fallback;
       if (tile) {
-        frame.drawImage(atlas, 0, tile.y, tile.w, tile.h, widget.x, widget.y, widget.w, widget.h);
+        composeTile(atlas, tile.y, tile.w, tile.h, widget);
       }
     }
     if (drag?.bytes && !drag.erase) frame.drawImage(drawing, 0, 0);
@@ -368,7 +442,8 @@
     return document.documentElement.dataset.theme === 'dark' ? 255 : 0;
   }
 
-  function composeInk({x, y, w, h, bitmap}) {
+  function composeInk(layer) {
+    const {w, h, bitmap} = layer;
     const color = inkColor();
     const key = w + ':' + h + ':' + color + ':' + bitmap;
     let tile = inkTiles.get(key);
@@ -380,38 +455,70 @@
       inkTiles.set(key, tile);
       if (inkTiles.size > 128) inkTiles.delete(inkTiles.keys().next().value);
     }
+    composeTile(tile, 0, w, h, layer);
+  }
+
+  function composeTile(source, sourceY, sourceWidth, sourceHeight, {x, y, w, h}) {
     if (drag?.erase) {
       eraseContext.clearRect(0, 0, w, h);
-      eraseContext.drawImage(tile, 0, 0);
+      eraseContext.imageSmoothingEnabled = false;
+      eraseContext.drawImage(source, 0, sourceY, sourceWidth, sourceHeight, 0, 0, w, h);
       eraseContext.globalCompositeOperation = 'destination-out';
       eraseContext.drawImage(drawing, -x, -y);
       eraseContext.globalCompositeOperation = 'source-over';
       frame.drawImage(eraseSurface, 0, 0, w, h, x, y, w, h);
     } else {
-      frame.drawImage(tile, x, y);
+      frame.drawImage(source, 0, sourceY, sourceWidth, sourceHeight, x, y, w, h);
     }
   }
 
-  function changeInk(transform) {
+  function changeLayers(transform) {
     const draft = current();
     const layout = [];
     let changed = false;
+    let changedWidget = false;
     let selection = -1;
     for (const [index, layer] of layers().entries()) {
-      const result = layer.type === 'drawing' ? transform(layer) : layer;
-      if (result !== layer) changed = true;
+      const result = transform(layer);
+      if (result !== layer) {
+        changed = true;
+        if (layer.type !== 'drawing') changedWidget = true;
+      }
       if (!result) continue;
       if (draft.selection === index) selection = layout.length;
       layout.push(result);
     }
     if (!changed) return;
+    if (changedWidget) clearPreview(true);
     draft.selection = selection;
     setDraft(layout, true);
   }
 
-  function eraseInk(mask) {
+  function eraseWidget(layer, brush, brushStride) {
+    const {x, y, w, h, mask} = layer;
+    const rowBytes = stride(w);
+    const old = mask ? decodeInk(mask.bitmap) : null;
+    const oldStride = mask ? stride(mask.w) : 0;
+    const bytes = new Uint8Array(rowBytes * h);
+    let changed = false;
+    for (let py = 0; py < h; py++) {
+      const oldY = mask ? Math.floor((py + .5) * mask.h / h) : 0;
+      for (let px = 0; px < w; px++) {
+        const globalX = x + px;
+        const oldX = mask ? Math.floor((px + .5) * mask.w / w) : 0;
+        const alreadyErased = old && (old[oldY * oldStride + (oldX >> 3)] & (128 >> (oldX & 7)));
+        const erased = brush[(y + py) * brushStride + (globalX >> 3)] & (128 >> (globalX & 7));
+        if (erased && !alreadyErased) changed = true;
+        if (erased || alreadyErased) bytes[py * rowBytes + (px >> 3)] |= 128 >> (px & 7);
+      }
+    }
+    return changed ? {...layer, mask: {w, h, bitmap: btoa(String.fromCharCode(...bytes))}} : layer;
+  }
+
+  function eraseLayers(mask) {
     const rowBytes = stride(schema.width);
-    changeInk(layer => {
+    changeLayers(layer => {
+      if (layer.type !== 'drawing') return eraseWidget(layer, mask, rowBytes);
       const {x, y, w, h, bitmap} = layer;
       const bytes = decodeInk(bitmap);
       let changed = false;
@@ -484,6 +591,7 @@
   function showScreen() {
     finishText(false);
     drag = undefined;
+    marquee.hidden = true;
     paletteDrag = undefined;
     cancelLayerDrag();
     showGuides();
@@ -744,6 +852,7 @@
         const saved = editableLayout(data.layouts[name]);
         if (!hasChanges(draft) && JSON.stringify(draft.saved) !== JSON.stringify(saved)) {
           draft.layout = saved;
+          draft.group = [];
           draft.undo = [];
           draft.redo = [];
         }
@@ -794,11 +903,11 @@
     if (remember) recordHistory(previous);
     draft.message = '';
     if (structureChanged) {
+      draft.group = [];
       renderWidgets();
     } else {
-      const layer = layers()[draft.selection];
-      position(hitboxes[draft.selection], layer);
-      if (!selection.hidden) position(selection, layer);
+      for (const index of selectedIndices()) positionLayer(hitboxes[index], layers()[index]);
+      positionSelection();
       updateInspector();
     }
     compose();
@@ -811,8 +920,15 @@
     const layout = layers().slice();
     const widget = layout[index];
     if (!widget || Object.entries(change).every(([name, value]) => widget[name] === value)) return;
+    if (widget.type === 'divider' && !('thickness' in change)) {
+      const minorAxis = widget.variant === 'vertical' ? 'w' : 'h';
+      if (change[minorAxis] !== undefined && change[minorAxis] !== widget[minorAxis]) {
+        change = {...change, thickness: Math.min(change[minorAxis], schema.height)};
+      }
+    }
     layout[index] = {...widget, ...change};
     setDraft(layout, false, remember);
+    if (textEditing) styleInlineText(layout[index]);
   }
 
   function moveWidget(dx, dy, origin = layers()[current().selection], snap = false) {
@@ -822,8 +938,56 @@
       y: clamp(y + dy, 0, schema.height - h),
       w, h,
     };
-    if (snap) snapPosition(next, current().selection);
+    if (snap) snapPosition(next, [current().selection]);
     editWidget({x: next.x, y: next.y}, !drag);
+  }
+
+  function moveGroup(dx, dy, origin = layers(), snap = false) {
+    const indices = selectedIndices();
+    const {x, y, w, h} = selectionBounds(indices, origin);
+    const next = {x: clamp(x + dx, 0, schema.width - w), y: clamp(y + dy, 0, schema.height - h), w, h};
+    if (snap) snapPosition(next, indices);
+    const layout = layers().slice();
+    const currentBox = selectionBounds(indices, layout);
+    if (next.x === currentBox.x && next.y === currentBox.y) return;
+    for (const index of indices) {
+      const layer = origin[index];
+      layout[index] = {...layer, x: layer.x + next.x - x, y: layer.y + next.y - y};
+    }
+    setDraft(layout, false, !drag);
+  }
+
+  function editDivider(widget, variant, length, thickness) {
+    const vertical = variant === 'vertical';
+    const rotated = variant !== widget.variant;
+    length = Math.min(length, vertical ? schema.height : schema.width);
+    const [w, h] = vertical ? [thickness, length] : [length, thickness];
+    // Round in opposite directions so a round trip does not shift a half-pixel center.
+    const roundCenter = vertical ? Math.ceil : Math.floor;
+    const x = clamp(widget.x + (rotated ? roundCenter((widget.w - w) / 2) : 0), 0, schema.width - w);
+    const y = clamp(widget.y + (rotated ? roundCenter((widget.h - h) / 2) : 0), 0, schema.height - h);
+    const change = {variant, x, y, w, h, thickness};
+    if (rotated && widget.mask) change.mask = rotateMask(widget.mask, w, h, vertical);
+    editWidget(change);
+  }
+
+  function rotateMask(mask, w, h, clockwise) {
+    const source = decodeInk(mask.bitmap);
+    const sourceStride = stride(mask.w);
+    const rowBytes = stride(w);
+    const rotated = new Uint8Array(rowBytes * h);
+    for (let y = 0; y < h; y++) {
+      const along = Math.floor((y + .5) * mask.w / h);
+      const px = clockwise ? along : mask.w - 1 - along;
+      for (let x = 0; x < w; x++) {
+        const across = Math.floor((x + .5) * mask.h / w);
+        const py = clockwise ? mask.h - 1 - across : across;
+        if (source[py * sourceStride + (px >> 3)] & (128 >> (px & 7))) {
+          rotated[y * rowBytes + (x >> 3)] |= 128 >> (x & 7);
+        }
+      }
+    }
+    return {w, h, bitmap: btoa(String.fromCharCode(...rotated))};
   }
 
   function resizeWidget(dx, dy, {origin, corner}, free) {
@@ -835,7 +999,8 @@
     const anchorY = north ? bottom : y;
     const signX = west ? -1 : 1;
     const signY = north ? -1 : 1;
-    const maxW = west ? right : schema.width - x;
+    const maxW = Math.min(west ? right : schema.width - x,
+      origin.type === 'divider' && origin.variant === 'vertical' ? schema.height : schema.width);
     const maxH = north ? bottom : schema.height - y;
     const rawW = w + signX * dx;
     const rawH = h + signY * dy;
@@ -844,7 +1009,7 @@
       const first = anchor + sign * min;
       const last = anchor + sign * max;
       const result = snapAxis(axis, anchor + sign * span, 0, Math.min(first, last),
-        Math.max(first, last), current().selection);
+        Math.max(first, last), [current().selection]);
       return {size: sign * (result.position - anchor), guide: result.guide};
     };
     if (free) {
@@ -903,6 +1068,24 @@
     };
   }
 
+  function updateMarquee(from, to) {
+    const x = clamp(Math.min(from.x, to.x), 0, schema.width);
+    const y = clamp(Math.min(from.y, to.y), 0, schema.height);
+    const right = clamp(Math.max(from.x, to.x), 0, schema.width);
+    const bottom = clamp(Math.max(from.y, to.y), 0, schema.height);
+    marquee.hidden = Math.max(right - x, bottom - y) < 2;
+    if (!marquee.hidden) position(marquee, {x, y, w: right - x, h: bottom - y});
+    const indices = [];
+    if (!marquee.hidden) {
+      for (const [index, layer] of layers().entries()) {
+        if (layer.x < right && layer.x + layer.w > x && layer.y < bottom && layer.y + layer.h > y) {
+          indices.push(index);
+        }
+      }
+    }
+    selectLayers(indices);
+  }
+
   function brushPoint(event) {
     const {x, y} = canvasPoint(event);
     return [clamp(Math.floor(x), 0, schema.width - 1), clamp(Math.floor(y), 0, schema.height - 1)];
@@ -958,7 +1141,7 @@
     const dimension = horizontal ? schema.width : schema.height;
     const targets = [dimension / 2, 0, dimension];
     for (const [index, layer] of layers().entries()) {
-      if (index === selected) continue;
+      if (selected.includes(index)) continue;
       const start = layer[axis];
       const span = horizontal ? layer.w : layer.h;
       targets.push(start, start + span, start + span / 2);
@@ -978,9 +1161,9 @@
     return best;
   }
 
-  function snapPosition(box, index) {
-    const x = snapAxis('x', box.x, box.w, 0, schema.width - box.w, index);
-    const y = snapAxis('y', box.y, box.h, 0, schema.height - box.h, index);
+  function snapPosition(box, selected = []) {
+    const x = snapAxis('x', box.x, box.w, 0, schema.width - box.w, selected);
+    const y = snapAxis('y', box.y, box.h, 0, schema.height - box.h, selected);
     box.x = x.position;
     box.y = y.position;
     showGuides(x.guide, y.guide);
@@ -993,7 +1176,7 @@
       x: clamp(Math.round(point.x - w / 2), 0, schema.width - w),
       y: clamp(Math.round(point.y - h / 2), 0, schema.height - h),
       w, h,
-    }, -1);
+    });
   }
 
   function insideCanvas({x, y}) {
@@ -1040,10 +1223,7 @@
     const h = Math.min(schema.height, Math.max(widget.h, 40 / height * schema.height));
     position(inlineText, {x: Math.min(widget.x, schema.width - w),
       y: Math.min(widget.y, schema.height - h), w, h});
-    setInlineFontSize(widget.size, width);
-    inlineText.style.fontFamily = widget.font === 'mono' ? 'var(--mono)' : '';
-    inlineText.style.fontWeight = widget.font === 'bold' ? '700' : '';
-    inlineText.style.textAlign = widget.align;
+    styleInlineText(widget, width);
     inlineText.value = widget.text;
     inlineText.hidden = false;
     textEditing = {index, screen};
@@ -1051,8 +1231,11 @@
     inlineText.select();
   }
 
-  function setInlineFontSize(size, width = stage.getBoundingClientRect().width) {
-    inlineText.style.fontSize = clamp(size * width / schema.width, 16, 38) + 'px';
+  function styleInlineText(widget, width = stage.getBoundingClientRect().width) {
+    inlineText.style.fontSize = clamp(widget.size * width / schema.width, 16, 38) + 'px';
+    inlineText.style.fontFamily = widget.font.startsWith('mono') ? 'var(--mono)' : '';
+    inlineText.style.fontWeight = widget.font.endsWith('bold') ? '700' : '';
+    inlineText.style.textAlign = widget.align;
   }
 
   function finishText(apply, refocus = false) {
@@ -1144,15 +1327,14 @@
     if (hitbox) startText(Number(hitbox.dataset.index));
   });
   inlineText.addEventListener('blur', (event) => {
-    if (event.relatedTarget !== fontSize) finishText(true);
+    if (!contentTools.contains(event.relatedTarget)) finishText(true);
   });
-  fontSize.addEventListener('blur', (event) => {
-    if (event.relatedTarget !== inlineText) finishText(true);
+  contentTools.addEventListener('focusout', (event) => {
+    if (event.relatedTarget !== inlineText && !contentTools.contains(event.relatedTarget)) finishText(true);
   });
   inlineText.addEventListener('keydown', (event) => {
     if (event.isComposing) return;
-    const singleLine = layers()[current().selection]?.variant === 'single';
-    if (event.key === 'Escape' || (event.key === 'Enter' && (singleLine || event.ctrlKey || event.metaKey))) {
+    if (event.key === 'Escape' || (event.key === 'Enter' && !event.shiftKey)) {
       event.preventDefault();
       finishText(event.key !== 'Escape', true);
     }
@@ -1180,16 +1362,25 @@
     }
     const corner = event.target.dataset.corner;
     const hitbox = event.target.closest('.editor-hitbox');
+    event.preventDefault();
+    const point = canvasPoint(event);
     if (!hitbox && !corner) {
       selectWidget(-1);
+      stage.focus({preventScroll: true});
+      drag = {id: event.pointerId, point, marquee: true};
+      stage.setPointerCapture(event.pointerId);
       return;
     }
-    event.preventDefault();
     const index = hitbox ? Number(hitbox.dataset.index) : current().selection;
     hitboxes[index].focus({preventScroll: true});
+    if (current().group.includes(index)) {
+      drag = {id: event.pointerId, point, groupOrigin: layers(), before: current().layout};
+      stage.setPointerCapture(event.pointerId);
+      return;
+    }
     selectWidget(index);
     drag = {
-      id: event.pointerId, point: canvasPoint(event), index, corner, origin: layers()[index],
+      id: event.pointerId, point, index, corner, origin: layers()[index],
       before: current().layout,
     };
     (hitbox ?? stage).setPointerCapture(event.pointerId);
@@ -1201,22 +1392,32 @@
       return;
     }
     const point = canvasPoint(event);
+    if (drag.marquee) {
+      updateMarquee(drag.point, point);
+      return;
+    }
     const dx = Math.round(point.x - drag.point.x);
     const dy = Math.round(point.y - drag.point.y);
-    if (drag.corner) {
+    if (drag.groupOrigin) {
+      moveGroup(dx, dy, drag.groupOrigin, true);
+    } else if (drag.corner) {
       drag.delta = {dx, dy};
       resizeWidget(dx, dy, drag, event.shiftKey);
-    }
-    else moveWidget(dx, dy, drag.origin, true);
+    } else moveWidget(dx, dy, drag.origin, true);
   });
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) {
     stage.addEventListener(event, ({pointerId, type}) => {
       if (drag?.id !== pointerId) return;
-      const {bytes, before, erase} = drag;
+      const {bytes, before, erase, marquee: selecting} = drag;
       drag = undefined;
+      if (selecting) {
+        marquee.hidden = true;
+        if (type === 'pointercancel') selectWidget(-1);
+        return;
+      }
       showGuides();
       if (bytes) {
-        if (type === 'pointerup' && erase) eraseInk(bytes);
+        if (type === 'pointerup' && erase) eraseLayers(bytes);
         if (type === 'pointerup' && !erase) {
           const layer = cropInk(bytes, schema.width, schema.height);
           if (layer) {
@@ -1235,11 +1436,17 @@
   stage.addEventListener('keydown', (event) => {
     const hitbox = event.target.closest('.editor-hitbox');
     const offset = arrows[event.key];
-    if (drag || tool !== 'select' || !hitbox || !Array.isArray(offset)) return;
+    const group = current().group;
+    if (drag || tool !== 'select' || !Array.isArray(offset) ||
+        (!hitbox && (event.target !== stage || !selectedIndices().length))) return;
     event.preventDefault();
-    selectWidget(Number(hitbox.dataset.index));
     const step = event.shiftKey ? 10 : 1;
-    moveWidget(offset[0] * step, offset[1] * step);
+    const [dx, dy] = offset.map(value => value * step);
+    if (group.length && (!hitbox || group.includes(Number(hitbox.dataset.index)))) moveGroup(dx, dy);
+    else {
+      if (hitbox) selectWidget(Number(hitbox.dataset.index));
+      moveWidget(dx, dy);
+    }
   });
 
   widgetList.addEventListener('click', (event) => {
@@ -1346,7 +1553,7 @@
   undo.addEventListener('click', () => stepHistory('undo', 'redo'));
   redo.addEventListener('click', () => stepHistory('redo', 'undo'));
   clearDrawing.addEventListener('click', () => {
-    if (!drag) changeInk(() => null);
+    if (!drag) changeLayers(layer => layer.type === 'drawing' ? null : layer);
   });
   element('editor-remove-drawing').addEventListener('click', () => {
     if (!drag && layers()[current().selection]?.type === 'drawing') removeLayer(current().selection);
@@ -1359,21 +1566,26 @@
   }
   editor.addEventListener('keydown', (event) => {
     if (content.hidden || event.isComposing || event.target.matches('input, textarea, select')) return;
-    const selected = current().selection;
+    const selected = selectedIndices();
     if ((event.key === 'Delete' || event.key === 'Backspace') &&
-        selected >= 0 && !drag && !layerDrag && !paletteDrag) {
+        selected.length && !drag && !layerDrag && !paletteDrag) {
       event.preventDefault();
-      removeLayer(selected);
+      if (selected.length === 1) removeLayer(selected[0]);
+      else setDraft(layers().filter((_, index) => !selected.includes(index)), true);
       (widgetButtons[current().selection] ?? palette.firstElementChild).focus();
     } else if (['Enter', 'F2'].includes(event.key) && event.target.matches('button[data-index]') &&
         layers()[Number(event.target.dataset.index)]?.type === 'text') {
       event.preventDefault();
       startText(Number(event.target.dataset.index));
-    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-      event.preventDefault();
-      if (event.shiftKey) stepHistory('redo', 'undo');
-      else stepHistory('undo', 'redo');
     }
+  });
+  window.addEventListener('keydown', (event) => {
+    if (content.hidden || event.isComposing || !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== 'z' || event.target.isContentEditable ||
+        event.target.matches?.('input, textarea, select')) return;
+    event.preventDefault();
+    if (event.shiftKey) stepHistory('redo', 'undo');
+    else stepHistory('undo', 'redo');
   });
 
   remove.addEventListener('click', () => {
@@ -1385,6 +1597,11 @@
     const field = event.target;
     const name = field.dataset.property;
     if (!name || name === 'text') return;
+    const widget = layers()[current().selection];
+    if (name === 'variant' && widget?.type === 'divider' && field.value !== widget.variant) {
+      editDivider(widget, field.value, Number(dividerLength.value), Number(dividerThickness.value));
+      return;
+    }
     if (field.type === 'number') {
       if (!Number.isFinite(field.valueAsNumber)) {
         updateInspector();
@@ -1401,15 +1618,35 @@
     const button = event.target.closest('button[data-align]');
     if (button && !drag && !paletteDrag && !layerDrag) editWidget({align: button.dataset.align});
   });
+  boldControl.addEventListener('click', () => {
+    const layer = layers()[current().selection];
+    if (!layer || boldControl.hidden || drag || paletteDrag || layerDrag) return;
+    const mono = layer.font.startsWith('mono');
+    const bold = layer.font.endsWith('bold');
+    editWidget({font: mono ? (bold ? 'mono' : 'mono-bold') : (bold ? 'regular' : 'bold')});
+  });
   canvasAlignment.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-canvas-align]');
-    const layer = layers()[current().selection];
-    if (!button || !layer || drag || paletteDrag || layerDrag) return;
+    const box = selectionBounds();
+    if (!button || !box || drag || paletteDrag || layerDrag) return;
     const side = button.dataset.canvasAlign;
     const horizontal = ['left', 'center', 'right'].indexOf(side);
     const vertical = ['top', 'middle', 'bottom'].indexOf(side);
-    if (horizontal >= 0) editWidget({x: Math.round((schema.width - layer.w) * horizontal / 2)});
-    if (vertical >= 0) editWidget({y: Math.round((schema.height - layer.h) * vertical / 2)});
+    const x = horizontal >= 0 ? Math.round((schema.width - box.w) * horizontal / 2) : box.x;
+    const y = vertical >= 0 ? Math.round((schema.height - box.h) * vertical / 2) : box.y;
+    if (current().group.length) moveGroup(x - box.x, y - box.y);
+    else editWidget({x, y});
+  });
+  dividerSettings.addEventListener('change', () => {
+    const widget = layers()[current().selection];
+    if (widget?.type !== 'divider') return;
+    if (!Number.isFinite(dividerLength.valueAsNumber) || !Number.isFinite(dividerThickness.valueAsNumber)) {
+      updateInspector();
+      return;
+    }
+    const length = clamp(Math.round(dividerLength.valueAsNumber), 1, Number(dividerLength.max));
+    const thickness = clamp(Math.round(dividerThickness.valueAsNumber), 1, Number(dividerThickness.max));
+    editDivider(widget, widget.variant, length, thickness);
   });
   fontSize.addEventListener('change', () => {
     if (fontOptions.hidden) return;
@@ -1420,7 +1657,6 @@
     const size = clamp(Math.round(fontSize.valueAsNumber), Number(fontSize.min), Number(fontSize.max));
     fontSize.value = size;
     editWidget({size});
-    if (textEditing) setInlineFontSize(size);
   });
   scaleField.addEventListener('change', () => {
     const widget = layers()[current().selection];
@@ -1444,10 +1680,15 @@
       editWidget({text});
     });
   }
+  fields.text.addEventListener('keydown', (event) => {
+    if (event.isComposing || event.key !== 'Enter' || event.shiftKey) return;
+    event.preventDefault();
+    hitboxes[current().selection]?.focus({preventScroll: true});
+  });
 
   reset.addEventListener('click', () => {
     current().selection = -1;
-    setDraft(null, true);
+    setDraft(restoreLayout(current()), true);
     (save.disabled ? back : save).focus();
   });
   blank.addEventListener('click', () => {
@@ -1469,11 +1710,12 @@
       return;
     }
     const draft = current();
-    const snapshot = draft.layout;
+    const snapshot = layers();
     requestLibrary({
-      payload: {name, layout: layers()},
+      payload: {name, layout: snapshot},
       onSuccess: ({entries}) => {
         draft.librarySaved = {name, layout: snapshot};
+        updateStatus();
         libraryForm.reset();
         showLibraryEntries(entries, name);
         setText(libraryStatus, 'Layout saved to the library.');
@@ -1492,6 +1734,7 @@
       payload: {name, delete: true},
       onSuccess: ({entries}) => {
         if (current().librarySaved?.name === name) current().librarySaved = null;
+        updateStatus();
         showLibraryEntries(entries, librarySelected === name ? null : librarySelected);
       },
     });

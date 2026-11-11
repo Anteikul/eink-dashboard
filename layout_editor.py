@@ -4,7 +4,7 @@ from copy import deepcopy
 from functools import lru_cache
 from math import cos, pi, sin, tau
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 from music_screen import fit_lines, font
 
@@ -12,7 +12,7 @@ WIDTH, HEIGHT = 250, 122
 MAX_WIDGETS = 18
 MAX_DRAWINGS = 96
 BOX_KEYS = ('x', 'y', 'w', 'h')
-FONTS = ('regular', 'bold', 'mono')
+FONTS = ('regular', 'bold', 'mono', 'mono-bold')
 ALIGNMENTS = ('left', 'center', 'right')
 WRAPPING = (('wrapped', 'Wrapped'), ('single', 'Single line'))
 PIXEL_BITS = bytes([0] + [1] * 255)
@@ -55,7 +55,7 @@ COMMON = (
                 (169, 17, 74, 78), size=27, face='bold', align='center'),
     _definition('text', 'Custom text', WRAPPING, (12, 10, 134, 35), text='Your text'),
     _definition('divider', 'Divider', (('horizontal', 'Horizontal'), ('vertical', 'Vertical')),
-                (12, 63, 120, 8), text_style=False),
+                (12, 63, 120, 1), text_style=False),
 )
 PLAYBACK = (
     _definition('title', 'Track title', WRAPPING, (118, 13, 119, 54), size=17, face='bold'),
@@ -108,8 +108,11 @@ def _validate_drawing(supplied):
         box = {key: supplied.get(key) for key in BOX_KEYS}
         _validate_box(**box)
         w, h = box['w'], box['h']
+    return {'type': 'drawing', **box, 'bitmap': _validate_bitmap(supplied.get('bitmap'), w, h)}
+
+
+def _validate_bitmap(bitmap, w, h):
     size = ((w + 7) // 8) * h
-    bitmap = supplied.get('bitmap')
     if not isinstance(bitmap, str) or len(bitmap) != 4 * ((size + 2) // 3):
         raise ValueError('The drawing is invalid.')
     try:
@@ -118,7 +121,7 @@ def _validate_drawing(supplied):
         raise ValueError('The drawing is invalid.') from error
     if len(pixels) != size:
         raise ValueError('The drawing is invalid.')
-    return {'type': 'drawing', **box, 'bitmap': b64encode(pixels).decode()}
+    return b64encode(pixels).decode()
 
 
 def validate_layout(screen, layout):
@@ -158,6 +161,18 @@ def validate_layout(screen, layout):
             widget['text'].encode('utf-8')
         except UnicodeEncodeError as error:
             raise ValueError('Use valid Unicode text.') from error
+        if widget['type'] == 'divider' and 'thickness' in supplied:
+            thickness = supplied['thickness']
+            if type(thickness) is not int or not 1 <= thickness <= HEIGHT:
+                raise ValueError('Choose a valid divider thickness.')
+            widget['thickness'] = thickness
+        if 'mask' in supplied:
+            mask = supplied['mask']
+            if not isinstance(mask, dict):
+                raise ValueError('The drawing is invalid.')
+            w, h = mask.get('w'), mask.get('h')
+            _validate_box(0, 0, w, h)
+            widget['mask'] = {'w': w, 'h': h, 'bitmap': _validate_bitmap(mask.get('bitmap'), w, h)}
         normalized.append(widget)
     if len(normalized) - drawings > MAX_WIDGETS:
         raise ValueError(f'Use up to {MAX_WIDGETS} widgets per layout.')
@@ -259,7 +274,8 @@ def content_key(layout, now, weather, track, cover, progress, *, duration_ms=0,
 
 
 def _face(widget, size):
-    return font(size, bold=widget['font'] == 'bold', mono=widget['font'] == 'mono')
+    face = widget['font']
+    return font(size, bold=face in ('bold', 'mono-bold'), mono=face in ('mono', 'mono-bold'))
 
 
 def _fit_face(widget, size, lines, w, h):
@@ -397,15 +413,17 @@ def _draw_weather(mask, widget, value):
     mask.paste(label, (x, y), label)
 
 
-def _draw_divider(mask, variant):
+def _draw_divider(mask, variant, thickness=1):
     w, h = mask.size
     if variant == 'vertical':
-        middle = (w - 1) // 2
-        points = ((middle, 0), (middle, h - 1))
+        thickness = min(w, thickness)
+        left = (w - thickness) // 2
+        box = (left, 0, left + thickness - 1, h - 1)
     else:
-        middle = (h - 1) // 2
-        points = ((0, middle), (w - 1, middle))
-    ImageDraw.Draw(mask).line(points, fill=1)
+        thickness = min(h, thickness)
+        top = (h - thickness) // 2
+        box = (0, top, w - 1, top + thickness - 1)
+    ImageDraw.Draw(mask).rectangle(box, fill=1)
 
 
 def _draw_progress(mask, widget, filled):
@@ -440,6 +458,21 @@ def _drawing_mask(bitmap, w, h):
     return Image.frombytes('1', (w, h), b64decode(bitmap))
 
 
+def _apply_erasure(widget, layer, offset=(0, 0), *, art=False):
+    mask = widget.get('mask')
+    if mask is None or layer is None:
+        return layer
+    erased = _drawing_mask(mask['bitmap'], mask['w'], mask['h'])
+    erased = erased.resize((widget['w'], widget['h']), Image.Resampling.NEAREST)
+    x, y = offset
+    visible = ImageChops.invert(erased.crop((x, y, x + layer.width, y + layer.height)))
+    if art:
+        layer = layer.convert('RGBA')
+        layer.putalpha(visible.convert('L'))
+        return layer
+    return ImageChops.logical_and(layer, visible)
+
+
 def _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms):
     """Yield a widget's offset, pixel data and whether it is opaque art."""
     values = content_key(layout, now, weather, track, cover, progress, duration_ms=duration_ms,
@@ -456,7 +489,7 @@ def _widget_layers(layout, now, language, weather, units, track, cover, progress
                 art = (ImageOps.fit(cover, (w, h), Image.Resampling.NEAREST)
                        if widget['variant'] == 'fill' else _contain(cover, w, h))
             offset = ((w - art.width) // 2, (h - art.height) // 2) if art is not None else (0, 0)
-            yield offset, art, True
+            yield offset, _apply_erasure(widget, art, offset, art=True), True
             continue
         mask = Image.new('1', (w, h))
         if kind == 'clock':
@@ -464,13 +497,13 @@ def _widget_layers(layout, now, language, weather, units, track, cover, progress
         elif kind == 'weather':
             _draw_weather(mask, widget, value)
         elif kind == 'divider':
-            _draw_divider(mask, widget['variant'])
+            _draw_divider(mask, widget['variant'], widget.get('thickness', 1))
         elif kind == 'progress':
             _draw_progress(mask, widget, value)
         else:
             _draw_text(mask, widget, value, wrapped=widget['variant'] == 'wrapped',
                        fit=kind in ('date', 'playback-time'))
-        yield (0, 0), mask, False
+        yield (0, 0), _apply_erasure(widget, mask), False
 
 
 def render_custom(layout, now, theme, language, *, weather=None, units='celsius', track=None,
@@ -484,7 +517,8 @@ def render_custom(layout, now, theme, language, *, weather=None, units='celsius'
             continue
         position = (widget.get('x', 0) + dx, widget.get('y', 0) + dy)
         if opaque:
-            image.paste(layer, position)
+            alpha = layer.getchannel('A') if layer.mode == 'RGBA' else None
+            image.paste(layer, position, alpha)
         else:
             image.paste(foreground, position, layer)
     return bytearray(image.convert('L').tobytes().translate(PIXEL_BITS))

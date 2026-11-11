@@ -27,7 +27,7 @@ Open the pencil in the dashboard header to visit the full-page editor and enter 
 - Weather can show only the icon, only the temperature, or both side by side or stacked.
 - Playback can show album art, track and artist text, a progress indicator, or elapsed and remaining time.
 
-Use **Draw** to sketch freehand with a mouse, pen, or finger. Each pen stroke creates its own layer. The eraser removes ink without disturbing the widgets. Drag layers in the **Layers** panel to reorder them. The top row is frontmost. Press **Delete** to remove the selected layer, or double-click a custom text widget to edit it directly on the canvas. **Undo** and **Redo** work on drawing, widget edits, and layer order.
+Use **Draw** to sketch freehand with a mouse, pen, or finger. Each pen stroke creates its own layer. The eraser clears pixels from both drawings and widgets. Drag layers in the **Layers** panel to reorder them. The top row is frontmost. In **Select** mode, drag from an empty part of the canvas to select several layers, then move, align, or delete them together. Double-click custom text to edit it on the canvas. Press **Enter** to finish editing or **Shift+Enter** for a new line. Use **Ctrl+Z** and **Ctrl+Shift+Z** for undo and redo, or **⌘Z** and **⌘Shift+Z** on Mac.
 
 The 250 × 122 canvas uses sample data and the same widget renderer as the display. Use the save icon to apply the current screen on the Pi. **Start blank** clears the current draft and **Reset to default** restores the built-in screen when applied.
 

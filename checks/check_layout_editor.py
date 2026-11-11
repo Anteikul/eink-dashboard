@@ -58,6 +58,32 @@ with TemporaryDirectory() as folder:
                     assert png.startswith(b'\x89PNG\r\n\x1a\n')
         assert settings.layouts['dashboard'] is None and state.revision is None
 
+        clock = schema['defaults']['dashboard'][0]
+        regular_clock = request('/api/layout-preview', {'screen': 'dashboard', 'layout': [clock]})
+        bold_clock = request('/api/layout-preview', {'screen': 'dashboard',
+                             'layout': [{**clock, 'font': 'mono-bold'}]})
+        assert regular_clock[0] == bold_clock[0] == 200 and regular_clock[1] != bold_clock[1]
+
+        divider = next(item['template'] for item in schema['widgets']['dashboard'] if item['type'] == 'divider')
+        divider = {**divider, 'x': 10, 'y': 30, 'w': 8, 'h': 1,
+                   'mask': {'w': 8, 'h': 1, 'bitmap': 'IA=='}}
+        status, png = request('/api/layout-preview', {'screen': 'dashboard', 'layout': [divider]})
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            assert preview.getpixel((11, 30)) == preview.getpixel((13, 30)) == 0
+            assert preview.getpixel((12, 30)) == 255
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [divider]})[0] == 200
+        assert DeviceSettings(root).layouts['dashboard'] == [divider]
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': None})[0] == 200
+        for variant, w, h in (('horizontal', 20, 3), ('vertical', 3, 20)):
+            resized = {key: value for key, value in divider.items() if key != 'mask'}
+            resized.update(variant=variant, w=w, h=h, thickness=3)
+            status, png = request('/api/layout-preview', {'screen': 'dashboard', 'layout': [resized]})
+            assert status == 200
+            with Image.open(io.BytesIO(png)) as preview:
+                assert preview.getpixel((10, 30)) == preview.getpixel((9 + w, 29 + h)) == 0
+                assert preview.getpixel((10 + w, 30)) == preview.getpixel((10, 30 + h)) == 255
+
         stride = (schema['width'] + 7) // 8
         bitmap = bytearray(stride * schema['height'])
         bitmap[0] = 0x80
@@ -103,6 +129,11 @@ with TemporaryDirectory() as folder:
             assert status == 200
             with Image.open(io.BytesIO(png)) as preview:
                 assert preview.getpixel((0, 0)) == expected
+        erased_cover = {**cover, 'mask': {'w': 1, 'h': 1, 'bitmap': 'gA=='}}
+        status, png = request('/api/layout-preview', {'screen': 'playback', 'layout': [corner, erased_cover]})
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            assert preview.getpixel((0, 0)) == 255
         state.set_theme('light')
         assert request('/api/layouts', {'screen': 'playback', 'layout': None})[0] == 200
 

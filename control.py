@@ -228,7 +228,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 return
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                limit = 576 * 1024 if self.path in ('/api/layouts', '/api/layout-preview', '/api/layout-library') else 8192
+                limit = 672 * 1024 if self.path in ('/api/layouts', '/api/layout-preview', '/api/layout-library') else 8192
                 if not 0 < size <= limit or self.headers.get_content_type() != 'application/json':
                     raise ValueError('Invalid request.')
                 payload = json.loads(self.rfile.read(size))
