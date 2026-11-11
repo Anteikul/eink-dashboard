@@ -519,21 +519,36 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 #editor-photo-status:empty { display: none; }
 #editor-crop-photo:disabled { cursor: default; }
 #editor-photo-crop {
+  --crop-color: #ffd640;
   position: absolute;
   z-index: 6;
-  overflow: hidden;
   background: #000;
   cursor: crosshair;
   touch-action: none;
 }
-#editor-photo-crop:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#editor-stage:has(#editor-photo-crop:not([hidden])) { overflow: visible; }
+#editor-photo-crop:focus-visible { outline: 1px dashed white; outline-offset: 2px; }
 #editor-stage:has(#editor-photo-crop:not([hidden])) #editor-selection { display: none; }
-#editor-photo-selection {
+#editor-photo-mask { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+#editor-photo-mask > div, #editor-photo-selection {
   position: absolute;
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
-  box-shadow: 0 0 0 100vmax rgb(0 0 0 / .5);
+  left: var(--crop-left);
+  top: var(--crop-top);
+  width: var(--crop-width);
+  height: var(--crop-height);
+}
+#editor-photo-mask > div { box-shadow: 0 0 0 100vmax rgb(0 0 0 / .6); }
+#editor-photo-selection {
+  outline: 2px solid var(--crop-color);
+  box-shadow: 0 0 0 3px #191706;
   pointer-events: none;
+}
+#editor-photo-selection .editor-handle { width: 26px; height: 26px; }
+#editor-photo-selection .editor-handle::after {
+  inset: 6px;
+  border: 2px solid #191706;
+  border-radius: 50%;
+  background: var(--crop-color);
 }
 
 @media (max-width: 800px) and (orientation: portrait), (max-width: 600px) {

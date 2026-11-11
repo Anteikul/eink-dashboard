@@ -252,6 +252,17 @@ with TemporaryDirectory() as folder:
         assert clock_has_seconds(custom_clock)
         assert not clock_has_seconds({**custom_clock, 'format': 'HH:mm [ss]'})
         assert content_key([custom_clock], now, None, None, None, 0) == ('14.08.07',)
+        stacked_clock = {**custom_clock, 'clockStyle': 'stacked'}
+        assert clock_has_seconds(stacked_clock)
+        assert content_key([stacked_clock], now, None, None, None, 0) == (('14', '08', '07'),)
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [stacked_clock]})[0] == 200
+        assert DeviceSettings(root).layouts['dashboard'] == [stacked_clock]
+        legacy_clock = {**clock, 'variant': 'stacked'}
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [legacy_clock]})[0] == 200
+        assert DeviceSettings(root).layouts['dashboard'] == [{**clock, 'clockStyle': 'stacked'}]
+        analog_clock = {**stacked_clock, 'clockStyle': 'analog'}
+        assert not clock_has_seconds(analog_clock)
+        assert content_key([analog_clock], now, None, None, None, 0) == ((2, 8),)
         date = schema['defaults']['dashboard'][1]
         day = now.replace(day=9)
         for variant, expected in {

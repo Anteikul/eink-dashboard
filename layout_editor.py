@@ -22,6 +22,8 @@ WRAPPING = (('wrapped', 'Wrapped'), ('single', 'Single line'))
 PIXEL_BITS = bytes([0] + [1] * 255)
 TIME_TOKENS = re.compile(r'\[([^\[\]]*)\]|HH|hh|mm|MM|ss|SS|H|h|m|s|A|a')
 SECONDS_TOKENS = ('s', 'ss', 'SS')
+CLOCK_PATTERNS = {'24h': 'HH:mm', '12h': 'h:mm A', 'seconds': 'HH:mm:ss'}
+CLOCK_STYLES = (('digital', 'Side by side'), ('stacked', 'Stacked'), ('analog', 'Analog'))
 DATE_TOKENS = re.compile(r'\[([^\[\]]*)\]|YYYY|yyyy|YY|yy|MMMM|MMM|MM|M|dddd|ddd|dd|DD|d|D')
 CUSTOM_FORMATS = {'clock': 'HH:mm', 'date': 'DD.MM.YYYY'}
 DATE_FORMATS = {
@@ -58,13 +60,15 @@ def _definition(kind, label, variants, box, *, size=16, face='regular', align='l
     }
     if kind in CUSTOM_FORMATS:
         definition['customFormat'] = CUSTOM_FORMATS[kind]
+    if kind == 'clock':
+        definition['clockStyles'] = [{'value': value, 'label': name} for value, name in CLOCK_STYLES]
+        definition['template']['clockStyle'] = 'digital'
     return definition
 
 
 COMMON = (
     _definition('clock', 'Clock', (('24h', '24-hour'), ('12h', '12-hour'),
-                                   ('seconds', 'With seconds'), ('stacked', 'Stacked'),
-                                   ('analog', 'Analog'), ('custom', 'Custom format')),
+                                   ('seconds', 'With seconds'), ('custom', 'Custom format')),
                 (10, 25, 146, 54), size=47, face='mono'),
     _definition('date', 'Date', (('short', 'Short'), ('long', 'Long'), ('iso', 'ISO'),
                                  *((variant, label) for variant, (label, _) in DATE_FORMATS.items()),
@@ -193,6 +197,11 @@ def validate_layout(screen, layout, size=PANEL_SIZE):
             template = resize_layer(template, PANEL_SIZE, size)
         widget = {key: supplied.get(key, value) for key, value in template.items()}
         _validate_box(*(widget[key] for key in BOX_KEYS), size=size)
+        if widget['type'] == 'clock':
+            if widget['variant'] in ('stacked', 'analog'):
+                widget['clockStyle'], widget['variant'] = widget['variant'], '24h'
+            if widget['clockStyle'] not in tuple(style for style, _ in CLOCK_STYLES):
+                raise ValueError('Choose an available widget style.')
         if widget['variant'] not in tuple(variant['value'] for variant in definition['variants']):
             raise ValueError('Choose an available widget style.')
         if (type(widget['size']) is not int or not 8 <= widget['size'] <= 60
@@ -322,28 +331,44 @@ def format_clock(now, pattern):
 
 
 def clock_has_seconds(widget):
-    if widget['type'] != 'clock':
+    if widget['type'] != 'clock' or _clock_style(widget) == 'analog':
         return False
-    if widget['variant'] == 'custom':
-        return any(token[0] in SECONDS_TOKENS
-                   for token in TIME_TOKENS.finditer(widget.get('format', 'HH:mm')))
-    return widget['variant'] == 'seconds'
+    return any(token[0] in SECONDS_TOKENS for token in TIME_TOKENS.finditer(_clock_pattern(widget)))
+
+
+def _clock_style(widget):
+    legacy = widget['variant']
+    return legacy if legacy in ('stacked', 'analog') else widget.get('clockStyle', 'digital')
+
+
+def _clock_pattern(widget):
+    variant = widget['variant']
+    if variant == 'custom':
+        return widget.get('format', CUSTOM_FORMATS['clock'])
+    return CLOCK_PATTERNS.get(variant, CLOCK_PATTERNS['24h'])
+
+
+def _stack_clock_pattern(pattern):
+    start = 0
+    previous = None
+    for token in TIME_TOKENS.finditer(pattern):
+        if previous and previous[0][0] in 'HhMmSs' and token[0][0] in 'HhMmSs':
+            separator = pattern[previous.end():token.start()]
+            if separator and not separator.strip(' :./-'):
+                yield pattern[start:previous.end()]
+                start = token.start()
+        previous = token
+    yield pattern[start:]
 
 
 def _clock(now, widget):
-    variant = widget['variant']
-    if variant == 'custom':
-        return format_clock(now, widget.get('format', 'HH:mm'))
-    if variant == 'analog':
+    style = _clock_style(widget)
+    if style == 'analog':
         return (now.hour % 12, now.minute)
-    if variant == 'stacked':
-        return (f'{now.hour:02}', f'{now.minute:02}')
-    if variant == 'seconds':
-        return now.strftime('%H:%M:%S')
-    if variant == '12h':
-        suffix = 'AM' if now.hour < 12 else 'PM'
-        return f'{now.hour % 12 or 12}:{now.minute:02} {suffix}'
-    return now.strftime('%H:%M')
+    pattern = _clock_pattern(widget)
+    if style == 'stacked':
+        return tuple(format_clock(now, line) for line in _stack_clock_pattern(pattern))
+    return format_clock(now, pattern)
 
 
 def _temperature_and_icon(now, variant, weather, units, language):
@@ -478,7 +503,7 @@ def _dial_box(w, h):
 
 
 def _draw_clock(mask, widget, value):
-    if widget['variant'] != 'analog':
+    if _clock_style(widget) != 'analog':
         _draw_text(mask, widget, value, fit=True)
         return
     draw = ImageDraw.Draw(mask)

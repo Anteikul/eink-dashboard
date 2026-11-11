@@ -61,6 +61,8 @@ const czech = new Map(Object.entries({
   'Size (px)': 'Velikost (px)',
   'Position and dimensions': 'Poloha a rozměry',
   'Variant': 'Varianta',
+  'Display style': 'Varianta zobrazení',
+  'Side by side': 'Vedle sebe',
   'Font': 'Písmo',
   'Regular': 'Běžné',
   'Bold': 'Tučné',

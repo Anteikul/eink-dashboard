@@ -1,6 +1,5 @@
 function createPhotoCrop(surface, button, paint) {
   const image = surface.querySelector('#editor-photo-image');
-  const selection = surface.querySelector('#editor-photo-selection');
   let edit;
   let drag;
 
@@ -11,10 +10,10 @@ function createPhotoCrop(surface, button, paint) {
     edit.crop = crop;
     const {w: width, h: height} = edit.photo;
     const [x, y, w, h] = crop;
-    Object.assign(selection.style, {
-      left: x / width * 100 + '%', top: y / height * 100 + '%',
-      width: w / width * 100 + '%', height: h / height * 100 + '%',
-    });
+    surface.style.setProperty('--crop-left', x / width * 100 + '%');
+    surface.style.setProperty('--crop-top', y / height * 100 + '%');
+    surface.style.setProperty('--crop-width', w / width * 100 + '%');
+    surface.style.setProperty('--crop-height', h / height * 100 + '%');
   }
 
   function open({photo, crop, onApply}) {

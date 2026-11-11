@@ -160,6 +160,7 @@
                 <textarea id="editor-inline-text" aria-label="Edit text on canvas" data-i18n-attributes="aria-label" rows="2" hidden></textarea>
                 <div id="editor-photo-crop" role="group" aria-label="Crop photo" data-i18n-attributes="aria-label" tabindex="0" hidden>
                   <canvas id="editor-photo-image" role="img" aria-label="Black and white photo" data-i18n-attributes="aria-label"></canvas>
+                  <div id="editor-photo-mask" aria-hidden="true"><div></div></div>
                   <div id="editor-photo-selection" aria-hidden="true">
                     <span class="editor-handle" data-corner="nw"></span>
                     <span class="editor-handle" data-corner="ne"></span>
@@ -218,7 +219,8 @@
                     <label data-i18n>Height<input type="number" min="1" step="1" data-property="h"></label>
                   </div>
                 </details>
-                <label id="editor-variant-label" data-i18n>Variant<select data-property="variant"></select></label>
+                <label id="editor-clock-style" hidden><span data-i18n>Display style</span><select data-property="clockStyle"></select></label>
+                <label id="editor-variant-label"><span id="editor-variant-name" data-i18n>Variant</span><select data-property="variant"></select></label>
                 <div id="editor-format" hidden>
                   <label><span id="editor-format-label"></span><input type="text" data-property="format" maxlength="64" spellcheck="false" autocomplete="off" aria-describedby="editor-format-help"></label>
                   <p id="editor-format-help"></p>
