@@ -179,8 +179,8 @@ layoutOptions.addEventListener('click', async event => {
   setText(layoutStatus, '');
   try {
     await saveDisplay('/api/layout-library/apply', {screen, name: button.dataset.layout || null},
-      'Applying layout…', 'Could not apply the layout.');
-    setText(layoutStatus, 'Layout applied.');
+      'Saving layout…', 'Could not save the layout.');
+    setText(layoutStatus, 'Layout selected.');
   } catch (error) {
     setText(status, '');
     reportLayoutError(error);

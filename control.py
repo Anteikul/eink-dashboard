@@ -422,7 +422,6 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     except KeyError:
                         self.json(404, {'error': 'That saved layout no longer exists.'})
                         return
-                    state.set_mode(screen)
                     self.json(200, panel_status())
                     return
                 if self.path == '/api/layout-library':

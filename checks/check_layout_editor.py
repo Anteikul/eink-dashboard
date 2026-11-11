@@ -269,7 +269,7 @@ with TemporaryDirectory() as folder:
         assert request(apply, {'screen': 'dashboard'})[0] == 400
         assert state.mode == 'auto' and settings.layouts['dashboard'] is None
         status, applied = request(apply, selection)
-        assert status == 200 and json.loads(applied)['mode'] == 'dashboard'
+        assert status == 200 and json.loads(applied)['mode'] == 'auto'
         assert json.loads(applied)['activeLayout'] == {
             'screen': 'dashboard', 'kind': 'saved', 'name': 'Moje plocha'}
         assert DeviceSettings(root).active_layout('dashboard')['name'] == 'Moje plocha'
@@ -288,7 +288,7 @@ with TemporaryDirectory() as folder:
             'screen': 'dashboard', 'kind': 'custom', 'name': None}
         assert request(apply, selection)[0] == 200
         assert DeviceSettings(root).layouts == {'dashboard': draft['layout'], 'playback': []}
-        assert PanelState(root / 'theme.txt').mode == 'dashboard'
+        assert PanelState(root / 'theme.txt').mode == 'auto'
         assert json.loads(request(entry)[1])['layout'] == draft['layout']
         assert request(apply, {'screen': 'dashboard', 'name': None})[0] == 200
         assert settings.layouts['dashboard'] is None
@@ -298,10 +298,15 @@ with TemporaryDirectory() as folder:
         playback = {'screen': 'playback', 'name': 'Hudba', 'layout': custom}
         assert request(library, playback)[0] == 200
         status, applied = request(apply, {'screen': 'playback', 'name': 'Hudba'})
-        assert status == 200 and json.loads(applied)['mode'] == 'playback'
+        assert status == 200 and json.loads(applied)['mode'] == 'auto'
+        assert json.loads(applied)['activeLayout'] == {'screen': 'dashboard', 'kind': 'default', 'name': None}
         assert settings.layouts == {'dashboard': None, 'playback': custom}
-        assert request(apply, selection)[0] == 200
-        assert json.loads(request('/api/state', code='')[1])['selectedLayouts'] == {
+        assert request('/api/display-mode', {'mode': 'playback'})[0] == 200
+        status, applied = request(apply, selection)
+        assert status == 200 and json.loads(applied)['mode'] == 'playback'
+        assert json.loads(applied)['activeLayout'] == {'screen': 'playback', 'kind': 'saved', 'name': 'Hudba'}
+        assert PanelState(root / 'theme.txt').mode == 'playback'
+        assert json.loads(applied)['selectedLayouts'] == {
             'dashboard': {'screen': 'dashboard', 'kind': 'saved', 'name': 'Moje plocha'},
             'playback': {'screen': 'playback', 'kind': 'saved', 'name': 'Hudba'},
         }
