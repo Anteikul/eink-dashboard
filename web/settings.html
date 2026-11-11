@@ -61,7 +61,7 @@
             </section>
             <section class="setup-form settings-card" aria-labelledby="playback-settings-title">
               <h3 id="playback-settings-title" data-i18n>Playback</h3>
-              <label class="checkbox-setting" data-i18n><input type="checkbox" name="playback_enabled"> Switch to playback when music is playing</label>
+              <label class="checkbox-setting" data-i18n><input type="checkbox" name="playback_enabled"> Switch to playback automatically</label>
               <label class="checkbox-setting" data-i18n><input type="checkbox" name="queue_prefetch"> Prepare covers from the queue</label>
               <div class="setup-grid">
                 <label data-i18n>Check while playing (s)<input name="playing_interval" type="number" step="1" required></label>
@@ -114,7 +114,9 @@
             <p id="spotify-action-status" role="status"></p>
           </section>
           <form id="setup-code-form" class="setup-form settings-card">
-            <h3 data-i18n>Change setup code</h3>
+            <h3 data-i18n>Web password</h3>
+            <label class="checkbox-setting" data-i18n><input id="password-required" type="checkbox" checked> Require a password for settings and editor</label>
+            <p id="password-protection-status" role="status"></p>
             <p id="setup-code-help" data-i18n>Use 8–64 letters, numbers, or symbols without spaces.</p>
             <label data-i18n>New setup code<input type="password" name="newCode" pattern="[!-~]{8,64}" required autocomplete="new-password" aria-describedby="setup-code-help"></label>
             <label data-i18n>Confirm new code<input type="password" name="confirmCode" required autocomplete="new-password"></label>

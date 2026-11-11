@@ -451,7 +451,9 @@ def _widget_content(widget, now, weather, track, cover, progress, duration_ms, u
         return _temperature_and_icon(now, variant, weather, units, language) if weather_enabled else None
     if kind == 'text':
         return widget['text']
-    if kind in ('title', 'artist'):
+    if kind == 'title':
+        return track.title if track is not None else ('Nic se nepřehrává' if language == 'cs' else 'Nothing playing')
+    if kind == 'artist':
         return getattr(track, kind, '')
     if kind == 'cover':
         return id(cover)

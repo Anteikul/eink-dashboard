@@ -13,6 +13,7 @@ __pycache__/
 .cover-cache/
 covers/
 theme.txt
+display-mode.txt
 *.log
 *.pid
 *.lock

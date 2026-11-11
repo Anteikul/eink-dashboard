@@ -2,11 +2,9 @@
 import hmac
 import ipaddress
 import json
-import os
 import re
 import secrets
 import struct
-import tempfile
 import threading
 import time
 import zlib
@@ -16,12 +14,13 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import parse_qs
 
-from device_settings import find_places
+from device_settings import find_places, write_private
 from layout_editor import MAX_DIMENSION, MAX_DRAWINGS, MAX_WIDGETS, PANEL_SIZE, editor_schema, validate_layout
 from photo_import import PHOTO_SIZE, PHOTO_UPLOAD_LIMIT, prepare_photo
 from spotify_playback import SpotifyPlayback
 
 THEMES = ('light', 'dark')
+DISPLAY_MODES = ('auto', 'dashboard', 'playback')
 LAYOUT_ROUTES = ('/api/layouts', '/api/layout-preview', '/api/layout-library')
 MAX_BITMAP_BYTES = ((MAX_DIMENSION + 7) // 8) * MAX_DIMENSION
 MAX_PHOTO_BITMAP_BYTES = ((PHOTO_SIZE + 7) // 8) * PHOTO_SIZE
@@ -85,45 +84,52 @@ def preview_png(pixels, width, height):
 class PanelState:
     def __init__(self, path):
         self.path = path
+        self.mode_path = path.with_name('display-mode.txt')
         self.lock = threading.Lock()
-        try:
-            theme = path.read_text(encoding='utf-8').strip()
-        except FileNotFoundError:
-            theme = 'light'
-        self.theme = theme if theme in THEMES else 'light'
+        self.theme = self.read_choice(self.path, THEMES)
+        self.mode = self.read_choice(self.mode_path, DISPLAY_MODES)
         self.applied_theme = None
+        self.page = None
         self.frame = None
         self.revision = None
         self.track_url = None
+
+    @staticmethod
+    def read_choice(path, choices):
+        try:
+            value = path.read_text(encoding='utf-8').strip()
+        except FileNotFoundError:
+            return choices[0]
+        return value if value in choices else choices[0]
 
     def set_theme(self, theme):
         if theme not in THEMES:
             raise ValueError('Invalid theme')
         with self.lock:
             if theme != self.theme:
-                with tempfile.NamedTemporaryFile(
-                    mode='w', encoding='utf-8', dir=self.path.parent, delete=False
-                ) as staged:
-                    temporary = Path(staged.name)
-                    try:
-                        staged.write(theme + '\n')
-                        staged.flush()
-                        os.replace(temporary, self.path)
-                    finally:
-                        temporary.unlink(missing_ok=True)
+                write_private(self.path, theme + '\n')
                 self.theme = theme
 
-    def publish(self, theme, frame, track_url=None):
+    def set_mode(self, mode):
+        if mode not in DISPLAY_MODES:
+            raise ValueError('Choose a display mode.')
+        with self.lock:
+            if mode != self.mode:
+                write_private(self.mode_path, mode + '\n')
+                self.mode = mode
+
+    def publish(self, theme, frame, track_url=None, *, page='dashboard'):
         with self.lock:
             self.applied_theme = theme
             self.frame = frame
             self.revision = str(time.time_ns())
             self.track_url = track_url
+            self.page = page
 
     def status(self):
         with self.lock:
             return {'theme': self.theme, 'appliedTheme': self.applied_theme,
-                    'revision': self.revision, 'trackUrl': self.track_url}
+                    'mode': self.mode, 'page': self.page, 'revision': self.revision, 'trackUrl': self.track_url}
 
 
 def start_server(host, port, state, settings, reload_settings, *, wifi=None, layout_preview=None, spotify=None):
@@ -151,10 +157,12 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
     subnet = ipaddress.IPv4Network(f'{host}/24', strict=False) if wifi is not None else None
     site = {url: (kind, (assets / filename).read_bytes())
             for url, (filename, kind) in routes.items()}
-    admin_routes = {'/api/settings', '/api/setup-code', '/api/local-name', '/api/places', '/api/spotify/start',
+    admin_routes = {'/api/settings', '/api/setup-code', '/api/password-protection', '/api/local-name', '/api/places', '/api/spotify/start',
                     '/api/spotify/finish', '/api/spotify/disconnect', '/api/layouts', '/api/layout-preview',
                     '/api/layout-library', '/api/photo-import', '/api/spotify/check'}
-    allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {'/api/theme', '/api/language', '/api/unlock'}
+    allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {
+        '/api/theme', '/api/display-mode', '/api/language', '/api/unlock',
+    }
     photo_lock = threading.Lock()
 
     def panel_status():
@@ -188,10 +196,12 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             self.reply(status, 'application/json', json.dumps(body).encode(), headers)
 
         def setup_credentials(self):
+            code = settings.code
+            if not settings.values['password_required']:
+                return code
             supplied = self.headers.get('X-Setup-Code', '')
             if supplied and settings.authorized(supplied):
                 return supplied
-            code = settings.code
             if valid_session(self.headers.get('Cookie', ''), settings.session_key, code):
                 return code
             return None
@@ -240,6 +250,9 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             if path in site:
                 if path in PROTECTED_PAGES and self.setup_credentials() is None:
                     self.reply(302, 'text/plain', b'', [('Location', f'/unlock?next={path[1:]}')])
+                elif path == '/unlock' and not settings.values['password_required']:
+                    next_page = parse_qs(query).get('next') == ['editor']
+                    self.reply(302, 'text/plain', b'', [('Location', '/editor' if next_page else '/settings')])
                 else:
                     self.reply(200, *site[path])
             elif wifi is not None:
@@ -332,9 +345,11 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                         self.json(200, {}, [('Set-Cookie', cookie)])
                     return
                 if self.path == '/api/theme':
-                    if payload.get('theme') not in THEMES:
-                        raise ValueError('Invalid theme.')
-                    state.set_theme(payload['theme'])
+                    state.set_theme(payload.get('theme'))
+                    self.json(200, panel_status())
+                    return
+                if self.path == '/api/display-mode':
+                    state.set_mode(payload.get('mode'))
                     self.json(200, panel_status())
                     return
                 if self.path == '/api/language':
@@ -351,6 +366,12 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                         self.json(200, {}, [('Set-Cookie', cookie)])
                     else:
                         self.json(403, {'error': BAD_CODE})
+                    return
+                if self.path == '/api/password-protection':
+                    required = payload.get('required')
+                    settings.set_password_required(required)
+                    headers = [('Set-Cookie', session_cookie(settings.session_key, settings.code))] if required else ()
+                    self.json(200, {'required': required}, headers)
                     return
                 if self.path == '/api/layouts':
                     screen = payload['screen']

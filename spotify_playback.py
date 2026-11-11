@@ -163,7 +163,7 @@ class SpotifyPlayback:
         return queue_tracks(self.request_json(QUEUE_URL, 2), current)
 
     def poll(self, stop, prepare_cover, *, playing_interval=PLAYING_INTERVAL, idle_interval=IDLE_INTERVAL,
-             prefetch=True):
+             prefetch=True, enabled=None):
         self.maximum_age = max(40, playing_interval + 20)
         known = False
         previous_playback = None
@@ -172,6 +172,12 @@ class SpotifyPlayback:
         queue_checked = False
         cover_worker = None
         while not stop.is_set():
+            if enabled is not None and not enabled():
+                self.latest = None, 0
+                known = False
+                previous_playback = None
+                stop.wait(1)
+                continue
             try:
                 playback = self.read()
                 track = playback.track if playback else None

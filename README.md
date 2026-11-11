@@ -15,7 +15,9 @@ cd "$HOME" &&
 
 The installer uses `sudo` for missing packages and enables startup on boot. Leave the installation folder in place. To update a ZIP installation, rerun the same block in the same account and restart the Pi. If you cloned the repository, update and run `sh install.sh` in that checkout.
 
-Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Light and dark themes are below the preview. The gear opens **Settings** at `/settings`, where you can choose English or Czech. Unlock **Device setup** with the code printed by the installer to change location, display options, weather and Spotify intervals, and Wi-Fi setup timing. You can also change the setup code there. To recover the current code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
+Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Below the preview, choose **Automatic**, **Dashboard**, or **Playback**, and a light or dark theme. Automatic mode follows Spotify when automatic switching is enabled. Playback mode keeps the playback layout visible while Spotify is idle. The Pi remembers the selected mode after a restart.
+
+The gear opens **Settings** at `/settings`, where you can choose English or Czech. Unlock **Device setup** with the code printed by the installer to change location, display options, weather and Spotify intervals, and Wi-Fi setup timing. In **Web password**, you can change the code or let anyone who can reach the web interface open the settings and editor. Turn the password requirement back on to use the current code again. To recover the code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
 
 You can also open `http://eink.local/` on the same network. To change the name or turn it off, unlock **Device setup** and use **Local address**. If you change or disable the name while using it, Settings reopens at the Pi's IP address. The setup hotspot uses the address shown on the e-paper display.
 

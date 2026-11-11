@@ -16,6 +16,8 @@ const places = document.querySelector('#places');
 const disconnect = document.querySelector('#spotify-disconnect');
 const setupCodeForm = document.querySelector('#setup-code-form');
 const setupCodeStatus = document.querySelector('#setup-code-status');
+const passwordRequired = document.querySelector('#password-required');
+const passwordProtectionStatus = document.querySelector('#password-protection-status');
 const localName = document.querySelector('#local-name');
 const localHostname = document.querySelector('#local-hostname');
 const localNameForm = document.querySelector('#local-name-form');
@@ -89,6 +91,7 @@ function showSettings(data) {
   }
   localName.checked = data.settings.local_name;
   localHostname.value = data.settings.local_hostname;
+  passwordRequired.checked = data.settings.password_required;
   showSpotify(data);
 }
 
@@ -275,6 +278,22 @@ disconnect.addEventListener('click', () => action(async () => {
   setText(spotifyActionStatus, 'Spotify disconnected.');
 }, spotifyActionStatus));
 
+passwordRequired.addEventListener('change', async () => {
+  const required = passwordRequired.checked;
+  passwordRequired.disabled = true;
+  setText(passwordProtectionStatus, '');
+  try {
+    const data = await api('/api/password-protection', {required});
+    passwordRequired.checked = data.required;
+    setText(passwordProtectionStatus, data.required ? 'Web password enabled.' : 'Web password disabled.');
+  } catch (error) {
+    passwordRequired.checked = !required;
+    setText(passwordProtectionStatus, error.message);
+  } finally {
+    passwordRequired.disabled = false;
+  }
+});
+
 setupCodeForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const newCode = setupCodeForm.elements.newCode.value;
@@ -287,7 +306,8 @@ setupCodeForm.addEventListener('submit', async (event) => {
   setText(setupCodeStatus, '');
   try {
     await api('/api/setup-code', {newCode});
-    setupCodeForm.reset();
+    setupCodeForm.elements.newCode.value = '';
+    setupCodeForm.elements.confirmCode.value = '';
     setText(setupCodeStatus, 'Setup code changed.');
   } catch (error) {
     setText(setupCodeStatus, error.message);

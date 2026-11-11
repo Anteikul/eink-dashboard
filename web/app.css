@@ -79,6 +79,8 @@ h2 { font-size: 15px; margin: 0; font-weight: 680; }
 .settings-save button { background: var(--accent); color: #1e251f; }
 .settings-card [role=status]:empty, .settings-save [role=status]:empty { display: none; }
 .settings { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px 18px; margin-top: 18px; }
+#mode-controls { flex-wrap: wrap; }
+#mode-controls button { flex: 1 0 auto; justify-content: center; }
 .language-setting { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 14px; }
 .language-setting select { min-height: 40px; padding: 6px 9px; font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 5px; }
 .language-setting select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

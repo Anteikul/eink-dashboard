@@ -36,9 +36,17 @@
       </div>
       <p class="track-link" id="track-link" hidden data-i18n><a rel="noreferrer" data-i18n>Open track in Spotify</a></p>
     </section>
+    <section class="settings" aria-labelledby="display-mode-heading">
+      <h2 id="display-mode-heading" data-i18n>Display mode</h2>
+      <fieldset id="mode-controls" data-control="mode" aria-labelledby="display-mode-heading" disabled>
+        <button type="button" data-mode="auto" aria-pressed="false" data-i18n>Automatic</button>
+        <button type="button" data-mode="dashboard" aria-pressed="false" data-i18n>Dashboard</button>
+        <button type="button" data-mode="playback" aria-pressed="false" data-i18n>Playback</button>
+      </fieldset>
+    </section>
     <section class="settings" aria-labelledby="settings-heading">
       <h2 id="settings-heading" data-i18n>Display theme</h2>
-      <fieldset aria-labelledby="settings-heading" disabled>
+      <fieldset data-control="theme" aria-labelledby="settings-heading" disabled>
         <button type="button" data-theme="light" aria-pressed="false" data-i18n>
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>
           Light

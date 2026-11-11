@@ -1,6 +1,7 @@
 from PIL import Image
 
-from dashboard import WIDTH, changed_regions, needs_full_refresh, pack
+from dashboard import WIDTH, changed_regions, display_page, needs_full_refresh, pack
+from layout_editor import content_key, editor_schema
 from music_screen import progress_pixels, render_music
 from spotify_playback import playing_track
 
@@ -31,6 +32,13 @@ assert seek.with_estimate(playing).position_at(16.0) == 13_000
 assert not needs_full_refresh('light', 'light', 5, advancing=True)
 assert needs_full_refresh('light', 'dark', 5, advancing=True)
 assert needs_full_refresh('light', 'light', 5)
+assert display_page('auto', False, True) == 'dashboard'
+assert display_page('auto', True, True) == 'playback'
+assert display_page('auto', True, False) == 'dashboard'
+assert display_page('dashboard', True, True) == 'dashboard'
+assert display_page('playback', False, False) == 'playback'
+title = editor_schema()['defaults']['playback'][1]
+assert content_key([title], None, None, None, None, 0, language='cs') == ('Nic se nepřehrává',)
 
 cover = Image.new('1', (96, 96), 0)
 for theme in ('light', 'dark'):

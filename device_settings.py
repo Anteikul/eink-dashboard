@@ -24,7 +24,7 @@ from wifi_setup import GRACE
 DEFAULTS = {
     'location': 'Prague', 'latitude': 50.0755, 'longitude': 14.4378,
     'timezone': 'Europe/Prague', 'units': 'celsius', 'rotation': 180, 'language': 'en',
-    'local_name': True,
+    'local_name': True, 'password_required': True,
     'display_width': PANEL_SIZE[0], 'display_height': PANEL_SIZE[1],
     'weather_enabled': True, 'weather_interval': 15, 'full_refresh_after': 5,
     'playback_enabled': True, 'playing_interval': PLAYING_INTERVAL, 'idle_interval': IDLE_INTERVAL,
@@ -104,7 +104,7 @@ def validate_settings(payload):
     if type(result['local_name']) is not bool:
         raise ValueError('Choose whether to use the local address.')
     result['local_hostname'] = validate_local_hostname(result['local_hostname'])
-    for key in ('weather_enabled', 'playback_enabled', 'queue_prefetch'):
+    for key in ('weather_enabled', 'playback_enabled', 'queue_prefetch', 'password_required'):
         if type(result[key]) is not bool:
             raise ValueError('Check the on/off settings.')
     for key, (minimum, maximum) in SETTING_RANGES.items():
@@ -257,12 +257,19 @@ class DeviceSettings:
         return {'settings': self.values, 'spotifyConnected': self.credentials.is_file(),
                 'redirectUri': REDIRECT_URI, 'ranges': SETTING_RANGES}
 
+    def set_password_required(self, required):
+        if type(required) is not bool:
+            raise ValueError('Check the on/off settings.')
+        with self.lock:
+            if self.values['password_required'] != required:
+                self.write_values({**self.values, 'password_required': required})
+
     def save(self, payload):
         with self.lock:
             values = validate_settings({
                 **{key: self.values[key] for key in EXTRA_SETTINGS}, **payload,
                 'language': self.values['language'], 'local_name': self.values['local_name'],
-                'local_hostname': self.values['local_hostname'],
+                'local_hostname': self.values['local_hostname'], 'password_required': self.values['password_required'],
             })
             size = display_size(values)
             layout_state = self.layout_state if size == self.layout_state[0] else (size, self.layouts_at(size))

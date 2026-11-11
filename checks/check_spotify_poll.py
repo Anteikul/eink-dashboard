@@ -67,6 +67,7 @@ queue_requests.clear()
 assert observed_waits([(first, 100_000, 60_000), None], queue_requests,
                       playing_interval=3, idle_interval=11, prefetch=False) == [3, 11]
 assert queue_requests == []
+assert observed_waits([None, None], enabled=iter((False, True)).__next__) == [1, 8]
 queued_item = {'id': second.id, 'type': 'track', 'name': second.title,
                'artists': [{'name': second.artist}]}
 assert queue_tracks({'currently_playing': {'id': first.id}, 'queue': [queued_item] * 3}, first) == (second, second)

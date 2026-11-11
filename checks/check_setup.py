@@ -53,6 +53,13 @@ with TemporaryDirectory() as folder:
             html = response.read().decode()
         assert 'data-theme="light"' in html and 'href="/settings"' in html and '<dialog' not in html
         assert 'id="device-form"' not in html
+        assert get('/api/state', code='')[1]['mode'] == 'auto'
+        for mode in ('dashboard', 'playback', 'auto'):
+            assert f'data-mode="{mode}"' in html
+            assert get('/api/display-mode', {'mode': mode}, code='')[1]['mode'] == mode
+            assert PanelState(root / 'theme.txt').status()['mode'] == mode
+        assert get('/api/display-mode', {'mode': 'unknown'}, code='')[0] == 400
+        assert get('/api/display-mode', {'mode': 'playback'}, code='', origin='http://other.example')[0] == 403
         sign_in_pages = []
         for destination in ('settings', 'editor'):
             try:
@@ -184,6 +191,24 @@ with TemporaryDirectory() as folder:
         assert get('/api/settings', code='new-setup-code')[0] == 200
         assert DeviceSettings(root).code == 'new-setup-code'
         assert settings.code_path.stat().st_mode & 0o777 == 0o600
+        assert get('/api/password-protection', {'required': False}, code='')[0] == 403
+        assert get('/api/password-protection', {'required': 0})[0] == 400
+        assert get('/api/password-protection', {'required': False}) == (200, {'required': False})
+        assert DeviceSettings(root).values['password_required'] is False
+        assert get('/api/settings', code='')[0] == 200
+        assert get('/api/layouts', code='')[0] == 200
+        for path in ('/settings', '/editor', '/unlock?next=editor'):
+            with urlopen(base + path) as response:
+                assert response.geturl().endswith('/editor' if path.startswith('/unlock') else path)
+        assert get('/api/settings', selected, code='')[1]['settings']['password_required'] is False
+        assert get('/api/password-protection', {'required': True}, code='', origin='http://other.example')[0] == 403
+        with post_from_browser('/api/password-protection', {'required': True}) as response:
+            assert json.load(response) == {'required': True} and response.headers.get('Set-Cookie')
+        assert DeviceSettings(root).values['password_required'] is True
+        assert get('/api/settings', code='')[0] == 403
+        with browser.open(base + '/api/settings') as response:
+            assert response.status == 200
+        assert DeviceSettings(root).code == 'new-setup-code'
     finally:
         server.shutdown()
         server.server_close()

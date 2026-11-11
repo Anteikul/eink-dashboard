@@ -112,6 +112,12 @@ def canvas_defaults(size):
     return editor_schema(size)['defaults']
 
 
+def display_page(mode, playing, automatic_playback):
+    if mode != 'auto':
+        return mode
+    return 'playback' if playing and automatic_playback else 'dashboard'
+
+
 def fit_panel(pixels, size, theme):
     if size == PANEL_SIZE:
         return pixels
@@ -287,15 +293,17 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     weather_enabled = config['weather_enabled']
     if weather_enabled:
         threading.Thread(target=weather.poll, args=(stop,), daemon=True).start()
+    state = PanelState(FOLDER / 'theme.txt')
     credentials = settings.credentials
     spotify = None
-    if config['playback_enabled'] and credentials.is_file():
+    if credentials.is_file():
         from music_screen import prepare_cover, progress_pixels, render_music
 
         spotify = SpotifyPlayback(credentials, settings.lock)
         threading.Thread(target=spotify.poll, args=(stop, prepare_cover), kwargs={
             'playing_interval': config['playing_interval'], 'idle_interval': config['idle_interval'],
             'prefetch': config['queue_prefetch'],
+            'enabled': lambda: settings.values['playback_enabled'] or state.mode == 'playback',
         }, daemon=True).start()
     panel = VerifiedEPD()
     counts = {'full': 0, 'partial': 0}
@@ -303,6 +311,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     initialized = False
     last_content = None
     displayed_theme = None
+    displayed_page = None
     displayed_music = False
     displayed_track = None
     displayed_layout = None
@@ -313,7 +322,6 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     join_until = None
     partial_count = 0
     previous = None
-    state = PanelState(FOLDER / 'theme.txt')
     network = (NetworkSetup(password_file=FOLDER / '.hotspot-password', delay=config['hotspot_delay'])
                if wifi_setup else None)
     if network:
@@ -351,11 +359,12 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             seconds = JOIN_CONFIRM_SECONDS if join_until is None else ceil(join_until - time.monotonic())
             showing_join = joined is not None and seconds > 0
             prepared = spotify.current if spotify else None
-            music = prepared is not None and hotspot is None and not showing_join
             size, layouts = settings.layout_state
-            page = 'playback' if music else 'dashboard'
-            layout = None if hotspot or showing_join else layouts[page]
-            if layout is None and size != PANEL_SIZE and not (hotspot or showing_join):
+            page = None if hotspot or showing_join else display_page(
+                state.mode, prepared is not None, preferences['playback_enabled'])
+            music = page == 'playback' and prepared is not None
+            layout = layouts[page] if page else None
+            if page and layout is None and (size != PANEL_SIZE or (page == 'playback' and not music)):
                 layout = canvas_defaults(size)[page]
             track, cover, progress, duration_ms = None, None, 0, 0
             if music:
@@ -373,7 +382,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 widgets = content_key(layout, now, current_weather, track, cover, progress,
                                       duration_ms=duration_ms, units=units, language=language,
                                       weather_enabled=weather_enabled)
-                content = (theme, language, size, layout, track, widgets)
+                content = (theme, page, language, size, layout, track, widgets)
                 advancing = displayed_layout == layout and (
                     (music and displayed_music and displayed_track == track)
                     or (partial_count < 120 and any(
@@ -413,7 +422,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             pixels = pack(screen, rotation)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.
-            full = (displayed_music != music or displayed_layout != layout or displayed_size != size
+            full = (displayed_page != page or displayed_music != music
+                    or displayed_layout != layout or displayed_size != size
                     or displayed_hotspot != hotspot or displayed_join != showing_join
                     or needs_full_refresh(displayed_theme, theme, partial_count, advancing=advancing,
                                           after=config['full_refresh_after']))
@@ -430,7 +440,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                     last_content = content
                     displayed_track = track
                     if not hotspot and (server or network):
-                        state.publish(theme, state.frame, track.url if track else None)
+                        state.publish(theme, state.frame, track.url if track else None, page=page)
                     continue
                 panel.display_regions(pixels, regions)
                 partial_count += 1
@@ -439,6 +449,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 detail = f'partial ({len(regions)} regions, {bytes_changed}/{len(pixels)} bytes per plane)'
             previous = pixels
             displayed_theme = theme
+            displayed_page = page
             displayed_music = music
             displayed_track = track
             displayed_layout = layout
@@ -449,11 +460,10 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             if showing_join and join_until is None:
                 join_until = time.monotonic() + JOIN_CONFIRM_SECONDS
             if not hotspot and (server or network):
-                state.publish(theme, preview_png(screen, WIDTH, HEIGHT), track.url if track else None)
-            mode = 'full' if full else 'partial'
-            counts[mode] += 1
-            page = 'wifi setup' if hotspot else 'connected' if showing_join else 'music' if music else 'weather'
-            print(f'{now:%H:%M:%S} {detail} {page} {time.monotonic() - started:.3f}s', flush=True)
+                state.publish(theme, preview_png(screen, WIDTH, HEIGHT), track.url if track else None, page=page)
+            counts['full' if full else 'partial'] += 1
+            label = 'wifi setup' if hotspot else 'connected' if showing_join else page
+            print(f'{now:%H:%M:%S} {detail} {label} {time.monotonic() - started:.3f}s', flush=True)
     finally:
         stop.set()
         local_name.close()
