@@ -85,18 +85,21 @@
           </div>
           <form id="device-form" class="setup-form">
             <h3 data-i18n>Location and display</h3>
-            <label for="city" data-i18n>City</label>
-            <div class="setup-row">
-              <input id="city" name="location" required maxlength="120">
-              <button id="find-city" type="button" data-i18n>Search</button>
+            <div class="city-search">
+              <label for="city" data-i18n>City</label>
+              <input id="city" name="location" required maxlength="120" autocomplete="off"
+                role="combobox" aria-autocomplete="list" aria-controls="places" aria-expanded="false">
+              <ul id="places" role="listbox" aria-label="Suggested cities" data-i18n-attributes="aria-label" hidden></ul>
+              <p id="city-status" role="status"></p>
             </div>
-            <select id="places" aria-label="Search results" data-i18n-attributes="aria-label" hidden></select>
             <div class="setup-grid">
               <label data-i18n>Latitude<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
               <label data-i18n>Longitude<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
               <label data-i18n>Time zone<input name="timezone" placeholder="Europe/Prague" required></label>
               <label data-i18n>Temperature units<select name="units"><option value="celsius">°C</option><option value="fahrenheit">°F</option></select></label>
               <label data-i18n>Rotation<select name="rotation"><option value="0">0°</option><option value="180">180°</option></select></label>
+              <label data-i18n>Display width (px)<input name="display_width" type="number" min="32" max="400" step="1" required></label>
+              <label data-i18n>Display height (px)<input name="display_height" type="number" min="32" max="400" step="1" required></label>
             </div>
             <button type="submit" data-i18n>Save settings</button>
           </form>

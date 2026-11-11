@@ -16,13 +16,14 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from layout_editor import validate_layout
+from layout_editor import PANEL_SIZE, resize_layout, validate_display_size, validate_layout
 from spotify_playback import TOKEN_URL
 
 DEFAULTS = {
     'location': 'Prague', 'latitude': 50.0755, 'longitude': 14.4378,
     'timezone': 'Europe/Prague', 'units': 'celsius', 'rotation': 180, 'language': 'en',
     'local_name': True,
+    'display_width': PANEL_SIZE[0], 'display_height': PANEL_SIZE[1],
 }
 LANGUAGES = ('en', 'cs')
 REDIRECT_URI = 'http://127.0.0.1:8765/callback'
@@ -91,7 +92,12 @@ def validate_settings(payload):
         raise ValueError('Choose English or Czech.')
     if type(result['local_name']) is not bool:
         raise ValueError('Choose whether to use the local address.')
+    display_size(result)
     return result
+
+
+def display_size(values):
+    return validate_display_size((values['display_width'], values['display_height']))
 
 
 class DeviceSettings:
@@ -104,29 +110,54 @@ class DeviceSettings:
         self.lock = threading.Lock()
         self.pending = None
         self.values = validate_settings({**DEFAULTS, **json.loads(self.path.read_text())}) if self.path.is_file() else DEFAULTS.copy()
-        self.layouts = self.load_layouts()
+        self._stored_layouts = self.load_layouts()
+        size = display_size(self.values)
+        self.layout_state = size, self.layouts_at(size)
         if not self.code_path.exists():
             write_private(self.code_path, secrets.token_urlsafe(18) + '\n')
         self.code = self.code_path.read_text().strip()
 
     def load_layouts(self):
-        defaults = {'dashboard': None, 'playback': None}
+        defaults = {screen: (PANEL_SIZE, None) for screen in LAYOUT_SCREENS}
         try:
             saved = json.loads(self.layouts_path.read_text())
-            return {screen: validate_layout(screen, saved.get(screen)) for screen in defaults}
+            sizes = saved.get('sizes', {})
+            layouts = {}
+            for screen in defaults:
+                size = validate_display_size(sizes.get(screen, PANEL_SIZE))
+                layouts[screen] = size, validate_layout(screen, saved.get(screen), size)
+            return layouts
         except FileNotFoundError:
             pass
         except (AttributeError, TypeError, ValueError, OSError):
             print('Could not read the saved layouts. Using the built-in screens.', flush=True)
         return defaults
 
-    def save_layout(self, screen, layout):
-        layout = validate_layout(screen, layout)
+    @property
+    def layouts(self):
+        return self.layout_state[1]
+
+    def layouts_at(self, size):
+        return {screen: resize_layout(layout, source, size)
+                for screen, (source, layout) in self._stored_layouts.items()}
+
+    def require_display_size(self, expected):
+        size = self.layout_state[0]
+        if expected is not None and validate_display_size(expected) != size:
+            raise ValueError('Display dimensions changed. Reopen the editor.')
+        return size
+
+    def save_layout(self, screen, layout, *, expected_size=None):
         with self.lock:
-            layouts = {**self.layouts, screen: layout}
-            if layouts != self.layouts:
-                write_private(self.layouts_path, json.dumps(layouts, ensure_ascii=False) + '\n')
-                self.layouts = layouts
+            size = self.require_display_size(expected_size)
+            layout = validate_layout(screen, layout, size)
+            if layout != self.layouts[screen]:
+                stored = {**self._stored_layouts, screen: (size, layout)}
+                data = {name: value for name, (_, value) in stored.items()}
+                data['sizes'] = {name: dimensions for name, (dimensions, _) in stored.items()}
+                write_private(self.layouts_path, json.dumps(data, ensure_ascii=False) + '\n')
+                self._stored_layouts = stored
+                self.layout_state = size, {**self.layouts, screen: layout}
         return layout
 
     def read_library(self):
@@ -142,22 +173,24 @@ class DeviceSettings:
         except ValueError as error:
             raise OSError('Could not read the layout library.') from error
 
-    def get_layout_library(self, screen, name=None, *, details=False):
+    def get_layout_library(self, screen, name=None, *, details=False, size=None):
         if screen not in LAYOUT_SCREENS:
             raise ValueError('Choose Dashboard or Playback.')
         entries = self.read_library()[screen]
         if name is None:
             return library_listing(entries, details=details)
-        layout, _ = library_entry(entries[layout_name(name)])
-        return {'layout': validate_layout(screen, layout)}
+        entry = entries[layout_name(name)]
+        layout, _ = library_entry(entry)
+        source = validate_display_size(entry.get('size', PANEL_SIZE)) if isinstance(entry, dict) else PANEL_SIZE
+        size = self.layout_state[0] if size is None else size
+        return {'layout': resize_layout(validate_layout(screen, layout, source), source, size)}
 
-    def edit_layout_library(self, screen, name, layout, *, delete=False):
+    def edit_layout_library(self, screen, name, layout, *, delete=False, expected_size=None):
         if screen not in LAYOUT_SCREENS:
             raise ValueError('Choose Dashboard or Playback.')
         name = layout_name(name)
-        if not delete:
-            layout = validate_layout(screen, layout)
         with self.lock:
+            size = self.require_display_size(expected_size)
             library = self.read_library()
             entries = library[screen]
             if delete:
@@ -167,7 +200,8 @@ class DeviceSettings:
                     raise ValueError('A saved layout already has that name.')
                 if len(entries) >= MAX_SAVED_LAYOUTS:
                     raise ValueError(f'This screen already has {MAX_SAVED_LAYOUTS} saved layouts.')
-                entries[name] = {'layout': layout, 'savedAt': datetime.now(timezone.utc).isoformat()}
+                entries[name] = {'layout': validate_layout(screen, layout, size), 'size': size,
+                                 'savedAt': datetime.now(timezone.utc).isoformat()}
             write_private(self.library_path, json.dumps(library, ensure_ascii=False) + '\n')
             return library_listing(entries, details=True)
 
@@ -190,9 +224,14 @@ class DeviceSettings:
 
     def save(self, payload):
         with self.lock:
-            self.write_values(validate_settings({
+            values = validate_settings({
+                'display_width': self.values['display_width'], 'display_height': self.values['display_height'],
                 **payload, 'language': self.values['language'], 'local_name': self.values['local_name'],
-            }))
+            })
+            size = display_size(values)
+            layout_state = self.layout_state if size == self.layout_state[0] else (size, self.layouts_at(size))
+            self.write_values(values)
+            self.layout_state = layout_state
 
     def set_local_name(self, enabled):
         if type(enabled) is not bool:

@@ -6,6 +6,8 @@ const spotifyForm = document.querySelector('#spotify-form');
 const finishForm = document.querySelector('#spotify-finish');
 const setupFields = document.querySelector('#setup-fields');
 const setupStatus = document.querySelector('#setup-status');
+const city = document.querySelector('#city');
+const cityStatus = document.querySelector('#city-status');
 const places = document.querySelector('#places');
 const disconnect = document.querySelector('#spotify-disconnect');
 const setupCodeForm = document.querySelector('#setup-code-form');
@@ -14,9 +16,15 @@ const localName = document.querySelector('#local-name');
 const localNameStatus = document.querySelector('#local-name-status');
 let setupCode = '';
 let foundPlaces = [];
+let selectedPlace = -1;
+let placeTimer;
+let placeRequest;
 
 openSettings.addEventListener('click', () => settingsDialog.showModal());
-settingsDialog.addEventListener('close', () => openSettings.focus());
+settingsDialog.addEventListener('close', () => {
+  clearPlaces();
+  openSettings.focus();
+});
 
 languageSelect.addEventListener('change', async () => {
   const status = document.querySelector('#language-status');
@@ -34,9 +42,9 @@ languageSelect.addEventListener('change', async () => {
   }
 });
 
-async function api(path, payload) {
+async function api(path, payload, signal) {
   const headers = {'X-Setup-Code': setupCode};
-  const options = {headers};
+  const options = {headers, signal};
   if (payload !== undefined) {
     options.method = 'POST';
     headers['Content-Type'] = 'application/json';
@@ -65,6 +73,7 @@ function fillDevice(settings) {
 }
 
 function showSettings(data) {
+  clearPlaces();
   fillDevice(data.settings);
   if (!localName.disabled) localName.checked = data.settings.local_name;
   document.querySelector('#redirect-uri').textContent = data.redirectUri;
@@ -103,31 +112,100 @@ unlockForm.addEventListener('submit', (event) => {
     unlockForm.reset();
     unlockForm.hidden = true;
     setupFields.hidden = false;
-    document.querySelector('#city').focus();
+    city.focus();
   });
 });
 
-document.querySelector('#find-city').addEventListener('click', () => action(async () => {
-  const data = await api('/api/places', {name: deviceForm.elements.location.value});
-  foundPlaces = data.places;
-  if (places.options.length) dynamicText.delete(places.options[0]);
-  const placeholder = new Option('', '');
-  setText(placeholder, 'Select a location');
-  places.replaceChildren(placeholder);
-  for (const [index, place] of foundPlaces.entries()) places.add(new Option(place.label, index));
-  places.hidden = !foundPlaces.length;
-  setText(setupStatus, foundPlaces.length ? 'Select a location from the list.' : 'No matching locations found.');
-}));
+function clearPlaces() {
+  clearTimeout(placeTimer);
+  placeRequest?.abort();
+  placeRequest = undefined;
+  foundPlaces = [];
+  selectedPlace = -1;
+  places.replaceChildren();
+  places.hidden = true;
+  city.setAttribute('aria-expanded', 'false');
+  city.removeAttribute('aria-activedescendant');
+  setText(cityStatus, '');
+}
 
-places.addEventListener('change', () => {
-  if (places.value !== '') fillDevice(foundPlaces[Number(places.value)]);
+function searchPlaces(event) {
+  if (event.isComposing) return;
+  clearPlaces();
+  const name = city.value.trim();
+  if (name.length < 2 || name.length > 80) return;
+  const controller = new AbortController();
+  placeRequest = controller;
+  placeTimer = setTimeout(async () => {
+    try {
+      const {places: matches} = await api('/api/places', {name}, controller.signal);
+      if (controller.signal.aborted) return;
+      foundPlaces = matches;
+      places.replaceChildren(...matches.map((place, index) => {
+        const option = document.createElement('li');
+        option.id = 'place-' + index;
+        option.dataset.index = index;
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', 'false');
+        option.textContent = place.label;
+        return option;
+      }));
+      places.hidden = !matches.length;
+      city.setAttribute('aria-expanded', String(!places.hidden));
+      if (!matches.length) setText(cityStatus, 'No matching locations found.');
+    } catch (error) {
+      if (!controller.signal.aborted) setText(cityStatus, error.message);
+    }
+  }, 300);
+}
+
+function choosePlace(index) {
+  const place = foundPlaces[index];
+  if (!place) return;
+  clearPlaces();
+  fillDevice(place);
+  city.focus();
+}
+
+city.addEventListener('input', searchPlaces);
+city.addEventListener('compositionend', searchPlaces);
+city.addEventListener('blur', clearPlaces);
+city.addEventListener('keydown', (event) => {
+  if (event.isComposing) return;
+  if (event.key === 'Escape' && (placeRequest || !places.hidden)) {
+    event.preventDefault();
+    clearPlaces();
+    return;
+  }
+  if (places.hidden) return;
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    choosePlace(Math.max(0, selectedPlace));
+  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    const next = event.key === 'ArrowDown' ? selectedPlace + 1
+      : selectedPlace < 0 ? foundPlaces.length - 1 : selectedPlace - 1;
+    places.children[selectedPlace]?.setAttribute('aria-selected', 'false');
+    selectedPlace = (next + foundPlaces.length) % foundPlaces.length;
+    const option = places.children[selectedPlace];
+    option.setAttribute('aria-selected', 'true');
+    city.setAttribute('aria-activedescendant', option.id);
+    option.scrollIntoView({block: 'nearest'});
+  }
+});
+places.addEventListener('mousedown', (event) => event.preventDefault());
+places.addEventListener('click', (event) => {
+  const option = event.target.closest('[data-index]');
+  if (option) choosePlace(Number(option.dataset.index));
 });
 
 deviceForm.addEventListener('submit', (event) => {
   event.preventDefault();
   action(async () => {
     const form = Object.fromEntries(new FormData(deviceForm));
-    for (const key of ['latitude', 'longitude', 'rotation']) form[key] = Number(form[key]);
+    for (const key of ['latitude', 'longitude', 'rotation', 'display_width', 'display_height']) {
+      form[key] = Number(form[key]);
+    }
     showSettings(await api('/api/settings', form));
     setText(setupStatus, 'Settings saved. The display will refresh shortly.');
   });

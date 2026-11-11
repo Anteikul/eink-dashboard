@@ -13,10 +13,13 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs
 
 from device_settings import find_places
-from layout_editor import editor_schema, validate_layout
+from layout_editor import MAX_DIMENSION, MAX_DRAWINGS, MAX_WIDGETS, PANEL_SIZE, editor_schema, validate_layout
 from local_name import HOSTNAME
 
 THEMES = ('light', 'dark')
+LAYOUT_ROUTES = ('/api/layouts', '/api/layout-preview', '/api/layout-library')
+MAX_BITMAP_BYTES = ((MAX_DIMENSION + 7) // 8) * MAX_DIMENSION
+MAX_LAYOUT_BYTES = 4 * ((MAX_BITMAP_BYTES + 2) // 3) * (MAX_DRAWINGS + MAX_WIDGETS) + 128 * 1024
 
 
 def pack_row(row):
@@ -146,13 +149,15 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             self.json(403, {'error': 'Check the device setup code.'})
             return False
 
-        def layout_png(self, screen, layout, *, layers=False):
+        def layout_png(self, screen, layout, size, *, layers=False):
             if layout_preview is None:
                 from dashboard import render_layout_preview
             else:
                 render_layout_preview = layout_preview
             preferences = settings.values
             options = {'layers': True} if layers else {}
+            if size != PANEL_SIZE:
+                options['size'] = size
             return render_layout_preview(screen, layout, state.theme, preferences['language'],
                                          preferences['units'], **options)
 
@@ -186,23 +191,27 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     self.json(200, settings.status())
             elif path == '/api/layouts':
                 if self.setup_access():
-                    self.json(200, {**editor_schema(), 'layouts': settings.layouts})
+                    size, layouts = settings.layout_state
+                    self.json(200, {**editor_schema(size), 'layouts': layouts})
             elif path == '/api/layout-library':
                 if self.setup_access():
                     params = parse_qs(query, keep_blank_values=True)
                     screen = params.get('screen', [''])[0]
                     name = params.get('name', [None])[0]
                     try:
+                        expected = [int(params[key][0]) for key in ('width', 'height')] if (
+                            'width' in params and 'height' in params) else None
+                        size = settings.require_display_size(expected)
                         if params.get('thumbnail') == ['1']:
                             if screen not in ('dashboard', 'playback') or name is None:
                                 raise ValueError('Invalid preview.')
-                            layout = settings.get_layout_library(screen, name)['layout'] if name else None
+                            layout = settings.get_layout_library(screen, name, size=size)['layout'] if name else None
                             if layout is None:
-                                layout = editor_schema()['defaults'][screen]
-                            self.reply(200, 'image/png', self.layout_png(screen, layout))
+                                layout = editor_schema(size)['defaults'][screen]
+                            self.reply(200, 'image/png', self.layout_png(screen, layout, size))
                         else:
                             self.json(200, settings.get_layout_library(
-                                screen, name, details=params.get('details') == ['1']))
+                                screen, name, details=params.get('details') == ['1'], size=size))
                     except KeyError:
                         self.json(404, {'error': 'That saved layout no longer exists.'})
                     except ValueError as error:
@@ -228,7 +237,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 return
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                limit = 672 * 1024 if self.path in ('/api/layouts', '/api/layout-preview', '/api/layout-library') else 8192
+                limit = MAX_LAYOUT_BYTES if self.path in LAYOUT_ROUTES else 8192
                 if not 0 < size <= limit or self.headers.get_content_type() != 'application/json':
                     raise ValueError('Invalid request.')
                 payload = json.loads(self.rfile.read(size))
@@ -262,7 +271,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     return
                 if self.path == '/api/layouts':
                     screen = payload['screen']
-                    layout = settings.save_layout(screen, payload['layout'])
+                    layout = settings.save_layout(screen, payload['layout'], expected_size=payload.get('displaySize'))
                     self.json(200, {'screen': screen, 'layout': layout})
                     return
                 if self.path == '/api/layout-library':
@@ -272,17 +281,19 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                         raise ValueError('Invalid request.')
                     layout = None if delete else payload['layout']
                     try:
-                        self.json(200, settings.edit_layout_library(screen, name, layout, delete=delete))
+                        self.json(200, settings.edit_layout_library(screen, name, layout, delete=delete,
+                                                                    expected_size=payload.get('displaySize')))
                     except KeyError:
                         self.json(404, {'error': 'That saved layout no longer exists.'})
                     return
                 if self.path == '/api/layout-preview':
                     screen = payload['screen']
-                    layout = validate_layout(screen, payload['layout'])
+                    size = settings.require_display_size(payload.get('displaySize'))
+                    layout = validate_layout(screen, payload['layout'], size)
                     layers = payload.get('layers', False)
                     if type(layers) is not bool or (layers and layout is None):
                         raise ValueError('Invalid preview.')
-                    self.reply(200, 'image/png', self.layout_png(screen, layout, layers=layers))
+                    self.reply(200, 'image/png', self.layout_png(screen, layout, size, layers=layers))
                     return
                 if self.path == '/api/places':
                     self.json(200, {'places': find_places(payload['name'], settings.values['language'])})

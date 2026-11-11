@@ -119,6 +119,7 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
   const stride = width => Math.ceil(width / 8);
   const layerKey = ({x, y, ...appearance}) => JSON.stringify(appearance);
+  const displaySize = () => [schema.width, schema.height];
   const selectedIndices = () => current().selection >= 0 ? [current().selection] : current().group;
 
   function positionHistory() {
@@ -233,6 +234,7 @@
     element('editor-variant-label').hidden = item.variants.length === 0;
     element('editor-text-style').hidden = !textStyle;
     element('editor-text-label').hidden = widget.type !== 'text';
+    element('editor-clock-format').hidden = widget.type !== 'clock' || widget.variant !== 'custom';
 
     if (fields.variant.dataset.type !== widget.type) {
       fields.variant.replaceChildren(...item.variants.map(variant =>
@@ -242,8 +244,7 @@
 
     fields.x.max = schema.width - widget.w;
     fields.y.max = schema.height - widget.h;
-    fields.w.max = Math.min(schema.width - widget.x,
-      widget.type === 'divider' && widget.variant === 'vertical' ? schema.height : schema.width);
+    fields.w.max = schema.width - widget.x;
     fields.h.max = schema.height - widget.y;
     for (const [name, field] of Object.entries(fields)) {
       const value = String(widget[name] ?? '');
@@ -259,7 +260,7 @@
       const vertical = widget.variant === 'vertical';
       dividerLength.max = vertical ? schema.height : schema.width;
       dividerLength.value = vertical ? widget.h : widget.w;
-      dividerThickness.max = schema.height;
+      dividerThickness.max = vertical ? schema.width : schema.height;
       dividerThickness.value = Math.min(widget.thickness ?? 1, vertical ? widget.w : widget.h);
       return;
     }
@@ -553,7 +554,7 @@
     stopPreview();
     retry.hidden = true;
     setText(previewStatus, '');
-    const payload = {screen, layout: widgets(), layers: true};
+    const payload = {screen, layout: widgets(), layers: true, displaySize: displaySize()};
     const code = setupCode;
     const controller = new AbortController();
     previewController = controller;
@@ -622,7 +623,9 @@
   }
 
   function libraryPath(params) {
-    return '/api/layout-library?' + new URLSearchParams({screen, ...params});
+    return '/api/layout-library?' + new URLSearchParams({
+      screen, width: schema.width, height: schema.height, ...params,
+    });
   }
 
   function stopLibraryThumbnails() {
@@ -791,7 +794,7 @@
     try {
       const response = await request(path, {
         signal,
-        payload: payload ? {screen, ...payload} : undefined,
+        payload: payload ? {screen, ...payload, displaySize: displaySize()} : undefined,
         fallback: 'Could not open the layout library.',
       });
       const data = await response.json();
@@ -865,6 +868,7 @@
         canvas.height = data.height;
       }
       stage.style.aspectRatio = data.width + ' / ' + data.height;
+      editor.style.setProperty('--display-ratio', data.width / data.height);
       element('editor-resolution').textContent = data.width + ' × ' + data.height + ' px';
       setupCode = code;
       for (const draft of Object.values(drafts)) {
@@ -923,7 +927,7 @@
     if (widget.type === 'divider' && !('thickness' in change)) {
       const minorAxis = widget.variant === 'vertical' ? 'w' : 'h';
       if (change[minorAxis] !== undefined && change[minorAxis] !== widget[minorAxis]) {
-        change = {...change, thickness: Math.min(change[minorAxis], schema.height)};
+        change = {...change, thickness: change[minorAxis]};
       }
     }
     layout[index] = {...widget, ...change};
@@ -961,6 +965,7 @@
     const vertical = variant === 'vertical';
     const rotated = variant !== widget.variant;
     length = Math.min(length, vertical ? schema.height : schema.width);
+    thickness = Math.min(thickness, vertical ? schema.width : schema.height);
     const [w, h] = vertical ? [thickness, length] : [length, thickness];
     // Round in opposite directions so a round trip does not shift a half-pixel center.
     const roundCenter = vertical ? Math.ceil : Math.floor;
@@ -999,8 +1004,7 @@
     const anchorY = north ? bottom : y;
     const signX = west ? -1 : 1;
     const signY = north ? -1 : 1;
-    const maxW = Math.min(west ? right : schema.width - x,
-      origin.type === 'divider' && origin.variant === 'vertical' ? schema.height : schema.width);
+    const maxW = west ? right : schema.width - x;
     const maxH = north ? bottom : schema.height - y;
     const rawW = w + signX * dx;
     const rawH = h + signY * dy;
@@ -1598,6 +1602,17 @@
     const name = field.dataset.property;
     if (!name || name === 'text') return;
     const widget = layers()[current().selection];
+    if (widget?.type === 'clock') {
+      if (name === 'format') {
+        if (!field.value.trim()) field.value = 'HH:mm';
+        editWidget({format: field.value});
+        return;
+      }
+      if (name === 'variant' && field.value === 'custom') {
+        editWidget({variant: 'custom', format: widget.format ?? 'HH:mm'});
+        return;
+      }
+    }
     if (name === 'variant' && widget?.type === 'divider' && field.value !== widget.variant) {
       editDivider(widget, field.value, Number(dividerLength.value), Number(dividerThickness.value));
       return;
@@ -1744,7 +1759,7 @@
     finishText(true);
     const draft = current();
     if (!hasChanges(draft) || savingScreen || librarySelection || drag || paletteDrag || layerDrag) return;
-    const payload = {screen, layout: draft.layout};
+    const payload = {screen, layout: draft.layout, displaySize: displaySize()};
     const code = setupCode;
     savingScreen = screen;
     draft.message = 'Saving layout…';

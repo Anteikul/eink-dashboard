@@ -23,13 +23,13 @@ You can also open `http://eink.local/` on the same network. To stop publishing t
 
 Open the pencil in the dashboard header to visit the full-page editor and enter the device setup code. The **Dashboard** and **Playback** tabs have separate layouts. Drag an icon onto the canvas, or click it to add the widget. Drag a layer on the canvas to move it and pull a widget corner to resize it. Hold **Shift** while resizing to change width and height independently. **Snap** aligns layers with the screen center and edges or with nearby layers. The inspector also supports exact pixel positions and sizes.
 
-- Clocks include 12-hour and 24-hour formats, seconds, stacked digits, and an analog face. You can also add the date, your own text, or a divider.
+- Clocks include 12-hour and 24-hour formats, seconds, stacked digits, an analog face, and custom patterns such as `HH.mm.ss` or `h:mm A`. Use brackets for literal text, as in `[Time] HH:mm`. You can also add the date, your own text, or a divider.
 - Weather can show only the icon, only the temperature, or both side by side or stacked.
 - Playback can show album art, track and artist text, a progress indicator, or elapsed and remaining time.
 
 Use **Draw** to sketch freehand with a mouse, pen, or finger. Each pen stroke creates its own layer. The eraser clears pixels from both drawings and widgets. Drag layers in the **Layers** panel to reorder them. The top row is frontmost. In **Select** mode, drag from an empty part of the canvas to select several layers, then move, align, or delete them together. Double-click custom text to edit it on the canvas. Press **Enter** to finish editing or **Shift+Enter** for a new line. Use **Ctrl+Z** and **Ctrl+Shift+Z** for undo and redo, or **⌘Z** and **⌘Shift+Z** on Mac.
 
-The 250 × 122 canvas uses sample data and the same widget renderer as the display. Use the save icon to apply the current screen on the Pi. **Start blank** clears the current draft and **Reset to default** restores the built-in screen when applied.
+The canvas uses sample data and the same widget renderer as the display. Under **Location and display**, set its width and height in pixels and choose a city from the suggestions to fill its coordinates and time zone. The 250 × 122 panel scales the canvas to fit without stretching it. Saved designs retain their original canvas dimensions. Use the save icon to apply the current screen on the Pi. **Start blank** clears the current draft and **Reset to default** restores the built-in screen when applied.
 
 The folder icon opens the layout library for the current screen. Save the canvas under a name to keep a reusable copy on the Pi. The list shows a thumbnail and the save date for each design. Click a design to see it on the canvas. The locked **Default layout** entry restores the built-in screen. Use **Apply to display** to put the current layout on the e-paper screen.
 

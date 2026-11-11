@@ -19,12 +19,12 @@ from zoneinfo import ZoneInfo
 
 from control import PanelState, preview_png, start_server
 from device_settings import DeviceSettings
-from layout_editor import content_key, render_custom, render_layer_atlas
+from layout_editor import PANEL_SIZE, clock_has_seconds, content_key, editor_schema, render_custom, render_layer_atlas
 from local_name import LocalName
 from spotify_playback import SpotifyPlayback, Track
 from wifi_setup import AP_ADDRESS, Link, NetworkSetup
 
-WIDTH, HEIGHT = 250, 122
+WIDTH, HEIGHT = PANEL_SIZE
 ROW_BYTES = (HEIGHT + 7) // 8
 JOIN_CONFIRM_SECONDS = 15
 WEEKDAYS = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
@@ -101,14 +101,31 @@ def sample_cover():
     return cover
 
 
-def render_layout_preview(screen, layout, theme, language, units, *, layers=False):
+@lru_cache(maxsize=4)
+def canvas_defaults(size):
+    return editor_schema(size)['defaults']
+
+
+def fit_panel(pixels, size, theme):
+    if size == PANEL_SIZE:
+        return pixels
+    from PIL import Image, ImageOps
+
+    source = Image.frombytes('L', size, bytes(pixels))
+    resized = ImageOps.contain(source, PANEL_SIZE, Image.Resampling.NEAREST)
+    panel = Image.new('L', PANEL_SIZE, int(theme == 'light'))
+    panel.paste(resized, ((WIDTH - resized.width) // 2, (HEIGHT - resized.height) // 2))
+    return bytearray(panel.tobytes())
+
+
+def render_layout_preview(screen, layout, theme, language, units, *, layers=False, size=PANEL_SIZE):
     from io import BytesIO
     from music_screen import progress_pixels, render_music
 
     now = datetime(2026, 11, 10, 14, 38, 27)
     weather = (16 if units == 'celsius' else 61, 2, True)
     music = screen == 'playback'
-    sample = {'weather': weather, 'units': units}
+    sample = {'weather': weather, 'units': units, 'size': size}
     if music:
         sample.update(track=Track('preview', 'Night Drive', 'The Midnight'), cover=sample_cover(),
                       progress=0.42, duration_ms=242_000)
@@ -117,6 +134,8 @@ def render_layout_preview(screen, layout, theme, language, units, *, layers=Fals
         with BytesIO() as png:
             atlas.save(png, format='PNG')
             return png.getvalue()
+    if layout is None and size != PANEL_SIZE:
+        layout = canvas_defaults(size)[screen]
     if layout is not None:
         pixels = render_custom(layout, now, theme, language, **sample)
     elif music:
@@ -124,7 +143,7 @@ def render_layout_preview(screen, layout, theme, language, units, *, layers=Fals
         pixels = render_music(track, theme, cover, progress_pixels(progress, cover))
     else:
         pixels = render(now, weather, theme, units, language)
-    return preview_png(pixels, WIDTH, HEIGHT)
+    return preview_png(pixels, *size)
 
 
 def render_wifi(hotspot, theme='light', language='en'):
@@ -272,6 +291,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
     displayed_music = False
     displayed_track = None
     displayed_layout = None
+    displayed_size = PANEL_SIZE
     displayed_hotspot = None
     displayed_join = False
     join_notice = None
@@ -312,7 +332,11 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             showing_join = joined is not None and seconds > 0
             prepared = spotify.current if spotify else None
             music = prepared is not None and hotspot is None and not showing_join
-            layout = None if hotspot or showing_join else settings.layouts['playback' if music else 'dashboard']
+            size, layouts = settings.layout_state
+            page = 'playback' if music else 'dashboard'
+            layout = None if hotspot or showing_join else layouts[page]
+            if layout is None and size != PANEL_SIZE and not (hotspot or showing_join):
+                layout = canvas_defaults(size)[page]
             track, cover, progress, duration_ms = None, None, 0, 0
             if music:
                 playback, cover = prepared
@@ -328,11 +352,11 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             elif layout is not None:
                 widgets = content_key(layout, now, current_weather, track, cover, progress,
                                       duration_ms=duration_ms, units=units, language=language)
-                content = (theme, language, layout, track, widgets)
+                content = (theme, language, size, layout, track, widgets)
                 advancing = displayed_layout == layout and (
                     (music and displayed_music and displayed_track == track)
                     or (partial_count < 120 and any(
-                        widget['type'] == 'clock' and widget['variant'] == 'seconds' for widget in layout
+                        clock_has_seconds(widget) for widget in layout
                     ))
                 )
             elif music:
@@ -357,7 +381,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 screen = render_joined(joined.address, seconds, theme, language)
             elif layout is not None:
                 screen = render_custom(layout, now, theme, language, weather=current_weather, units=units,
-                                       track=track, cover=cover, progress=progress, duration_ms=duration_ms)
+                                       track=track, cover=cover, progress=progress, duration_ms=duration_ms, size=size)
+                screen = fit_panel(screen, size, theme)
             elif music:
                 screen = render_music(track, theme, cover, filled)
             else:
@@ -365,7 +390,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             pixels = pack(screen, rotation)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.
-            full = (displayed_music != music or displayed_layout != layout
+            full = (displayed_music != music or displayed_layout != layout or displayed_size != size
                     or displayed_hotspot != hotspot or displayed_join != showing_join
                     or needs_full_refresh(displayed_theme, theme, partial_count, advancing=advancing))
             if full:
@@ -393,6 +418,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             displayed_music = music
             displayed_track = track
             displayed_layout = layout
+            displayed_size = size
             displayed_hotspot = hotspot
             displayed_join = showing_join
             last_content = content

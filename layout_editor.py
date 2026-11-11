@@ -1,4 +1,5 @@
-"""Validate screen layouts and composite their layers at the panel's resolution."""
+"""Validate screen layouts and composite their layers at the configured resolution."""
+import re
 from base64 import b64decode, b64encode
 from copy import deepcopy
 from functools import lru_cache
@@ -9,6 +10,8 @@ from PIL import Image, ImageChops, ImageDraw, ImageOps
 from music_screen import fit_lines, font
 
 WIDTH, HEIGHT = 250, 122
+PANEL_SIZE = WIDTH, HEIGHT
+MIN_DIMENSION, MAX_DIMENSION = 32, 400
 MAX_WIDGETS = 18
 MAX_DRAWINGS = 96
 BOX_KEYS = ('x', 'y', 'w', 'h')
@@ -16,6 +19,8 @@ FONTS = ('regular', 'bold', 'mono', 'mono-bold')
 ALIGNMENTS = ('left', 'center', 'right')
 WRAPPING = (('wrapped', 'Wrapped'), ('single', 'Single line'))
 PIXEL_BITS = bytes([0] + [1] * 255)
+TIME_TOKENS = re.compile(r'\[([^\[\]]*)\]|HH|hh|mm|MM|ss|SS|H|h|m|s|A|a')
+SECONDS_TOKENS = ('s', 'ss', 'SS')
 WEEKDAYS_LONG = {
     'en': ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'),
     'cs': ('pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota', 'neděle'),
@@ -44,7 +49,7 @@ def _definition(kind, label, variants, box, *, size=16, face='regular', align='l
 COMMON = (
     _definition('clock', 'Clock', (('24h', '24-hour'), ('12h', '12-hour'),
                                    ('seconds', 'With seconds'), ('stacked', 'Stacked'),
-                                   ('analog', 'Analog')),
+                                   ('analog', 'Analog'), ('custom', 'Custom format')),
                 (10, 25, 146, 54), size=47, face='mono'),
     _definition('date', 'Date', (('short', 'Short'), ('long', 'Long'), ('iso', 'ISO')),
                 (12, 77, 146, 24), size=14),
@@ -76,12 +81,12 @@ WIDGETS = {
 }
 
 
-def editor_schema():
+def editor_schema(size=PANEL_SIZE):
     dashboard = WIDGETS['dashboard']
     playback = WIDGETS['playback']
-    return deepcopy({
-        'width': WIDTH,
-        'height': HEIGHT,
+    schema = deepcopy({
+        'width': size[0],
+        'height': size[1],
         'maxWidgets': MAX_WIDGETS,
         'maxDrawings': MAX_DRAWINGS,
         'defaults': {
@@ -93,20 +98,35 @@ def editor_schema():
         },
         'widgets': {screen: list(definitions.values()) for screen, definitions in WIDGETS.items()},
     })
+    if size != PANEL_SIZE:
+        for screen, defaults in schema['defaults'].items():
+            schema['defaults'][screen] = resize_layout(defaults, PANEL_SIZE, size)
+            for widget in schema['widgets'][screen]:
+                widget['template'] = resize_layer(widget['template'], PANEL_SIZE, size)
+    return schema
 
 
-def _validate_box(x, y, w, h):
+def validate_display_size(size):
+    if (not isinstance(size, (tuple, list)) or len(size) != 2
+            or any(type(value) is not int or not MIN_DIMENSION <= value <= MAX_DIMENSION
+                   for value in size)):
+        raise ValueError('Enter a display width and height from 32 to 400 pixels.')
+    return tuple(size)
+
+
+def _validate_box(x, y, w, h, size):
+    width, height = size
     if (any(type(value) is not int for value in (x, y, w, h))
-            or not (0 <= x and 0 <= y and 1 <= w <= WIDTH - x and 1 <= h <= HEIGHT - y)):
+            or not (0 <= x and 0 <= y and 1 <= w <= width - x and 1 <= h <= height - y)):
         raise ValueError('Keep each widget inside the display.')
 
 
-def _validate_drawing(supplied):
+def _validate_drawing(supplied, size):
     box = {}
-    w, h = WIDTH, HEIGHT
+    w, h = size
     if any(key in supplied for key in BOX_KEYS):
         box = {key: supplied.get(key) for key in BOX_KEYS}
-        _validate_box(**box)
+        _validate_box(**box, size=size)
         w, h = box['w'], box['h']
     return {'type': 'drawing', **box, 'bitmap': _validate_bitmap(supplied.get('bitmap'), w, h)}
 
@@ -124,7 +144,7 @@ def _validate_bitmap(bitmap, w, h):
     return b64encode(pixels).decode()
 
 
-def validate_layout(screen, layout):
+def validate_layout(screen, layout, size=PANEL_SIZE):
     """Return normalized widget dictionaries, or None to select the original screen."""
     if screen not in ('dashboard', 'playback'):
         raise ValueError('Choose Dashboard or Playback.')
@@ -143,13 +163,16 @@ def validate_layout(screen, layout):
             drawings += 1
             if drawings > MAX_DRAWINGS:
                 raise ValueError(f'Use up to {MAX_DRAWINGS} pen strokes per layout.')
-            normalized.append(_validate_drawing(supplied))
+            normalized.append(_validate_drawing(supplied, size))
             continue
         definition = widgets.get(supplied['type'])
         if definition is None:
             raise ValueError('This widget is unavailable on this screen.')
-        widget = {key: supplied.get(key, value) for key, value in definition['template'].items()}
-        _validate_box(*(widget[key] for key in BOX_KEYS))
+        template = definition['template']
+        if size != PANEL_SIZE and not all(key in supplied for key in BOX_KEYS):
+            template = resize_layer(template, PANEL_SIZE, size)
+        widget = {key: supplied.get(key, value) for key, value in template.items()}
+        _validate_box(*(widget[key] for key in BOX_KEYS), size=size)
         if widget['variant'] not in tuple(variant['value'] for variant in definition['variants']):
             raise ValueError('Choose an available widget style.')
         if (type(widget['size']) is not int or not 8 <= widget['size'] <= 60
@@ -163,20 +186,56 @@ def validate_layout(screen, layout):
             raise ValueError('Use valid Unicode text.') from error
         if widget['type'] == 'divider' and 'thickness' in supplied:
             thickness = supplied['thickness']
-            if type(thickness) is not int or not 1 <= thickness <= HEIGHT:
+            if type(thickness) is not int or not 1 <= thickness <= MAX_DIMENSION:
                 raise ValueError('Choose a valid divider thickness.')
             widget['thickness'] = thickness
+        if widget['type'] == 'clock' and (widget['variant'] == 'custom' or 'format' in supplied):
+            pattern = supplied.get('format', 'HH:mm')
+            if (not isinstance(pattern, str) or not 1 <= len(pattern) <= 64
+                    or not pattern.isprintable() or not pattern.strip()):
+                raise ValueError('Enter a time format with 1–64 characters.')
+            widget['format'] = pattern
         if 'mask' in supplied:
             mask = supplied['mask']
             if not isinstance(mask, dict):
                 raise ValueError('The drawing is invalid.')
             w, h = mask.get('w'), mask.get('h')
-            _validate_box(0, 0, w, h)
+            _validate_box(0, 0, w, h, (MAX_DIMENSION, MAX_DIMENSION))
             widget['mask'] = {'w': w, 'h': h, 'bitmap': _validate_bitmap(mask.get('bitmap'), w, h)}
         normalized.append(widget)
     if len(normalized) - drawings > MAX_WIDGETS:
         raise ValueError(f'Use up to {MAX_WIDGETS} widgets per layout.')
     return normalized
+
+
+def resize_layer(layer, source_size, target_size):
+    source_w, source_h = source_size
+    target_w, target_h = target_size
+    scale_x, scale_y = target_w / source_w, target_h / source_h
+    x, y = layer.get('x', 0), layer.get('y', 0)
+    w, h = layer.get('w', source_w), layer.get('h', source_h)
+    left = min(target_w - 1, round(x * scale_x))
+    top = min(target_h - 1, round(y * scale_y))
+    width = max(1, round((x + w) * scale_x) - left)
+    height = max(1, round((y + h) * scale_y) - top)
+    resized = {**layer, 'x': left, 'y': top, 'w': width, 'h': height}
+    if layer['type'] == 'drawing':
+        pixels = _drawing_mask(layer['bitmap'], w, h).resize((width, height), Image.Resampling.NEAREST)
+        resized['bitmap'] = b64encode(pixels.tobytes()).decode()
+    else:
+        resized['size'] = min(60, max(8, round(layer['size'] * min(scale_x, scale_y))))
+        if layer['type'] == 'divider':
+            scale, limit = (scale_x, width) if layer['variant'] == 'vertical' else (scale_y, height)
+            thickness = min(limit, max(1, round(layer.get('thickness', 1) * scale)))
+            if thickness != 1 or 'thickness' in layer:
+                resized['thickness'] = thickness
+    return resized
+
+
+def resize_layout(layout, source_size, target_size):
+    if layout is None or source_size == target_size:
+        return layout
+    return [resize_layer(layer, source_size, target_size) for layer in layout]
 
 
 def _date(now, variant, language):
@@ -193,7 +252,29 @@ def _date(now, variant, language):
     return f'{weekday}, {now.day} {month} {now.year}'
 
 
-def _clock(now, variant):
+def format_clock(now, pattern):
+    hour = now.hour % 12 or 12
+    suffix = 'AM' if now.hour < 12 else 'PM'
+    values = {'HH': f'{now.hour:02}', 'H': str(now.hour), 'hh': f'{hour:02}', 'h': str(hour),
+              'mm': f'{now.minute:02}', 'm': str(now.minute), 'ss': f'{now.second:02}',
+              's': str(now.second), 'A': suffix, 'a': suffix.lower()}
+    values.update(MM=values['mm'], SS=values['ss'])
+    return TIME_TOKENS.sub(lambda match: match[1] if match[1] is not None else values[match[0]], pattern)
+
+
+def clock_has_seconds(widget):
+    if widget['type'] != 'clock':
+        return False
+    if widget['variant'] == 'custom':
+        return any(token[0] in SECONDS_TOKENS
+                   for token in TIME_TOKENS.finditer(widget.get('format', 'HH:mm')))
+    return widget['variant'] == 'seconds'
+
+
+def _clock(now, widget):
+    variant = widget['variant']
+    if variant == 'custom':
+        return format_clock(now, widget.get('format', 'HH:mm'))
     if variant == 'analog':
         return (now.hour % 12, now.minute)
     if variant == 'stacked':
@@ -247,7 +328,7 @@ def _widget_content(widget, now, weather, track, cover, progress, duration_ms, u
         return None
     variant = widget['variant']
     if kind == 'clock':
-        return _clock(now, variant)
+        return _clock(now, widget)
     if kind == 'date':
         return _date(now, variant, language)
     if kind == 'weather':
@@ -473,14 +554,14 @@ def _apply_erasure(widget, layer, offset=(0, 0), *, art=False):
     return ImageChops.logical_and(layer, visible)
 
 
-def _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms):
+def _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size):
     """Yield a widget's offset, pixel data and whether it is opaque art."""
     values = content_key(layout, now, weather, track, cover, progress, duration_ms=duration_ms,
                          units=units, language=language)
     for widget, value in zip(layout, values):
         kind = widget['type']
         if kind == 'drawing':
-            yield (0, 0), _drawing_mask(widget['bitmap'], widget.get('w', WIDTH), widget.get('h', HEIGHT)), False
+            yield (0, 0), _drawing_mask(widget['bitmap'], widget.get('w', size[0]), widget.get('h', size[1])), False
             continue
         w, h = widget['w'], widget['h']
         if kind == 'cover':
@@ -507,11 +588,11 @@ def _widget_layers(layout, now, language, weather, units, track, cover, progress
 
 
 def render_custom(layout, now, theme, language, *, weather=None, units='celsius', track=None,
-                  cover=None, progress=0.0, duration_ms=0):
+                  cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE):
     """Draw widgets back to front, using their boxes to clip every layer."""
     foreground = int(theme == 'dark')
-    image = Image.new('1', (WIDTH, HEIGHT), 1 - foreground)
-    layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms)
+    image = Image.new('1', size, 1 - foreground)
+    layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size)
     for widget, ((dx, dy), layer, opaque) in zip(layout, layers):
         if layer is None:
             continue
@@ -525,17 +606,18 @@ def render_custom(layout, now, theme, language, *, weather=None, units='celsius'
 
 
 def render_layer_atlas(layout, now, theme, language, *, weather=None, units='celsius', track=None,
-                       cover=None, progress=0.0, duration_ms=0):
+                       cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE):
     """Put independent transparent widgets in fixed slots below one background pixel."""
     foreground = 255 if theme == 'dark' else 0
     background = 255 - foreground
-    atlas = Image.new('RGBA', (WIDTH, 1 + HEIGHT * len(layout)))
+    width, height = size
+    atlas = Image.new('RGBA', (width, 1 + height * len(layout)))
     atlas.putpixel((0, 0), (background, background, background, 255))
-    layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms)
+    layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size)
     for index, ((x, y), layer, opaque) in enumerate(layers):
         if layer is None:
             continue
-        position = (x, y + 1 + HEIGHT * index)
+        position = (x, y + 1 + height * index)
         if opaque:
             atlas.paste(layer.convert('RGBA'), position)
         else:

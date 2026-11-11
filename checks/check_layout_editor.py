@@ -10,7 +10,9 @@ from urllib.request import Request, urlopen
 from PIL import Image
 
 from control import PanelState, start_server
+from dashboard import fit_panel, pack
 from device_settings import DeviceSettings
+from layout_editor import clock_has_seconds, content_key, format_clock
 
 
 with TemporaryDirectory() as folder:
@@ -205,8 +207,54 @@ with TemporaryDirectory() as folder:
         assert json.loads(request(listing + '&details=1')[1])['entries'] == [
             {'name': 'Starší', 'savedAt': None, 'layers': 1}]
         assert settings.get_layout_library('dashboard', 'Starší')['layout'] == custom
+
+        now = datetime(2026, 11, 10, 14, 8, 7)
+        assert format_clock(now, 'HH.MM.SS / h:mm a [čas]') == '14.08.07 / 2:08 pm čas'
+        assert format_clock(now.replace(hour=0), 'H / hh:mm A') == '0 / 12:08 AM'
+        custom_clock = {**clock, 'variant': 'custom', 'format': 'HH.mm.ss'}
+        assert clock_has_seconds(custom_clock)
+        assert not clock_has_seconds({**custom_clock, 'format': 'HH:mm [ss]'})
+        assert content_key([custom_clock], now, None, None, None, 0) == ('14.08.07',)
+        layout = [custom_clock, dot]
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': layout})[0] == 200
+        assert request('/api/layout-preview', {'screen': 'dashboard',
+                       'layout': [{**custom_clock, 'format': ' '}]})[0] == 400
+
+        original = settings.values
+        enlarged = {**original, 'display_width': 375, 'display_height': 183}
+        assert request('/api/settings', {**enlarged, 'display_height': 401})[0] == 400
+        assert request('/api/settings', enlarged)[0] == 200
+        schema = json.loads(request('/api/layouts')[1])
+        assert (schema['width'], schema['height']) == (375, 183)
+        resized = schema['layouts']['dashboard']
+        assert resized == DeviceSettings(root).layouts['dashboard']
+        assert resized[0]['w'] == round(clock['w'] * 1.5)
+        assert resized[0]['format'] == custom_clock['format']
+        assert (resized[1]['x'], resized[1]['y']) == (18, 36)
+        assert settings.get_layout_library('dashboard', 'Starší')['layout'][0]['x'] == round(text['x'] * 1.5)
+        assert request(listing + '&width=250&height=122')[0] == 400
+        payload = {'screen': 'dashboard', 'layout': resized, 'displaySize': [375, 183]}
+        assert request('/api/layouts', {**payload, 'displaySize': [250, 122]})[0] == 400
+        status, png = request('/api/layout-preview', payload)
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            assert preview.size == (375, 183) and preview.getextrema() == (0, 255)
+        status, png = request('/api/layout-preview', {**payload, 'layers': True})
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as atlas:
+            assert atlas.size == (375, 1 + 183 * len(resized))
+        assert request('/api/settings', original)[0] == 200
+        assert settings.layouts['dashboard'] == layout
+        assert settings.get_layout_library('dashboard', 'Starší')['layout'] == custom
+
+        square = bytearray(100 * 100)
+        fitted = fit_panel(square, (100, 100), 'light')
+        assert len(fitted) == 250 * 122
+        assert fitted[:64] == bytes([1] * 64)
+        assert fitted[64:186] == bytes(122)
+        assert len(pack(fitted, 180)) == 250 * 16
     finally:
         server.shutdown()
         server.server_close()
 
-print('Layout preview, validation, protected editing, independent pages and reset passed.')
+print('Layout preview, custom time, display dimensions, saved layouts and panel fit passed.')

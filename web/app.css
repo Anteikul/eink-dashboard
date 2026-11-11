@@ -97,6 +97,11 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .setup-form :is(input,select,textarea):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .setup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 9px; }
+.city-search { display: grid; gap: 4px; }
+#city-status:empty { display: none; }
+#places { margin: 0; padding: 3px; list-style: none; max-height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; }
+#places li { padding: 8px 10px; border-radius: 3px; font-size: 13px; cursor: pointer; }
+#places li:is(:hover, [aria-selected="true"]) { color: var(--paper); background: var(--ink); }
 .setup button { justify-self: start; border-color: var(--line); }
 .setup a { color: inherit; text-underline-offset: 3px; }
 .setup code { font: 12px var(--mono); overflow-wrap: anywhere; }
@@ -173,7 +178,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   place-items: start center;
 }
 .editor-canvas-area .bezel {
-  width: clamp(0px, calc((100cqh - 18px) * 250 / 122 + 18px), 100%);
+  width: clamp(0px, calc((100cqh - 18px) * var(--display-ratio, 2.04918) + 18px), 100%);
   padding: 8px;
   border-radius: 9px;
 }
@@ -441,7 +446,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-library-thumb {
   display: block;
   width: 100%;
-  aspect-ratio: 250 / 122;
+  aspect-ratio: var(--display-ratio, 2.04918);
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 3px;
