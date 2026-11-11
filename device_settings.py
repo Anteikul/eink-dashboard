@@ -143,6 +143,14 @@ class DeviceSettings:
         if not self.code_path.exists():
             write_private(self.code_path, secrets.token_urlsafe(18) + '\n')
         self.code = self.code_path.read_text().strip()
+        session_key_path = directory / '.web-session-key'
+        try:
+            self.session_key = bytes.fromhex(session_key_path.read_text().strip())
+        except (FileNotFoundError, ValueError):
+            self.session_key = b''
+        if len(self.session_key) != 32:
+            self.session_key = secrets.token_bytes(32)
+            write_private(session_key_path, self.session_key.hex() + '\n')
 
     def load_layouts(self):
         defaults = {screen: (PANEL_SIZE, None) for screen in LAYOUT_SCREENS}

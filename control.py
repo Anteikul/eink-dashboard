@@ -1,13 +1,17 @@
 """Local browser controls and a preview of the last completed panel update."""
+import hmac
 import ipaddress
 import json
 import os
+import re
+import secrets
 import struct
 import tempfile
 import threading
 import time
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.cookies import CookieError, SimpleCookie
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import parse_qs
@@ -19,6 +23,36 @@ THEMES = ('light', 'dark')
 LAYOUT_ROUTES = ('/api/layouts', '/api/layout-preview', '/api/layout-library')
 MAX_BITMAP_BYTES = ((MAX_DIMENSION + 7) // 8) * MAX_DIMENSION
 MAX_LAYOUT_BYTES = 4 * ((MAX_BITMAP_BYTES + 2) // 3) * (MAX_DRAWINGS + MAX_WIDGETS) + 128 * 1024
+PROTECTED_PAGES = ('/settings', '/editor')
+SESSION_COOKIE = 'eink_session'
+SESSION_AGE = 8 * 60 * 60
+BAD_CODE = 'Check the device setup code.'
+SESSION_TOKEN = re.compile(r'([0-9]{1,12})\.([0-9a-f]{32})\.([0-9a-f]{64})')
+
+
+def session_signature(key, expires, nonce, code):
+    return hmac.digest(key, f'{expires}.{nonce}.{code}'.encode(), 'sha256').hex()
+
+
+def session_cookie(key, code):
+    expires = int(time.time()) + SESSION_AGE
+    nonce = secrets.token_hex(16)
+    signature = session_signature(key, expires, nonce, code)
+    return (f'{SESSION_COOKIE}={expires}.{nonce}.{signature}; '
+            f'Path=/; Max-Age={SESSION_AGE}; HttpOnly; SameSite=Strict')
+
+
+def valid_session(cookies, key, code):
+    try:
+        session = SimpleCookie(cookies).get(SESSION_COOKIE)
+    except CookieError:
+        return False
+    match = SESSION_TOKEN.fullmatch(session.value) if session else None
+    if not match:
+        return False
+    expires, nonce, signature = match.groups()
+    return int(expires) > time.time() and hmac.compare_digest(
+        signature, session_signature(key, expires, nonce, code))
 
 
 def pack_row(row):
@@ -94,11 +128,13 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
         '/': ('index.html', 'text/html; charset=utf-8'),
         '/editor': ('editor.html', 'text/html; charset=utf-8'),
         '/settings': ('settings.html', 'text/html; charset=utf-8'),
+        '/unlock': ('unlock.html', 'text/html; charset=utf-8'),
         '/app.css': ('app.css', 'text/css; charset=utf-8'),
         '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
         '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),
         '/locale.js': ('locale.js', 'text/javascript; charset=utf-8'),
         '/editor.js': ('editor.js', 'text/javascript; charset=utf-8'),
+        '/unlock.js': ('unlock.js', 'text/javascript; charset=utf-8'),
     }
     if wifi is not None:
         routes = {
@@ -113,7 +149,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
     admin_routes = {'/api/settings', '/api/setup-code', '/api/local-name', '/api/places', '/api/spotify/start',
                     '/api/spotify/finish', '/api/spotify/disconnect', '/api/layouts', '/api/layout-preview',
                     '/api/layout-library'}
-    allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {'/api/theme', '/api/language'}
+    allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {'/api/theme', '/api/language', '/api/unlock'}
 
     def panel_status():
         return {**state.status(), 'language': settings.values['language']}
@@ -126,7 +162,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
         def log_message(self, format, *args):
             pass
 
-        def reply(self, status, kind, body):
+        def reply(self, status, kind, body, headers=()):
             self.send_response(status)
             self.send_header('Content-Type', kind)
             self.send_header('Content-Length', str(len(body)))
@@ -134,19 +170,30 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Content-Security-Policy',
                              "default-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'")
+            for name, value in headers:
+                self.send_header(name, value)
             try:
                 self.end_headers()
                 self.wfile.write(body)
             except ConnectionError:
                 self.close_connection = True
 
-        def json(self, status, body):
-            self.reply(status, 'application/json', json.dumps(body).encode())
+        def json(self, status, body, headers=()):
+            self.reply(status, 'application/json', json.dumps(body).encode(), headers)
+
+        def setup_credentials(self):
+            supplied = self.headers.get('X-Setup-Code', '')
+            if supplied and settings.authorized(supplied):
+                return supplied
+            code = settings.code
+            if valid_session(self.headers.get('Cookie', ''), settings.session_key, code):
+                return code
+            return None
 
         def setup_access(self):
-            if settings.authorized(self.headers.get('X-Setup-Code', '')):
+            if self.setup_credentials() is not None:
                 return True
-            self.json(403, {'error': 'Check the device setup code.'})
+            self.json(403, {'error': BAD_CODE})
             return False
 
         def layout_png(self, screen, layout, size, *, layers=False):
@@ -185,7 +232,10 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 return
             path, _, query = self.path.partition('?')
             if path in site:
-                self.reply(200, *site[path])
+                if path in PROTECTED_PAGES and self.setup_credentials() is None:
+                    self.reply(302, 'text/plain', b'', [('Location', f'/unlock?next={path[1:]}')])
+                else:
+                    self.reply(200, *site[path])
             elif wifi is not None:
                 if path == '/api/wifi':
                     self.json(200, {'status': wifi.status, 'language': settings.values['language']})
@@ -240,8 +290,12 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     or (subnet is not None and ipaddress.IPv4Address(self.client_address[0]) not in subnet)):
                 self.json(403, {'error': 'Open the dashboard directly on the Pi.'})
                 return
-            if self.path in admin_routes and not self.setup_access():
-                return
+            code = None
+            if self.path in admin_routes:
+                code = self.setup_credentials()
+                if code is None:
+                    self.json(403, {'error': BAD_CODE})
+                    return
             try:
                 size = int(self.headers.get('Content-Length', '0'))
                 limit = MAX_LAYOUT_BYTES if self.path in LAYOUT_ROUTES else 8192
@@ -255,6 +309,14 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                         self.json(202, {'status': 'joining'})
                     else:
                         self.json(409, {'error': 'Wi-Fi setup is busy or the hotspot has already closed.'})
+                    return
+                if self.path == '/api/unlock':
+                    submitted = payload.get('code')
+                    if not isinstance(submitted, str) or not settings.authorized(submitted):
+                        self.json(403, {'error': BAD_CODE})
+                    else:
+                        cookie = session_cookie(settings.session_key, submitted)
+                        self.json(200, {}, [('Set-Cookie', cookie)])
                     return
                 if self.path == '/api/theme':
                     if payload.get('theme') not in THEMES:
@@ -271,10 +333,11 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     self.json(200, {'enabled': enabled, 'hostname': hostname, 'ipUrl': f'http://{authority}'})
                     return
                 if self.path == '/api/setup-code':
-                    if settings.change_code(self.headers.get('X-Setup-Code', ''), payload['newCode']):
-                        self.json(200, {})
+                    if settings.change_code(code, payload['newCode']):
+                        cookie = session_cookie(settings.session_key, payload['newCode'])
+                        self.json(200, {}, [('Set-Cookie', cookie)])
                     else:
-                        self.json(403, {'error': 'Check the device setup code.'})
+                        self.json(403, {'error': BAD_CODE})
                     return
                 if self.path == '/api/layouts':
                     screen = payload['screen']

@@ -100,6 +100,7 @@ with TemporaryDirectory() as folder:
     try:
         assert b'Set up Wi-Fi' in request('/')[1]
         assert request('/screen.png')[0] == request('/api/settings')[0] == 404
+        assert request('/unlock')[0] == request('/api/unlock', {'code': 'wrong'})[0] == 404
         assert hotspot.password.encode() not in request('/api/wifi')[1]
         assert request('/api/wifi', {'ssid': 'Home', 'password': 'abc12345'}, origin='http://other')[0] == 403
         assert request('/api/wifi', {'ssid': 'Home', 'password': 'short'})[0] == 400

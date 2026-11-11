@@ -21,9 +21,10 @@ You can also open `http://eink.local/` on the same network. To change the name o
 
 ### Build your own screens
 
-Open the pencil in the dashboard header to visit the full-page editor and enter the device setup code. The **Dashboard** and **Playback** tabs have separate layouts. Drag an icon onto the canvas, or click it to add the widget. Drag a layer on the canvas to move it and pull a widget corner to resize it. Hold **Shift** while resizing to change width and height independently. **Snap** aligns layers with the screen center and edges or with nearby layers. The inspector also supports exact pixel positions and sizes.
+Open the pencil in the dashboard header to visit the full-page editor. One sign-in with the device setup code unlocks the editor and Settings in the same browser. The **Dashboard** and **Playback** tabs have separate layouts. Drag an icon onto the canvas, or click it to add the widget. Drag a layer on the canvas to move it and pull a widget corner to resize it. Hold **Shift** while resizing to change width and height independently. **Snap** aligns layers with the screen center and edges or with nearby layers. The inspector also supports exact pixel positions and sizes.
 
-- Clocks include 12-hour and 24-hour formats, seconds, stacked digits, an analog face, and custom patterns such as `HH.mm.ss` or `h:mm A`. Use brackets for literal text, as in `[Time] HH:mm`. You can also add the date, your own text, or a divider.
+- Clocks include 12-hour and 24-hour formats, seconds, stacked digits, an analog face, and custom patterns such as `HH.mm.ss` or `h:mm A`. Use brackets for literal text, as in `[Time] HH:mm`. You can also add your own text or a divider.
+- Dates include localized weekday and month names, ISO, dotted and slash formats, or a custom pattern such as `[Today] dddd, D MMMM YYYY`.
 - Weather can show only the icon, only the temperature, or both side by side or stacked.
 - Playback can show album art, track and artist text, a progress indicator, or elapsed and remaining time.
 

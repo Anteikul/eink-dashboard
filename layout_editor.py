@@ -21,6 +21,16 @@ WRAPPING = (('wrapped', 'Wrapped'), ('single', 'Single line'))
 PIXEL_BITS = bytes([0] + [1] * 255)
 TIME_TOKENS = re.compile(r'\[([^\[\]]*)\]|HH|hh|mm|MM|ss|SS|H|h|m|s|A|a')
 SECONDS_TOKENS = ('s', 'ss', 'SS')
+DATE_TOKENS = re.compile(r'\[([^\[\]]*)\]|YYYY|yyyy|YY|yy|MMMM|MMM|MM|M|dddd|ddd|dd|DD|d|D')
+CUSTOM_FORMATS = {'clock': 'HH:mm', 'date': 'DD.MM.YYYY'}
+DATE_FORMATS = {
+    'dotted': ('Dotted (09.11.2026)', 'DD.MM.YYYY'),
+    'dotted-short-year': ('Short year (09.11.26)', 'DD.MM.YY'),
+    'day-first': ('Day first (09/11/2026)', 'DD/MM/YYYY'),
+    'month-first': ('Month first (11/09/2026)', 'MM/DD/YYYY'),
+    'month-name': ('Abbreviated month', 'D MMM YYYY'),
+    'day-month': ('Day and month (9. 11.)', 'D. M.'),
+}
 WEEKDAYS_LONG = {
     'en': ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'),
     'cs': ('pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota', 'neděle'),
@@ -31,12 +41,13 @@ MONTHS_LONG = {
     'cs': ('ledna', 'února', 'března', 'dubna', 'května', 'června', 'července',
            'srpna', 'září', 'října', 'listopadu', 'prosince'),
 }
+MONTHS_SHORT_CS = ('led', 'úno', 'bře', 'dub', 'kvě', 'čer', 'čvc', 'srp', 'zář', 'říj', 'lis', 'pro')
 
 
 def _definition(kind, label, variants, box, *, size=16, face='regular', align='left',
                 text='', text_style=True):
     x, y, w, h = box
-    return {
+    definition = {
         'type': kind,
         'label': label,
         'variants': [{'value': value, 'label': name} for value, name in variants],
@@ -44,6 +55,9 @@ def _definition(kind, label, variants, box, *, size=16, face='regular', align='l
                      'size': size, 'font': face, 'align': align, 'text': text},
         'textStyle': text_style,
     }
+    if kind in CUSTOM_FORMATS:
+        definition['customFormat'] = CUSTOM_FORMATS[kind]
+    return definition
 
 
 COMMON = (
@@ -51,7 +65,9 @@ COMMON = (
                                    ('seconds', 'With seconds'), ('stacked', 'Stacked'),
                                    ('analog', 'Analog'), ('custom', 'Custom format')),
                 (10, 25, 146, 54), size=47, face='mono'),
-    _definition('date', 'Date', (('short', 'Short'), ('long', 'Long'), ('iso', 'ISO')),
+    _definition('date', 'Date', (('short', 'Short'), ('long', 'Long'), ('iso', 'ISO'),
+                                 *((variant, label) for variant, (label, _) in DATE_FORMATS.items()),
+                                 ('custom', 'Custom format')),
                 (12, 77, 146, 24), size=14),
     _definition('weather', 'Weather', (('icon-left', 'Icon left'), ('icon-right', 'Icon right'),
                                        ('icon-above', 'Icon above'), ('icon-below', 'Icon below'),
@@ -189,11 +205,14 @@ def validate_layout(screen, layout, size=PANEL_SIZE):
             if type(thickness) is not int or not 1 <= thickness <= MAX_DIMENSION:
                 raise ValueError('Choose a valid divider thickness.')
             widget['thickness'] = thickness
-        if widget['type'] == 'clock' and (widget['variant'] == 'custom' or 'format' in supplied):
-            pattern = supplied.get('format', 'HH:mm')
+        custom_format = definition.get('customFormat')
+        if custom_format and (widget['variant'] == 'custom' or 'format' in supplied):
+            pattern = supplied.get('format', custom_format)
             if (not isinstance(pattern, str) or not 1 <= len(pattern) <= 64
                     or not pattern.isprintable() or not pattern.strip()):
-                raise ValueError('Enter a time format with 1–64 characters.')
+                message = ('Enter a date format with 1–64 characters.' if widget['type'] == 'date'
+                           else 'Enter a time format with 1–64 characters.')
+                raise ValueError(message)
             widget['format'] = pattern
         if 'mask' in supplied:
             mask = supplied['mask']
@@ -238,7 +257,28 @@ def resize_layout(layout, source_size, target_size):
     return [resize_layer(layer, source_size, target_size) for layer in layout]
 
 
-def _date(now, variant, language):
+def format_date(now, pattern, language):
+    from dashboard import MONTHS, WEEKDAYS, WEEKDAYS_CS
+
+    weekday, month = now.weekday(), now.month - 1
+    short_days, short_months = (WEEKDAYS_CS, MONTHS_SHORT_CS) if language == 'cs' else (WEEKDAYS, MONTHS)
+    values = {
+        'YYYY': f'{now.year:04}', 'YY': f'{now.year % 100:02}',
+        'MMMM': MONTHS_LONG[language][month], 'MMM': short_months[month],
+        'MM': f'{now.month:02}', 'M': str(now.month),
+        'dddd': WEEKDAYS_LONG[language][weekday], 'ddd': short_days[weekday],
+        'DD': f'{now.day:02}', 'D': str(now.day),
+    }
+    values.update(yyyy=values['YYYY'], yy=values['YY'], dd=values['DD'], d=values['D'])
+    return DATE_TOKENS.sub(lambda match: match[1] if match[1] is not None else values[match[0]], pattern)
+
+
+def _date(now, widget, language):
+    variant = widget['variant']
+    if variant == 'custom':
+        return format_date(now, widget.get('format', CUSTOM_FORMATS['date']), language)
+    if variant in DATE_FORMATS:
+        return format_date(now, DATE_FORMATS[variant][1], language)
     if variant == 'iso':
         return now.date().isoformat()
     if variant == 'short':
@@ -330,7 +370,7 @@ def _widget_content(widget, now, weather, track, cover, progress, duration_ms, u
     if kind == 'clock':
         return _clock(now, widget)
     if kind == 'date':
-        return _date(now, variant, language)
+        return _date(now, widget, language)
     if kind == 'weather':
         return _temperature_and_icon(now, variant, weather, units, language) if weather_enabled else None
     if kind == 'text':

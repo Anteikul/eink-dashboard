@@ -1,9 +1,9 @@
-const unlockForm = document.querySelector('#unlock-form');
 const deviceForm = document.querySelector('#device-form');
 const spotifyForm = document.querySelector('#spotify-form');
 const finishForm = document.querySelector('#spotify-finish');
 const setupFields = document.querySelector('#setup-fields');
 const setupStatus = document.querySelector('#setup-status');
+const signIn = document.querySelector('#settings-sign-in');
 const deviceStatus = document.querySelector('#device-status');
 const spotifyActionStatus = document.querySelector('#spotify-action-status');
 const city = document.querySelector('#city');
@@ -16,7 +16,6 @@ const localName = document.querySelector('#local-name');
 const localHostname = document.querySelector('#local-hostname');
 const localNameForm = document.querySelector('#local-name-form');
 const localNameStatus = document.querySelector('#local-name-status');
-let setupCode = '';
 let foundPlaces = [];
 let selectedPlace = -1;
 let placeTimer;
@@ -39,16 +38,22 @@ languageSelect.addEventListener('change', async () => {
 });
 
 async function api(path, payload, signal) {
-  const headers = {'X-Setup-Code': setupCode};
-  const options = {headers, signal};
+  const options = {signal};
   if (payload !== undefined) {
     options.method = 'POST';
-    headers['Content-Type'] = 'application/json';
+    options.headers = {'Content-Type': 'application/json'};
     options.body = JSON.stringify(payload);
   }
   const response = await fetch(path, options);
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Could not load settings.');
+  if (!response.ok) {
+    if (data.error === 'Check the device setup code.') {
+      signIn.hidden = false;
+      throw new Error('Sign in again to continue.');
+    }
+    throw new Error(data.error || 'Could not load settings.');
+  }
+  if (path !== '/api/state' && path !== '/api/language') signIn.hidden = true;
   return data;
 }
 
@@ -111,18 +116,6 @@ localNameForm.addEventListener('submit', async (event) => {
   } finally {
     button.disabled = false;
   }
-});
-
-unlockForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  action(async () => {
-    setupCode = document.querySelector('#setup-code').value.trim();
-    showSettings(await api('/api/settings'));
-    unlockForm.reset();
-    unlockForm.hidden = true;
-    setupFields.hidden = false;
-    city.focus();
-  });
 });
 
 function clearPlaces() {
@@ -262,7 +255,6 @@ setupCodeForm.addEventListener('submit', async (event) => {
   setText(setupCodeStatus, '');
   try {
     await api('/api/setup-code', {newCode});
-    setupCode = newCode;
     setupCodeForm.reset();
     setText(setupCodeStatus, 'Setup code changed.');
   } catch (error) {
@@ -276,3 +268,8 @@ api('/api/state').then(data => {
   applyLanguage(data.language);
   document.documentElement.dataset.theme = data.appliedTheme || data.theme;
 }).catch(error => setText(document.querySelector('#language-status'), error.message));
+
+action(async () => {
+  showSettings(await api('/api/settings'));
+  setupFields.hidden = false;
+});

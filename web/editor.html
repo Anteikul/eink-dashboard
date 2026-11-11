@@ -17,14 +17,11 @@
       </a>
       <h1 data-i18n>Edit layouts</h1>
     </header>
-    <form id="editor-unlock" class="setup-form" hidden>
-      <label for="editor-code" data-i18n>Setup code</label>
-      <div class="setup-row">
-        <input id="editor-code" type="password" autocomplete="off" required>
-        <button type="submit" data-i18n>Unlock</button>
-      </div>
-    </form>
     <p id="editor-access-status" class="editor-message" role="status"></p>
+    <div id="editor-access-actions" class="access-actions" hidden>
+      <a id="editor-sign-in" href="/unlock?next=editor" target="_blank" rel="noopener" data-i18n hidden>Sign in again</a>
+      <button id="editor-access-retry" type="button" data-i18n>Try again</button>
+    </div>
     <div id="editor-content" hidden>
       <div class="editor-topbar">
         <div class="editor-tabs" role="tablist" aria-label="Layouts" data-i18n-attributes="aria-label">
@@ -209,9 +206,9 @@
                   </div>
                 </details>
                 <label id="editor-variant-label" data-i18n>Variant<select data-property="variant"></select></label>
-                <div id="editor-clock-format" hidden>
-                  <label data-i18n>Time format<input type="text" data-property="format" maxlength="64" spellcheck="false" autocomplete="off" aria-describedby="editor-clock-format-help"></label>
-                  <p id="editor-clock-format-help" data-i18n>Use HH:mm for 24-hour time, h:mm A for AM/PM, and ss for seconds. Put literal text in [brackets].</p>
+                <div id="editor-format" hidden>
+                  <label><span id="editor-format-label"></span><input type="text" data-property="format" maxlength="64" spellcheck="false" autocomplete="off" aria-describedby="editor-format-help"></label>
+                  <p id="editor-format-help"></p>
                 </div>
                 <div id="editor-text-style" class="editor-text-style">
                   <label data-i18n>Font<select data-property="font"><option value="regular" data-i18n>Regular</option><option value="bold" data-i18n>Bold</option><option value="mono" data-i18n>Monospace</option><option value="mono-bold" data-i18n>Bold monospace</option></select></label>

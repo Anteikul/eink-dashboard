@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · E‑ink</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/locale.js" defer></script>
+  <script src="/unlock.js" defer></script>
+</head>
+<body>
+  <main class="unlock-page">
+    <a class="editor-back editor-icon unlock-back" href="/" aria-label="Back to display" data-i18n-attributes="aria-label">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7"/></svg>
+    </a>
+    <form id="unlock-form" class="setup-form unlock-form" method="post" action="/api/unlock">
+      <h1 data-i18n>Sign in</h1>
+      <label for="unlock-code" data-i18n>Password</label>
+      <input id="unlock-code" name="code" type="password" autocomplete="current-password" maxlength="64" required autofocus>
+      <button type="submit" data-i18n>Unlock</button>
+      <p id="unlock-status" role="status"></p>
+    </form>
+  </main>
+</body>
+</html>

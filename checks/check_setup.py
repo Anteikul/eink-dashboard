@@ -1,14 +1,15 @@
 import io
 import json
+from http.cookiejar import CookieJar
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlencode, urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener, urlopen
 from unittest.mock import patch
 
-from control import PanelState, start_server
+from control import SESSION_AGE, PanelState, start_server, valid_session
 from dashboard import Weather, render, screen_content
 from datetime import datetime
 from device_settings import DEFAULTS, DeviceSettings, REDIRECT_URI, SPOTIFY_SCOPE
@@ -36,15 +37,53 @@ with TemporaryDirectory() as folder:
         except HTTPError as error:
             return error.code, json.load(error) if error.headers.get_content_type() == 'application/json' else None
 
+    class NoRedirect(HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    cookie_jar = CookieJar()
+    browser = build_opener(HTTPCookieProcessor(cookie_jar))
+    password_headers = {'Content-Type': 'application/json', 'Origin': base}
+
+    def post_from_browser(path, data, headers=password_headers):
+        return browser.open(Request(base + path, data=json.dumps(data).encode(), headers=headers), timeout=5)
+
     try:
         with urlopen(base) as response:
             html = response.read().decode()
         assert 'data-theme="light"' in html and 'href="/settings"' in html and '<dialog' not in html
         assert 'id="device-form"' not in html
-        with urlopen(base + '/settings') as response:
+        sign_in_pages = []
+        for destination in ('settings', 'editor'):
+            try:
+                build_opener(NoRedirect()).open(base + '/' + destination)
+            except HTTPError as error:
+                assert error.code == 302 and error.headers['Location'] == '/unlock?next=' + destination
+            else:
+                raise AssertionError('Protected page opened without authentication')
+            with browser.open(base + '/' + destination) as response:
+                sign_in_pages.append(response.read())
+        assert sign_in_pages[0] == sign_in_pages[1] and b'id="unlock-code"' in sign_in_pages[0]
+        assert get('/api/unlock', {'code': 'wrong'}, code='')[0] == 403
+        assert get('/api/unlock', {'code': settings.code}, code='', origin='http://other.example')[0] == 403
+        with post_from_browser('/api/unlock', {'code': settings.code}) as response:
+            assert response.status == 200
+            cookie = response.headers['Set-Cookie']
+            assert all(attr in cookie for attr in ('HttpOnly', 'SameSite=Strict', 'Path=/'))
+        session_header = cookie.split(';', 1)[0]
+        restarted = DeviceSettings(root)
+        assert (root / '.web-session-key').stat().st_mode & 0o777 == 0o600
+        assert valid_session(session_header, restarted.session_key, restarted.code)
+        with patch('control.time.time', return_value=int(session_header.split('=')[1].split('.')[0]) + SESSION_AGE):
+            assert not valid_session(session_header, restarted.session_key, restarted.code)
+        with browser.open(base + '/settings') as response:
             page = response.read().decode()
-        assert 'id="device-form"' in page and 'href="/"' in page
-        assert 'name="weather_interval"' in page and 'name="playing_interval"' in page
+            assert 'id="device-form"' in page and 'href="/"' in page
+            assert 'name="weather_interval"' in page and 'name="playing_interval"' in page
+        with browser.open(base + '/editor') as response:
+            assert b'id="layout-editor"' in response.read()
+        with browser.open(base + '/api/layouts') as response:
+            assert response.status == 200
         alias = f'eink.local:{server.server_port}'
         alias_origin = f'http://{alias}'
         assert get('/api/state', host=alias)[0] == 200
@@ -124,7 +163,16 @@ with TemporaryDirectory() as folder:
         original_code = settings.code
         assert get('/api/setup-code', {'newCode': 'short'})[0] == 400
         assert get('/api/setup-code', {'newCode': 'new-setup-code'}, code='wrong')[0] == 403
-        assert get('/api/setup-code', {'newCode': 'new-setup-code'}) == (200, {})
+        with post_from_browser('/api/setup-code', {'newCode': 'new-setup-code'}) as response:
+            assert response.status == 200 and response.headers['Set-Cookie'] != cookie
+        with browser.open(base + '/api/settings') as response:
+            assert response.status == 200
+        try:
+            urlopen(Request(base + '/api/settings', headers={'Cookie': session_header}))
+        except HTTPError as error:
+            assert error.code == 403
+        else:
+            raise AssertionError('Old session survived a setup code change')
         assert get('/api/settings', code=original_code)[0] == 403
         assert get('/api/settings', code='new-setup-code')[0] == 200
         assert DeviceSettings(root).code == 'new-setup-code'

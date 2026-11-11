@@ -2,9 +2,10 @@
   const element = (id) => document.getElementById(id);
   const editor = element('layout-editor');
   const back = element('editor-back');
-  const unlock = element('editor-unlock');
-  const codeField = element('editor-code');
   const accessStatus = element('editor-access-status');
+  const accessActions = element('editor-access-actions');
+  const accessRetry = element('editor-access-retry');
+  const signIn = element('editor-sign-in');
   const content = element('editor-content');
   const panel = element('editor-panel');
   const tabs = [...editor.querySelectorAll('[role=tab]')];
@@ -86,7 +87,6 @@
   const badCode = 'Check the device setup code.';
 
   let schema;
-  let setupCode = '';
   let screen = 'dashboard';
   let hitboxes = [];
   let widgetButtons = [];
@@ -148,11 +148,10 @@
     return svg;
   }
 
-  async function request(path, {code = setupCode, payload, signal, fallback} = {}) {
-    const headers = {'X-Setup-Code': code};
-    const options = {headers, signal};
+  async function request(path, {payload, signal, fallback} = {}) {
+    const options = {signal};
     if (payload !== undefined) {
-      headers['Content-Type'] = 'application/json';
+      options.headers = {'Content-Type': 'application/json'};
       options.method = 'POST';
       options.body = JSON.stringify(payload);
     }
@@ -234,7 +233,15 @@
     element('editor-variant-label').hidden = item.variants.length === 0;
     element('editor-text-style').hidden = !textStyle;
     element('editor-text-label').hidden = widget.type !== 'text';
-    element('editor-clock-format').hidden = widget.type !== 'clock' || widget.variant !== 'custom';
+    const customFormat = item.customFormat && widget.variant === 'custom';
+    element('editor-format').hidden = !customFormat;
+    if (customFormat) {
+      const isDate = widget.type === 'date';
+      setText(element('editor-format-label'), isDate ? 'Date format' : 'Time format');
+      setText(element('editor-format-help'), isDate
+        ? 'Use DD.MM.YYYY for numbers, MMM for the short month, dddd for the weekday, and [brackets] for literal text.'
+        : 'Use HH:mm for 24-hour time, h:mm A for AM/PM, and ss for seconds. Put literal text in [brackets].');
+    }
 
     if (fields.variant.dataset.type !== widget.type) {
       fields.variant.replaceChildren(...item.variants.map(variant =>
@@ -540,14 +547,11 @@
     previewController = undefined;
   }
 
-  function askForCode(message) {
-    setLibraryVisible(false);
-    stopPreview();
-    clearPreview();
-    content.hidden = true;
-    unlock.hidden = false;
-    setText(accessStatus, message);
-    codeField.focus();
+  function showAccessError(message) {
+    const expired = message === badCode;
+    accessActions.hidden = false;
+    signIn.hidden = !expired;
+    setText(accessStatus, expired ? 'Sign in again, then retry here.' : message);
   }
 
   function schedulePreview(delay = 160) {
@@ -555,13 +559,12 @@
     retry.hidden = true;
     setText(previewStatus, '');
     const payload = {screen, layout: widgets(), layers: true, displaySize: displaySize()};
-    const code = setupCode;
     const controller = new AbortController();
     previewController = controller;
     previewTimer = setTimeout(async () => {
       try {
         const response = await request('/api/layout-preview', {
-          code, payload, signal: controller.signal, fallback: 'Could not load the sample preview.',
+          payload, signal: controller.signal, fallback: 'Could not load the sample preview.',
         });
         const blob = await response.blob();
         if (controller.signal.aborted || previewController !== controller) return;
@@ -580,7 +583,7 @@
       } catch (error) {
         if (controller.signal.aborted || previewController !== controller) return;
         if (error.message === badCode) {
-          askForCode(error.message);
+          showAccessError(error.message);
           return;
         }
         setText(previewStatus, error instanceof TypeError ? 'The Pi did not respond.' : error.message);
@@ -739,7 +742,7 @@
 
   function reportLibraryError(error) {
     const message = error instanceof TypeError ? 'The Pi did not respond.' : error.message;
-    if (message === badCode) askForCode(message);
+    if (message === badCode) showAccessError(message);
     else setText(libraryStatus, message);
   }
 
@@ -837,16 +840,15 @@
     }
   }
 
-  async function loadLayouts(code) {
+  async function loadLayouts() {
     loadController?.abort();
     const controller = new AbortController();
     loadController = controller;
-    const unlockButton = unlock.querySelector('button');
-    unlockButton.disabled = true;
+    accessRetry.disabled = true;
     setText(accessStatus, 'Loading layouts…');
     try {
       const response = await request('/api/layouts', {
-        code, signal: controller.signal, fallback: 'Could not load the layouts.',
+        signal: controller.signal, fallback: 'Could not load the layouts.',
       });
       const data = await response.json();
       if (controller.signal.aborted) return;
@@ -870,21 +872,19 @@
       stage.style.aspectRatio = data.width + ' / ' + data.height;
       editor.style.setProperty('--display-ratio', data.width / data.height);
       element('editor-resolution').textContent = data.width + ' × ' + data.height + ' px';
-      setupCode = code;
       for (const draft of Object.values(drafts)) {
         if (draft.message === badCode) draft.message = '';
       }
-      unlock.reset();
-      unlock.hidden = true;
+      accessActions.hidden = true;
       content.hidden = false;
       setText(accessStatus, '');
       showScreen();
       tabs.find(tab => tab.dataset.screen === screen).focus();
     } catch (error) {
       if (controller.signal.aborted) return;
-      askForCode(error instanceof TypeError ? 'The Pi did not respond.' : error.message);
+      showAccessError(error instanceof TypeError ? 'The Pi did not respond.' : error.message);
     } finally {
-      if (loadController === controller) unlockButton.disabled = false;
+      if (loadController === controller) accessRetry.disabled = false;
     }
   }
 
@@ -1297,12 +1297,7 @@
     event.returnValue = '';
   });
 
-  unlock.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const code = codeField.value.trim();
-    if (code) loadLayouts(code);
-    else setText(accessStatus, badCode);
-  });
+  accessRetry.addEventListener('click', loadLayouts);
 
   for (const [index, tab] of tabs.entries()) {
     tab.addEventListener('click', () => {
@@ -1602,14 +1597,15 @@
     const name = field.dataset.property;
     if (!name || name === 'text') return;
     const widget = layers()[current().selection];
-    if (widget?.type === 'clock') {
+    const customFormat = widget && definition(widget.type)?.customFormat;
+    if (customFormat) {
       if (name === 'format') {
-        if (!field.value.trim()) field.value = 'HH:mm';
+        if (!field.value.trim()) field.value = customFormat;
         editWidget({format: field.value});
         return;
       }
       if (name === 'variant' && field.value === 'custom') {
-        editWidget({variant: 'custom', format: widget.format ?? 'HH:mm'});
+        editWidget({variant: 'custom', format: widget.format ?? customFormat});
         return;
       }
     }
@@ -1760,19 +1756,18 @@
     const draft = current();
     if (!hasChanges(draft) || savingScreen || librarySelection || drag || paletteDrag || layerDrag) return;
     const payload = {screen, layout: draft.layout, displaySize: displaySize()};
-    const code = setupCode;
     savingScreen = screen;
     draft.message = 'Saving layout…';
     updateStatus();
     try {
-      const response = await request('/api/layouts', {code, payload, fallback: 'Could not save the layout.'});
+      const response = await request('/api/layouts', {payload, fallback: 'Could not save the layout.'});
       const data = await response.json();
       if (draft.layout === payload.layout) draft.layout = data.layout;
       draft.saved = data.layout;
       draft.message = 'Layout saved. The display will refresh shortly.';
     } catch (error) {
       draft.message = error instanceof TypeError ? 'The Pi did not respond.' : error.message;
-      if (code === setupCode && draft.message === badCode) askForCode(draft.message);
+      if (draft.message === badCode) showAccessError(draft.message);
     } finally {
       savingScreen = undefined;
       updateStatus();
@@ -1801,7 +1796,7 @@
     schedulePreview();
   }).observe(document.documentElement, {attributeOldValue: true, attributeFilter: ['lang', 'data-theme']});
 
-  askForCode('');
+  loadLayouts();
   fetch('/api/state').then(response => response.ok ? response.json() : null).then(data => {
     if (!data) return;
     document.documentElement.dataset.theme = data.theme;

@@ -27,14 +27,8 @@
     </div>
     <section class="setup" aria-labelledby="setup-title">
       <h2 id="setup-title" data-i18n>Device setup</h2>
-      <form id="unlock-form" class="setup-form">
-        <label for="setup-code" data-i18n>Setup code</label>
-        <div class="setup-row">
-          <input id="setup-code" type="password" autocomplete="off" required>
-          <button type="submit" data-i18n>Unlock</button>
-        </div>
-      </form>
       <p id="setup-status" role="status" data-i18n></p>
+      <a id="settings-sign-in" href="/unlock?next=settings" target="_blank" rel="noopener" data-i18n hidden>Sign in again</a>
       <div id="setup-fields" hidden>
         <form id="device-form" class="setup-form">
           <div class="settings-cards">

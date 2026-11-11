@@ -12,7 +12,7 @@ from PIL import Image
 from control import PanelState, start_server
 from dashboard import fit_panel, pack
 from device_settings import DeviceSettings
-from layout_editor import clock_has_seconds, content_key, format_clock
+from layout_editor import clock_has_seconds, content_key, format_clock, format_date
 
 
 with TemporaryDirectory() as folder:
@@ -215,6 +215,23 @@ with TemporaryDirectory() as folder:
         assert clock_has_seconds(custom_clock)
         assert not clock_has_seconds({**custom_clock, 'format': 'HH:mm [ss]'})
         assert content_key([custom_clock], now, None, None, None, 0) == ('14.08.07',)
+        date = schema['defaults']['dashboard'][1]
+        day = now.replace(day=9)
+        for variant, expected in {
+            'dotted': '09.11.2026', 'dotted-short-year': '09.11.26',
+            'day-first': '09/11/2026', 'month-first': '11/09/2026',
+            'month-name': '9 lis 2026', 'day-month': '9. 11.',
+        }.items():
+            assert content_key([{**date, 'variant': variant}], day, None, None, None, 0,
+                               language='cs') == (expected,)
+        pattern = '[Dnes] dddd d. MMMM yyyy'
+        assert format_date(day, pattern, 'cs') == 'Dnes pondělí 9. listopadu 2026'
+        assert format_date(day, 'ddd, MMM DD YY', 'en') == 'Mon, Nov 09 26'
+        custom_date = {**date, 'variant': 'custom', 'format': pattern}
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [custom_date]})[0] == 200
+        assert DeviceSettings(root).layouts['dashboard'] == [custom_date]
+        assert request('/api/layout-preview', {'screen': 'dashboard',
+                       'layout': [{**custom_date, 'format': ' '}]})[0] == 400
         layout = [custom_clock, dot]
         assert request('/api/layouts', {'screen': 'dashboard', 'layout': layout})[0] == 200
         assert request('/api/layout-preview', {'screen': 'dashboard',
