@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageOps
 from control import PanelState, start_server
 from dashboard import fit_panel, pack
 from device_settings import DeviceSettings
-from layout_editor import clock_has_seconds, content_key, format_clock, format_date
+from layout_editor import clock_has_seconds, content_key, format_clock, format_date, render_custom
 
 
 with TemporaryDirectory() as folder:
@@ -265,6 +265,26 @@ with TemporaryDirectory() as folder:
         assert settings.get_layout_library('dashboard', 'Starší')['layout'] == custom
 
         now = datetime(2026, 11, 10, 14, 8, 7)
+        temperature = next(option['template'] for option in schema['widgets']['dashboard']
+                           if option['type'] == 'weather')
+        temperature = {**temperature, 'variant': 'temperature-only', 'font': 'bold', 'align': 'center',
+                       'placement': {'x': 194, 'y': 93, 'scaleX': 46 / 66, 'scaleY': .75}}
+
+        def temperature_bounds(widget, degrees, units='celsius'):
+            pixels = render_custom([widget], now, 'dark', 'en', weather=(degrees, 2, True), units=units)
+            return Image.frombytes('L', (250, 122), bytes(bit * 255 for bit in pixels)).getbbox()
+
+        preview_bounds = temperature_bounds(temperature, 16)
+        live_bounds = temperature_bounds(temperature, 5)
+        assert preview_bounds[0] == 194 and live_bounds[0] > preview_bounds[0]
+        assert abs(live_bounds[0] + live_bounds[2] - preview_bounds[0] - preview_bounds[2]) <= 1
+        placement = {**temperature['placement'], 'referenceWidth': preview_bounds[2] - preview_bounds[0]}
+        centered = {**temperature, 'placement': placement}
+        assert temperature_bounds(centered, 5) == live_bounds
+        right = {**centered, 'align': 'right'}
+        assert temperature_bounds(right, 5)[2] == temperature_bounds(right, 16)[2]
+        assert request('/api/layouts', {'screen': 'dashboard', 'layout': [centered]})[0] == 200
+        assert DeviceSettings(root).layouts['dashboard'] == [centered]
         assert format_clock(now, 'HH.MM.SS / h:mm a [čas]') == '14.08.07 / 2:08 pm čas'
         assert format_clock(now.replace(hour=0), 'H / hh:mm A') == '0 / 12:08 AM'
         custom_clock = {**clock, 'variant': 'custom', 'format': 'HH.mm.ss'}

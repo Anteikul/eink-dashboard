@@ -164,7 +164,13 @@ def _validate_placement(placement, size):
     if any(type(scale) not in (int, float) or not 1 / MAX_DIMENSION <= scale <= MAX_DIMENSION
            for scale in scales.values()):
         raise ValueError('Keep each widget inside the display.')
-    return {'x': x, 'y': y, **scales}
+    normalized = {'x': x, 'y': y, **scales}
+    if 'referenceWidth' in placement:
+        width = placement['referenceWidth']
+        if type(width) is not int or not 1 <= width <= size[0] - x:
+            raise ValueError('Keep each widget inside the display.')
+        normalized['referenceWidth'] = width
+    return normalized
 
 
 def _validate_bitmap(bitmap, w, h):
@@ -290,6 +296,9 @@ def resize_layer(layer, source_size, target_size):
             resized['placement'] = {**placement,
                                     'x': min(target_w - 1, round(placement['x'] * scale_x)),
                                     'y': min(target_h - 1, round(placement['y'] * scale_y))}
+            if 'referenceWidth' in placement:
+                available = target_w - resized['placement']['x']
+                resized['placement']['referenceWidth'] = min(available, max(1, round(placement['referenceWidth'] * scale_x)))
         if layer['type'] == 'divider':
             scale, limit = (scale_x, width) if layer['variant'] == 'vertical' else (scale_y, height)
             thickness = min(limit, max(1, round(layer.get('thickness', 1) * scale)))
@@ -388,6 +397,10 @@ def _clock(now, widget):
     if style == 'stacked':
         return tuple(format_clock(now, line) for line in _stack_clock_pattern(pattern))
     return format_clock(now, pattern)
+
+
+def preview_weather(units):
+    return (61 if units == 'fahrenheit' else 16, 2, True)
 
 
 def _temperature_and_icon(now, variant, weather, units, language):
@@ -717,6 +730,36 @@ def _source_bounds(layer, offset, opaque):
     return offset[0] + left, offset[1] + top, right - left, bottom - top
 
 
+@lru_cache(maxsize=32)
+def _weather_sample_width(w, h, variant, font, size, align, value):
+    mask = Image.new('1', (w, h))
+    _draw_weather(mask, {'variant': variant, 'font': font, 'size': size, 'align': align}, value)
+    bounds = mask.getbbox()
+    return bounds[2] - bounds[0] if bounds else w
+
+
+def _scaled_extent(length, scale, limit):
+    return min(limit, max(1, floor(length * scale + .5)))
+
+
+def _placement_left(widget, width, limit, now, units, language):
+    placement = widget['placement']
+    x = placement['x']
+    align = widget['align']
+    if align == 'left':
+        return min(x, limit - width)
+    reference = placement.get('referenceWidth')
+    if reference is None and widget['type'] == 'weather':
+        # Older placements stored the left edge measured with the editor's sample weather.
+        sample = _temperature_and_icon(now, widget['variant'], preview_weather(units), units, language)
+        sample_width = _weather_sample_width(widget['w'], widget['h'], widget['variant'], widget['font'],
+                                             widget['size'], align, sample)
+        reference = _scaled_extent(sample_width, placement['scaleX'], limit)
+    if reference is not None:
+        x += floor((reference - width) / (2 if align == 'center' else 1) + .5)
+    return max(0, min(x, limit - width))
+
+
 def render_custom(layout, now, theme, language, *, weather=None, units='celsius', track=None,
                   cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE, weather_enabled=True):
     """Draw widgets back to front, using their boxes to clip every layer."""
@@ -737,9 +780,10 @@ def render_custom(layout, now, theme, language, *, weather=None, units='celsius'
                 continue
             left, top, w, h = bounds
             left, top = left - dx, top - dy
-            width = min(size[0], max(1, floor(w * placement['scaleX'] + .5)))
-            height = min(size[1], max(1, floor(h * placement['scaleY'] + .5)))
-            position = min(placement['x'], size[0] - width), min(placement['y'], size[1] - height)
+            width = _scaled_extent(w, placement['scaleX'], size[0])
+            height = _scaled_extent(h, placement['scaleY'], size[1])
+            position = (_placement_left(widget, width, size[0], now, units, language),
+                        min(placement['y'], size[1] - height))
             layer = layer.crop((left, top, left + w, top + h)).resize((width, height), Image.Resampling.NEAREST)
         if opaque:
             alpha = layer.getchannel('A') if layer.mode == 'RGBA' else None

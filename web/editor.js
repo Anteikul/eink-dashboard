@@ -425,10 +425,12 @@
     if (!layer.type || layer.type === 'drawing') return layer;
     const source = sourceBounds(layer);
     if (!layer.placement) return {x: layer.x + source.x, y: layer.y + source.y, w: source.w, h: source.h};
-    const {x, y, scaleX, scaleY} = layer.placement;
+    const {x, y, scaleX, scaleY, referenceWidth} = layer.placement;
     const w = clamp(Math.round(source.w * scaleX), 1, schema.width);
     const h = clamp(Math.round(source.h * scaleY), 1, schema.height);
-    return {x: Math.min(x, schema.width - w), y: Math.min(y, schema.height - h), w, h};
+    const factor = {left: 0, center: .5, right: 1}[layer.align];
+    const left = x + Math.round(((referenceWidth ?? w) - w) * factor);
+    return {x: clamp(left, 0, schema.width - w), y: Math.min(y, schema.height - h), w, h};
   }
 
   function boxChange(layer, {x, y, w, h}) {
@@ -440,7 +442,7 @@
     const source = sourceBounds(layer);
     const scaleX = w === current.w ? layer.placement?.scaleX ?? 1 : w / source.w;
     const scaleY = h === current.h ? layer.placement?.scaleY ?? 1 : h / source.h;
-    return {placement: {x, y, scaleX, scaleY}};
+    return {placement: {x, y, scaleX, scaleY, referenceWidth: w}};
   }
 
   function compose() {
@@ -1825,7 +1827,16 @@
   });
   alignment.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-align]');
-    if (button && !drag && !paletteDrag && !layerDrag) editWidget({align: button.dataset.align});
+    const widget = layers()[current().selection];
+    if (!button || !widget || drag || paletteDrag || layerDrag) return;
+    const align = button.dataset.align;
+    const {placement} = widget;
+    const change = {align};
+    if (placement && (widget.align !== align || placement.referenceWidth === undefined)) {
+      const {x, w} = controlBounds(widget);
+      change.placement = {...placement, x, referenceWidth: w};
+    }
+    editWidget(change);
   });
   boldControl.addEventListener('click', () => {
     const layer = layers()[current().selection];

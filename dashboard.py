@@ -19,7 +19,9 @@ from zoneinfo import ZoneInfo
 
 from control import PanelState, preview_png, start_server
 from device_settings import DEFAULTS, DeviceSettings
-from layout_editor import PANEL_SIZE, clock_has_seconds, content_key, editor_schema, render_custom, render_layer_atlas
+from layout_editor import (
+    PANEL_SIZE, clock_has_seconds, content_key, editor_schema, preview_weather, render_custom, render_layer_atlas,
+)
 from local_name import LocalName
 from spotify_playback import SpotifyPlayback, Track
 from wifi_setup import AP_ADDRESS, Link, NetworkSetup
@@ -128,7 +130,7 @@ def render_layout_preview(screen, layout, theme, language, units, *, layers=Fals
     from music_screen import progress_pixels, render_music
 
     now = datetime(2026, 11, 10, 14, 38, 27)
-    weather = (16 if units == 'celsius' else 61, 2, True)
+    weather = preview_weather(units)
     music = screen == 'playback'
     sample = {'weather': weather, 'units': units, 'size': size, 'weather_enabled': weather_enabled}
     if music:
