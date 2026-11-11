@@ -36,6 +36,22 @@
       </div>
       <p class="track-link" id="track-link" hidden data-i18n><a rel="noreferrer" data-i18n>Open track in Spotify</a></p>
     </section>
+    <details id="saved-layouts" class="quick-layouts">
+      <summary data-i18n>Saved layouts</summary>
+      <fieldset id="quick-layout-options" aria-label="Saved layouts" data-i18n-attributes="aria-label" hidden disabled>
+        <section data-screen="dashboard" aria-labelledby="quick-dashboard-heading">
+          <h3 id="quick-dashboard-heading" data-i18n>Dashboard</h3>
+          <button type="button" data-layout="" data-i18n>Default layout</button>
+          <div data-saved-names></div>
+        </section>
+        <section data-screen="playback" aria-labelledby="quick-playback-heading">
+          <h3 id="quick-playback-heading" data-i18n>Playback</h3>
+          <button type="button" data-layout="" data-i18n>Default layout</button>
+          <div data-saved-names></div>
+        </section>
+      </fieldset>
+      <p id="quick-layout-status" role="status"></p>
+    </details>
     <section class="settings" aria-labelledby="display-mode-heading">
       <h2 id="display-mode-heading" data-i18n>Display mode</h2>
       <fieldset id="mode-controls" data-control="mode" aria-labelledby="display-mode-heading" disabled>

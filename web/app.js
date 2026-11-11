@@ -4,11 +4,16 @@ const status = document.querySelector('#status');
 const image = document.querySelector('#preview');
 const placeholder = document.querySelector('#placeholder');
 const trackLink = document.querySelector('#track-link');
+const layoutPicker = document.querySelector('#saved-layouts');
+const layoutOptions = document.querySelector('#quick-layout-options');
+const layoutStatus = document.querySelector('#quick-layout-status');
+const layoutSections = [...layoutOptions.querySelectorAll('[data-screen]')];
 let revision = null;
 let saving = false;
 let saveError = '';
 let reading = false;
 let change = 0;
+let loadingLayouts = false;
 
 image.addEventListener('load', () => {
   placeholder.hidden = true;
@@ -52,32 +57,109 @@ async function read() {
   }
 }
 
+async function request(path, payload, fallback) {
+  const options = payload === undefined ? undefined : {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  };
+  const response = await fetch(path, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || fallback);
+  return data;
+}
+
+function message(error) {
+  return error instanceof TypeError ? 'The Pi did not respond.' : error.message;
+}
+
+async function saveDisplay(path, payload, pending, fallback) {
+  saving = true;
+  change++;
+  saveError = '';
+  setText(status, pending);
+  try {
+    show(await request(path, payload, fallback));
+  } finally {
+    saving = false;
+  }
+}
+
 for (const button of buttons) {
   button.addEventListener('click', async () => {
     if (saving || button.getAttribute('aria-pressed') === 'true') return;
-    saving = true;
-    change++;
-    saveError = '';
     const key = button.closest('fieldset').dataset.control;
     const theme = key === 'theme';
-    setText(status, theme ? 'Saving theme…' : 'Switching display mode…');
     try {
-      const response = await fetch(theme ? '/api/theme' : '/api/display-mode', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({[key]: button.dataset[key]}),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      show(data);
+      await saveDisplay(theme ? '/api/theme' : '/api/display-mode', {[key]: button.dataset[key]},
+        theme ? 'Saving theme…' : 'Switching display mode…', 'Could not apply the change. Try again.');
     } catch (error) {
-      saveError = error instanceof TypeError ? 'The Pi did not respond.' : error.message;
+      saveError = message(error);
       setText(status, saveError);
-    } finally {
-      saving = false;
     }
   });
 }
 
+function reportLayoutError(error) {
+  if (error.message === 'Check the device setup code.') {
+    window.location.assign('/unlock?next=layouts');
+  } else {
+    setText(layoutStatus, message(error));
+  }
+}
+
+async function loadQuickLayouts() {
+  if (loadingLayouts) return;
+  loadingLayouts = true;
+  layoutOptions.hidden = true;
+  setText(layoutStatus, 'Loading layouts…');
+  try {
+    const lists = await Promise.all(layoutSections.map(section => request(
+      '/api/layout-library?' + new URLSearchParams({screen: section.dataset.screen}), undefined,
+      'Could not open the layout library.',
+    )));
+    for (const [index, section] of layoutSections.entries()) {
+      const buttons = lists[index].names.map(name => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.layout = name;
+        button.textContent = name;
+        return button;
+      });
+      section.querySelector('[data-saved-names]').replaceChildren(...buttons);
+    }
+    layoutOptions.hidden = false;
+    layoutOptions.disabled = false;
+    setText(layoutStatus, '');
+  } catch (error) {
+    reportLayoutError(error);
+  } finally {
+    loadingLayouts = false;
+  }
+}
+
+layoutPicker.addEventListener('toggle', () => {
+  if (layoutPicker.open) loadQuickLayouts();
+});
+
+layoutOptions.addEventListener('click', async event => {
+  const button = event.target.closest('button[data-layout]');
+  if (!button || saving) return;
+  const screen = button.closest('[data-screen]').dataset.screen;
+  layoutOptions.disabled = true;
+  setText(layoutStatus, '');
+  try {
+    await saveDisplay('/api/layout-library/apply', {screen, name: button.dataset.layout || null},
+      'Applying layout…', 'Could not apply the layout.');
+    setText(layoutStatus, 'Layout applied.');
+  } catch (error) {
+    setText(status, '');
+    reportLayoutError(error);
+  } finally {
+    layoutOptions.disabled = false;
+  }
+});
+
+if (window.location.hash === '#saved-layouts') layoutPicker.open = true;
 read();
 setInterval(read, 2000);

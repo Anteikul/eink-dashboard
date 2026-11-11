@@ -160,7 +160,8 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             for url, (filename, kind) in routes.items()}
     admin_routes = {'/api/settings', '/api/setup-code', '/api/password-protection', '/api/local-name', '/api/places', '/api/spotify/start',
                     '/api/spotify/finish', '/api/spotify/disconnect', '/api/layouts', '/api/layout-preview',
-                    '/api/layout-library', '/api/photo-import', '/api/spotify/check', '/api/update', '/api/update/install'}
+                    '/api/layout-library', '/api/layout-library/apply', '/api/photo-import', '/api/spotify/check',
+                    '/api/update', '/api/update/install'}
     allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {
         '/api/theme', '/api/display-mode', '/api/language', '/api/unlock',
     }
@@ -255,8 +256,9 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 if path in PROTECTED_PAGES and self.setup_credentials() is None:
                     self.reply(302, 'text/plain', b'', [('Location', f'/unlock?next={path[1:]}')])
                 elif path == '/unlock' and not settings.values['password_required']:
-                    next_page = parse_qs(query).get('next') == ['editor']
-                    self.reply(302, 'text/plain', b'', [('Location', '/editor' if next_page else '/settings')])
+                    next_page = parse_qs(query).get('next', [''])[0]
+                    destination = {'editor': '/editor', 'layouts': '/#saved-layouts'}.get(next_page, '/settings')
+                    self.reply(302, 'text/plain', b'', [('Location', destination)])
                 else:
                     self.reply(200, *site[path])
             elif wifi is not None:
@@ -396,6 +398,18 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     screen = payload['screen']
                     layout = settings.save_layout(screen, payload['layout'], expected_size=payload.get('displaySize'))
                     self.json(200, {'screen': screen, 'layout': layout})
+                    return
+                if self.path == '/api/layout-library/apply':
+                    screen, name = payload['screen'], payload['name']
+                    size = settings.layout_state[0]
+                    try:
+                        layout = settings.get_layout_library(screen, name, size=size)['layout'] if name is not None else None
+                    except KeyError:
+                        self.json(404, {'error': 'That saved layout no longer exists.'})
+                        return
+                    settings.save_layout(screen, layout, expected_size=size)
+                    state.set_mode(screen)
+                    self.json(200, panel_status())
                     return
                 if self.path == '/api/layout-library':
                     screen, name = payload['screen'], payload['name']

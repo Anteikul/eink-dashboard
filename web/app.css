@@ -80,6 +80,14 @@ h2 { font-size: 15px; margin: 0; font-weight: 680; }
 #check-update { background: transparent; color: var(--ink); border-color: var(--line); }
 .settings-card [role=status]:empty, .settings-save [role=status]:empty { display: none; }
 .settings { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px 18px; margin-top: 18px; }
+.quick-layouts { margin-top: 18px; border: 1px solid var(--line); border-radius: 8px; }
+.quick-layouts summary { padding: 12px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.quick-layouts summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#quick-layout-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 12px; padding: 0 12px 12px; border: 0; }
+#quick-layout-options[hidden], #quick-layout-status:empty { display: none; }
+.quick-layouts h3 { margin: 0 0 5px; color: var(--muted); font-size: 13px; }
+.quick-layouts button { width: 100%; min-height: 36px; padding: 6px 8px; text-align: left; overflow-wrap: anywhere; }
+#quick-layout-status { margin: 0 12px 10px; color: var(--muted); font-size: 13px; }
 #mode-controls { flex-wrap: wrap; }
 #mode-controls button { flex: 1 0 auto; justify-content: center; }
 .language-setting { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 14px; }

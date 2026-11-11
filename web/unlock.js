@@ -2,7 +2,8 @@ const unlockForm = document.querySelector('#unlock-form');
 const codeField = document.querySelector('#unlock-code');
 const unlockStatus = document.querySelector('#unlock-status');
 const submit = unlockForm.querySelector('button');
-const destination = new URLSearchParams(window.location.search).get('next') === 'editor' ? '/editor' : '/settings';
+const nextPage = new URLSearchParams(window.location.search).get('next');
+const destination = nextPage === 'layouts' ? '/#saved-layouts' : nextPage === 'editor' ? '/editor' : '/settings';
 
 unlockForm.addEventListener('submit', async event => {
   event.preventDefault();

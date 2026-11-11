@@ -255,6 +255,25 @@ with TemporaryDirectory() as folder:
             '/api/layout-preview', {'screen': 'dashboard', 'layout': schema['defaults']['dashboard']})
         assert (root / '.layout-library.json').stat().st_mode & 0o777 == 0o600
         assert settings.layouts == {'dashboard': None, 'playback': []}
+        apply = library + '/apply'
+        selection = {'screen': 'dashboard', 'name': 'Moje plocha'}
+        assert request(apply, selection, code='wrong')[0] == 403
+        assert request(apply, {**selection, 'screen': 'playback'})[0] == 404
+        assert request(apply, {'screen': 'other', 'name': None})[0] == 400
+        assert request(apply, {'screen': 'dashboard'})[0] == 400
+        assert state.mode == 'auto' and settings.layouts['dashboard'] is None
+        status, applied = request(apply, selection)
+        assert status == 200 and json.loads(applied)['mode'] == 'dashboard'
+        assert DeviceSettings(root).layouts == {'dashboard': draft['layout'], 'playback': []}
+        assert PanelState(root / 'theme.txt').mode == 'dashboard'
+        assert json.loads(request(entry)[1])['layout'] == draft['layout']
+        assert request(apply, {'screen': 'dashboard', 'name': None})[0] == 200
+        assert settings.layouts['dashboard'] is None
+        playback = {'screen': 'playback', 'name': 'Hudba', 'layout': custom}
+        assert request(library, playback)[0] == 200
+        status, applied = request(apply, {'screen': 'playback', 'name': 'Hudba'})
+        assert status == 200 and json.loads(applied)['mode'] == 'playback'
+        assert settings.layouts == {'dashboard': None, 'playback': custom}
         delete = {'screen': 'dashboard', 'name': 'Moje plocha', 'delete': True}
         assert request(library, delete)[0] == 200
         assert request(entry)[0] == 404
@@ -350,6 +369,9 @@ with TemporaryDirectory() as folder:
         assert request('/api/settings', original)[0] == 200
         assert settings.layouts['dashboard'] == layout
         assert settings.get_layout_library('dashboard', 'Starší')['layout'] == custom
+        assert request('/api/settings', enlarged)[0] == 200
+        assert request(apply, {'screen': 'dashboard', 'name': 'Starší'})[0] == 200
+        assert settings.layouts['dashboard'] == settings.get_layout_library('dashboard', 'Starší')['layout']
 
         square = bytearray(100 * 100)
         fitted = fit_panel(square, (100, 100), 'light')

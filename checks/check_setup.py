@@ -142,6 +142,8 @@ with TemporaryDirectory() as folder:
             assert get('/api/update/install', {'version': new_revision})[0] == 200
             assert update_restart.wait(5) and prepare.call_count == 1
         assert get('/api/settings', DEFAULTS, origin='http://other.example')[0] == 403
+        assert get('/api/layout-library/apply', {'screen': 'dashboard', 'name': None},
+                   origin='http://other.example')[0] == 403
         status, data = get('/api/settings')
         assert status == 200 and data['settings'] == DEFAULTS and not data['spotifyConnected']
         assert get('/api/spotify/check', {})[0] == 409
@@ -227,6 +229,12 @@ with TemporaryDirectory() as folder:
         for path in ('/settings', '/editor', '/unlock?next=editor'):
             with urlopen(base + path) as response:
                 assert response.geturl().endswith('/editor' if path.startswith('/unlock') else path)
+        try:
+            build_opener(NoRedirect()).open(base + '/unlock?next=layouts')
+        except HTTPError as error:
+            assert error.code == 302 and error.headers['Location'] == '/#saved-layouts'
+        else:
+            raise AssertionError('Unlock did not return to the saved layouts picker')
         assert get('/api/settings', selected, code='')[1]['settings']['password_required'] is False
         assert get('/api/password-protection', {'required': True}, code='', origin='http://other.example')[0] == 403
         with post_from_browser('/api/password-protection', {'required': True}) as response:
