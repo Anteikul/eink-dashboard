@@ -202,13 +202,13 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             self.json(403, {'error': BAD_CODE})
             return False
 
-        def layout_png(self, screen, layout, size, *, layers=False):
+        def layout_png(self, screen, layout, size, *, geometry=None):
             if layout_preview is None:
                 from dashboard import render_layout_preview
             else:
                 render_layout_preview = layout_preview
             preferences = settings.values
-            options = {'layers': True} if layers else {}
+            options = {'layers': True, 'geometry': geometry} if geometry is not None else {}
             if size != PANEL_SIZE:
                 options['size'] = size
             if not preferences['weather_enabled']:
@@ -376,7 +376,10 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     layers = payload.get('layers', False)
                     if type(layers) is not bool or (layers and layout is None):
                         raise ValueError('Invalid preview.')
-                    self.reply(200, 'image/png', self.layout_png(screen, layout, size, layers=layers))
+                    geometry = [] if layers else None
+                    png = self.layout_png(screen, layout, size, geometry=geometry)
+                    headers = [('X-Eink-Layer-Bounds', json.dumps(geometry))] if layers else ()
+                    self.reply(200, 'image/png', png, headers)
                     return
                 if self.path == '/api/places':
                     self.json(200, {'places': find_places(payload['name'], settings.values['language'])})

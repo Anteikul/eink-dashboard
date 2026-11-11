@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
 from control import PanelState, start_server
 from dashboard import fit_panel, pack
@@ -75,6 +75,15 @@ with TemporaryDirectory() as folder:
         assert status == 200
         with Image.open(io.BytesIO(png)) as preview:
             assert preview.getpixel((7, 11)) == 255
+        portrait = {**photo_widget, 'crop': [0, 0, 4, 8],
+                    'placement': {'x': 242, 'y': 0, 'scaleX': 2, 'scaleY': 1.5}}
+        payload = {'screen': 'dashboard', 'layout': [portrait]}
+        status, png = request('/api/layout-preview', payload)
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            assert ImageOps.invert(preview.convert('L')).getbbox() == (242, 0, 250, 12)
+        assert request('/api/layouts', payload)[0] == 200
+        assert DeviceSettings(root).layouts['dashboard'] == [portrait]
         assert request('/api/layout-preview', {'screen': 'dashboard',
                        'layout': [{**photo_widget, 'crop': [9, 0, 8, 8]}]})[0] == 400
         assert request('/api/layouts', {'screen': 'dashboard', 'layout': [photo_widget]})[0] == 200
@@ -192,6 +201,16 @@ with TemporaryDirectory() as folder:
             assert background.convert('1').tobytes() == preview.tobytes()
 
         text = next(option['template'] for option in schema['widgets']['dashboard'] if option['type'] == 'text')
+        placed_text = {**text, 'text': 'Hi', 'placement': {'x': 7, 'y': 0, 'scaleX': 2, 'scaleY': 1}}
+        text_bounds = []
+        for value in ('Hi', 'Hello there'):
+            status, png = request('/api/layout-preview', {'screen': 'dashboard',
+                                  'layout': [{**placed_text, 'text': value}]})
+            assert status == 200
+            with Image.open(io.BytesIO(png)) as preview:
+                text_bounds.append(ImageOps.invert(preview.convert('L')).getbbox())
+        assert text_bounds[0][:2] == text_bounds[1][:2] == (7, 0)
+        assert text_bounds[0][2] < text_bounds[1][2]
         custom = [{**text, 'text': 'Dobrý den <3'}]
         assert request('/api/layouts', {'screen': 'other', 'layout': custom})[0] == 400
         assert request('/api/layouts', {'screen': 'dashboard', 'layout': [{**text, 'x': 250}]})[0] == 400

@@ -21,7 +21,7 @@ You can also open `http://eink.local/` on the same network. To change the name o
 
 ### Build your own screens
 
-Open the pencil in the dashboard header to visit the full-page editor. One sign-in with the device setup code unlocks the editor and Settings in the same browser. The **Dashboard** and **Playback** tabs have separate layouts. Drag an icon onto the canvas, or click it to add the widget. Drag a layer on the canvas to move it and pull a widget corner to resize it. Hold **Shift** while resizing to change width and height independently. **Snap** aligns layers with the screen center and edges or with nearby layers. The inspector also supports exact pixel positions and sizes.
+Open the pencil in the dashboard header to visit the full-page editor. One sign-in with the device setup code unlocks the editor and Settings in the same browser. The **Dashboard** and **Playback** tabs have separate layouts. Drag an icon onto the canvas, or click it to add the widget. Drag a layer to move it and pull a corner to resize its visible contents. Hold **Shift** to change width and height independently. **Snap** uses the visible edges and centers of layers. The inspector shows their exact positions and sizes in display pixels.
 
 - Choose a clock display style and time format separately. Digital clocks can show digits side by side or stacked, with 12-hour or 24-hour time, seconds, or a custom pattern such as `HH.mm.ss` or `h:mm A`. The analog face uses hands. Use brackets for literal text, as in `[Time] HH:mm`. You can also add your own text or a divider.
 - Dates include localized weekday and month names, ISO, dotted and slash formats, or a custom pattern such as `[Today] dddd, D MMMM YYYY`.

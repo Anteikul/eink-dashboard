@@ -123,7 +123,7 @@ def fit_panel(pixels, size, theme):
 
 
 def render_layout_preview(screen, layout, theme, language, units, *, layers=False, size=PANEL_SIZE,
-                          weather_enabled=True):
+                          weather_enabled=True, geometry=None):
     from io import BytesIO
     from music_screen import progress_pixels, render_music
 
@@ -135,7 +135,7 @@ def render_layout_preview(screen, layout, theme, language, units, *, layers=Fals
         sample.update(track=Track('preview', 'Night Drive', 'The Midnight'), cover=sample_cover(),
                       progress=0.42, duration_ms=242_000)
     if layers:
-        atlas = render_layer_atlas(layout, now, theme, language, **sample)
+        atlas = render_layer_atlas(layout, now, theme, language, geometry=geometry, **sample)
         with BytesIO() as png:
             atlas.save(png, format='PNG')
             return png.getvalue()

@@ -224,7 +224,6 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   position: relative;
   width: min(100%, calc(100cqh * var(--display-ratio, 2.04918)));
   aspect-ratio: 250 / 122;
-  overflow: hidden;
   background: #f9f9f4;
   user-select: none;
 }
@@ -526,7 +525,6 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   cursor: crosshair;
   touch-action: none;
 }
-#editor-stage:has(#editor-photo-crop:not([hidden])) { overflow: visible; }
 #editor-photo-crop:focus-visible { outline: 1px dashed white; outline-offset: 2px; }
 #editor-stage:has(#editor-photo-crop:not([hidden])) #editor-selection { display: none; }
 #editor-photo-mask { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }

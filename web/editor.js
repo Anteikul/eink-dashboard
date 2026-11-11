@@ -16,8 +16,6 @@
   const drawing = document.createElement('canvas');
   const eraseSurface = document.createElement('canvas');
   const eraseContext = eraseSurface.getContext('2d');
-  const measureSurface = document.createElement('canvas');
-  const measureContext = measureSurface.getContext('2d', {willReadFrequently: true});
   const selection = element('editor-selection');
   const marquee = element('editor-marquee');
   const dropMarker = element('editor-drop-marker');
@@ -140,7 +138,7 @@
 
   function layerKey(layer) {
     if (!layerKeys.has(layer)) {
-      const {x, y, ...appearance} = layer;
+      const {x, y, placement, ...appearance} = layer;
       layerKeys.set(layer, JSON.stringify(appearance));
     }
     return layerKeys.get(layer);
@@ -285,12 +283,13 @@
       fields.variant.dataset.type = widget.type;
     }
 
-    fields.x.max = schema.width - widget.w;
-    fields.y.max = schema.height - widget.h;
-    fields.w.max = schema.width - widget.x;
-    fields.h.max = schema.height - widget.y;
+    const box = controlBounds(widget);
+    fields.x.max = schema.width - box.w;
+    fields.y.max = schema.height - box.h;
+    fields.w.max = schema.width - box.x;
+    fields.h.max = schema.height - box.y;
     for (const [name, field] of Object.entries(fields)) {
-      const value = String(widget[name] ?? '');
+      const value = String(box[name] ?? widget[name] ?? '');
       if (field.value !== value) field.value = value;
     }
     for (const button of alignment.children) {
@@ -302,15 +301,15 @@
     if (divider) {
       const vertical = widget.variant === 'vertical';
       dividerLength.max = vertical ? schema.height : schema.width;
-      dividerLength.value = vertical ? widget.h : widget.w;
+      dividerLength.value = vertical ? box.h : box.w;
       dividerThickness.max = vertical ? schema.width : schema.height;
-      dividerThickness.value = Math.min(widget.thickness ?? 1, vertical ? widget.w : widget.h);
+      dividerThickness.value = vertical ? box.w : box.h;
       return;
     }
-    const size = Math.max(widget.w, widget.h);
+    const size = Math.max(box.w, box.h);
     scaleField.max = Math.floor(Math.min(
-      (schema.width - widget.x) * size / widget.w,
-      (schema.height - widget.y) * size / widget.h,
+      (schema.width - box.x) * size / box.w,
+      (schema.height - box.y) * size / box.h,
     ));
     scaleField.value = size;
   }
@@ -328,9 +327,9 @@
     updateInspector();
   }
 
-  function selectionBounds(indices = selectedIndices(), layout = layers(), measure = controlBounds) {
+  function selectionBounds(indices = selectedIndices(), layout = layers()) {
     if (!indices.length) return null;
-    const boxes = indices.map(index => measure(layout[index]));
+    const boxes = indices.map(index => controlBounds(layout[index]));
     const x = Math.min(...boxes.map(box => box.x));
     const y = Math.min(...boxes.map(box => box.y));
     return {x, y, w: Math.max(...boxes.map(box => box.x + box.w)) - x,
@@ -414,40 +413,34 @@
     if (!keepFrame) frame.clearRect(0, 0, preview.width, preview.height);
   }
 
-  function measureTile(image, {y, w, h}) {
-    measureSurface.width = w;
-    measureSurface.height = h;
-    measureContext.drawImage(image, 0, y, w, h, 0, 0, w, h);
-    const {data} = measureContext.getImageData(0, 0, w, h);
-    let left = w, top = h, right = -1, bottom = -1;
-    for (let row = 0; row < h; row++) {
-      for (let column = 0; column < w; column++) {
-        if (data[(row * w + column) * 4 + 3] === 0) continue;
-        left = Math.min(left, column);
-        top = Math.min(top, row);
-        right = Math.max(right, column);
-        bottom = row;
-      }
-    }
-    return right < 0 ? null : {left, top, right: right + 1, bottom: bottom + 1};
-  }
-
   function tileFor(layer) {
     return tiles.get(layerKey(layer)) ?? tiles.get(previousTileKeys.get(layer));
   }
 
+  function sourceBounds(layer) {
+    return tileFor(layer)?.bounds ?? {x: 0, y: 0, w: layer.w, h: layer.h};
+  }
+
   function controlBounds(layer) {
     if (!layer.type || layer.type === 'drawing') return layer;
-    const tile = tileFor(layer);
-    if (!tile?.bounds) return layer;
-    const {left, top, right, bottom} = tile.bounds;
-    const x = Math.min(layer.w - 1, Math.round(left * layer.w / tile.w));
-    const y = Math.min(layer.h - 1, Math.round(top * layer.h / tile.h));
-    return {
-      x: layer.x + x, y: layer.y + y,
-      w: Math.max(1, Math.round(right * layer.w / tile.w) - x),
-      h: Math.max(1, Math.round(bottom * layer.h / tile.h) - y),
-    };
+    const source = sourceBounds(layer);
+    if (!layer.placement) return {x: layer.x + source.x, y: layer.y + source.y, w: source.w, h: source.h};
+    const {x, y, scaleX, scaleY} = layer.placement;
+    const w = clamp(Math.round(source.w * scaleX), 1, schema.width);
+    const h = clamp(Math.round(source.h * scaleY), 1, schema.height);
+    return {x: Math.min(x, schema.width - w), y: Math.min(y, schema.height - h), w, h};
+  }
+
+  function boxChange(layer, {x, y, w, h}) {
+    if (layer.type === 'drawing') return {x, y};
+    const current = controlBounds(layer);
+    if (x === current.x && y === current.y && w === current.w && h === current.h) {
+      return {placement: layer.placement};
+    }
+    const source = sourceBounds(layer);
+    const scaleX = w === current.w ? layer.placement?.scaleX ?? 1 : w / source.w;
+    const scaleY = h === current.h ? layer.placement?.scaleY ?? 1 : h / source.h;
+    return {placement: {x, y, scaleX, scaleY}};
   }
 
   function compose() {
@@ -460,8 +453,11 @@
         continue;
       }
       const tile = tileFor(widget);
-      if (tile) {
-        composeTile(atlas, tile.y, tile.w, tile.h, widget);
+      if (tile && widget.placement && tile.bounds) {
+        const {x, y, w, h} = tile.bounds;
+        composeTile(atlas, x, tile.y + y, w, h, controlBounds(widget));
+      } else if (tile && !widget.placement) {
+        composeTile(atlas, 0, tile.y, tile.w, tile.h, widget);
       }
     }
     if (drag?.bytes && !drag.erase) frame.drawImage(drawing, 0, 0);
@@ -536,20 +532,20 @@
       inkTiles.set(key, tile);
       if (inkTiles.size > 128) inkTiles.delete(inkTiles.keys().next().value);
     }
-    composeTile(tile, 0, w, h, layer);
+    composeTile(tile, 0, 0, w, h, layer);
   }
 
-  function composeTile(source, sourceY, sourceWidth, sourceHeight, {x, y, w, h}) {
+  function composeTile(source, sourceX, sourceY, sourceWidth, sourceHeight, {x, y, w, h}) {
     if (drag?.erase) {
       eraseContext.clearRect(0, 0, w, h);
       eraseContext.imageSmoothingEnabled = false;
-      eraseContext.drawImage(source, 0, sourceY, sourceWidth, sourceHeight, 0, 0, w, h);
+      eraseContext.drawImage(source, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, w, h);
       eraseContext.globalCompositeOperation = 'destination-out';
       eraseContext.drawImage(drawing, -x, -y);
       eraseContext.globalCompositeOperation = 'source-over';
       frame.drawImage(eraseSurface, 0, 0, w, h, x, y, w, h);
     } else {
-      frame.drawImage(source, 0, sourceY, sourceWidth, sourceHeight, x, y, w, h);
+      frame.drawImage(source, sourceX, sourceY, sourceWidth, sourceHeight, x, y, w, h);
     }
   }
 
@@ -576,21 +572,37 @@
   }
 
   function eraseWidget(layer, brush, brushStride) {
-    const {x, y, w, h, mask} = layer;
+    const {w, h, mask} = layer;
+    const box = layer.placement ? controlBounds(layer) : layer;
+    const source = layer.placement ? sourceBounds(layer) : {x: 0, y: 0, w, h};
     const rowBytes = stride(w);
     const old = mask ? decodeInk(mask.bitmap) : null;
     const oldStride = mask ? stride(mask.w) : 0;
     const bytes = new Uint8Array(rowBytes * h);
+    if (mask) {
+      for (let py = 0; py < h; py++) {
+        const oldY = Math.floor((py + .5) * mask.h / h);
+        for (let px = 0; px < w; px++) {
+          const oldX = Math.floor((px + .5) * mask.w / w);
+          if (old[oldY * oldStride + (oldX >> 3)] & (128 >> (oldX & 7))) {
+            bytes[py * rowBytes + (px >> 3)] |= 128 >> (px & 7);
+          }
+        }
+      }
+    }
     let changed = false;
-    for (let py = 0; py < h; py++) {
-      const oldY = mask ? Math.floor((py + .5) * mask.h / h) : 0;
-      for (let px = 0; px < w; px++) {
-        const globalX = x + px;
-        const oldX = mask ? Math.floor((px + .5) * mask.w / w) : 0;
-        const alreadyErased = old && (old[oldY * oldStride + (oldX >> 3)] & (128 >> (oldX & 7)));
-        const erased = brush[(y + py) * brushStride + (globalX >> 3)] & (128 >> (globalX & 7));
-        if (erased && !alreadyErased) changed = true;
-        if (erased || alreadyErased) bytes[py * rowBytes + (px >> 3)] |= 128 >> (px & 7);
+    for (let py = 0; py < box.h; py++) {
+      const maskY = source.y + Math.floor((py + .5) * source.h / box.h);
+      for (let px = 0; px < box.w; px++) {
+        const globalX = box.x + px;
+        if (!(brush[(box.y + py) * brushStride + (globalX >> 3)] & (128 >> (globalX & 7)))) continue;
+        const maskX = source.x + Math.floor((px + .5) * source.w / box.w);
+        const offset = maskY * rowBytes + (maskX >> 3);
+        const bit = 128 >> (maskX & 7);
+        if (!(bytes[offset] & bit)) {
+          bytes[offset] |= bit;
+          changed = true;
+        }
       }
     }
     return changed ? {...layer, mask: {w, h, bitmap: btoa(String.fromCharCode(...bytes))}} : layer;
@@ -642,6 +654,10 @@
         const blob = await response.blob();
         if (controller.signal.aborted || previewController !== controller) return;
         if (blob.type !== 'image/png') throw new Error('Could not load the sample preview.');
+        const geometry = JSON.parse(response.headers.get('X-Eink-Layer-Bounds'));
+        if (!Array.isArray(geometry) || geometry.length !== payload.layout.length) {
+          throw new Error('Could not load the sample preview.');
+        }
         const image = await createImageBitmap(blob);
         if (controller.signal.aborted || previewController !== controller) {
           image.close();
@@ -652,7 +668,10 @@
           const key = layerKey(widget);
           if (nextTiles.has(key)) continue;
           const tile = {y: 1 + index * schema.height, w: widget.w, h: widget.h};
-          tile.bounds = measureTile(image, tile);
+          if (geometry[index]) {
+            const [x, y, w, h] = geometry[index];
+            tile.bounds = {x, y, w, h};
+          }
           nextTiles.set(key, tile);
         }
         atlas?.close();
@@ -660,6 +679,7 @@
         tiles = nextTiles;
         for (const [index, layer] of layers().entries()) positionLayer(hitboxes[index], layer);
         positionSelection();
+        updateInspector();
         compose();
       } catch (error) {
         if (controller.signal.aborted || previewController !== controller) return;
@@ -1023,28 +1043,29 @@
   }
 
   function moveWidget(dx, dy, origin = layers()[current().selection], snap = false) {
-    const {x, y, w, h} = origin;
+    const {x, y, w, h} = controlBounds(origin);
     const next = {
       x: clamp(x + dx, 0, schema.width - w),
       y: clamp(y + dy, 0, schema.height - h),
       w, h,
     };
-    if (snap) snapPosition(next, [current().selection], controlBounds(origin), origin);
-    editWidget({x: next.x, y: next.y}, !drag);
+    if (snap) snapPosition(next, [current().selection]);
+    editWidget(boxChange(origin, next), !drag);
   }
 
   function moveGroup(dx, dy, origin = layers(), snap = false) {
     const indices = selectedIndices();
-    const bounds = selectionBounds(indices, origin, layer => layer);
+    const bounds = selectionBounds(indices, origin);
     const {x, y, w, h} = bounds;
     const next = {x: clamp(x + dx, 0, schema.width - w), y: clamp(y + dy, 0, schema.height - h), w, h};
-    if (snap) snapPosition(next, indices, selectionBounds(indices, origin), bounds);
+    if (snap) snapPosition(next, indices);
     const layout = layers().slice();
-    const currentBox = selectionBounds(indices, layout, layer => layer);
+    const currentBox = selectionBounds(indices, layout);
     if (next.x === currentBox.x && next.y === currentBox.y) return;
     for (const index of indices) {
       const layer = origin[index];
-      layout[index] = {...layer, x: layer.x + next.x - x, y: layer.y + next.y - y};
+      const box = controlBounds(layer);
+      layout[index] = {...layer, ...boxChange(layer, {...box, x: box.x + next.x - x, y: box.y + next.y - y})};
     }
     setDraft(layout, false, !drag);
   }
@@ -1055,11 +1076,12 @@
     length = Math.min(length, vertical ? schema.height : schema.width);
     thickness = Math.min(thickness, vertical ? schema.width : schema.height);
     const [w, h] = vertical ? [thickness, length] : [length, thickness];
+    const box = controlBounds(widget);
     // Round in opposite directions so a round trip does not shift a half-pixel center.
     const roundCenter = vertical ? Math.ceil : Math.floor;
-    const x = clamp(widget.x + (rotated ? roundCenter((widget.w - w) / 2) : 0), 0, schema.width - w);
-    const y = clamp(widget.y + (rotated ? roundCenter((widget.h - h) / 2) : 0), 0, schema.height - h);
-    const change = {variant, x, y, w, h, thickness};
+    const x = clamp(box.x + (rotated ? roundCenter((box.w - w) / 2) : 0), 0, schema.width - w);
+    const y = clamp(box.y + (rotated ? roundCenter((box.h - h) / 2) : 0), 0, schema.height - h);
+    const change = {variant, x, y, w, h, thickness, placement: undefined};
     if (rotated && widget.mask) change.mask = rotateMask(widget.mask, w, h, vertical);
     editWidget(change);
   }
@@ -1084,7 +1106,7 @@
   }
 
   function resizeWidget(dx, dy, {origin, corner, visible}, free) {
-    const {x, y, w, h} = origin;
+    const {x, y, w, h} = visible;
     const [right, bottom] = [x + w, y + h];
     const west = corner.includes('w');
     const north = corner.includes('n');
@@ -1094,34 +1116,29 @@
     const signY = north ? -1 : 1;
     const maxW = west ? right : schema.width - x;
     const maxH = north ? bottom : schema.height - y;
-    const fractionX = (west ? right - visible.x : visible.x + visible.w - x) / w;
-    const fractionY = (north ? bottom - visible.y : visible.y + visible.h - y) / h;
-    const rawW = w + signX * Math.round(dx / fractionX);
-    const rawH = h + signY * Math.round(dy / fractionY);
+    const rawW = w + signX * dx;
+    const rawH = h + signY * dy;
     let width, height, guideX, guideY;
-    const snapEdge = (axis, anchor, sign, fraction, span, min, max) => {
-      const edge = size => anchor + sign * Math.round(size * fraction);
-      const first = edge(min);
-      const last = edge(max);
-      span = clamp(span, min, max);
-      const {position, guide} = snapAxis(axis, edge(span), 0, Math.min(first, last),
+    const snapEdge = (axis, anchor, sign, span, min, max) => {
+      const first = anchor + sign * min;
+      const last = anchor + sign * max;
+      const {position, guide} = snapAxis(axis, anchor + sign * span, 0, Math.min(first, last),
         Math.max(first, last), [current().selection]);
-      const size = position === edge(span) ? span : clamp(Math.round(sign * (position - anchor) / fraction), min, max);
-      return {size, guide};
+      return {size: sign * (position - anchor), guide};
     };
     if (free) {
-      ({size: width, guide: guideX} = snapEdge('x', anchorX, signX, fractionX, rawW, 1, maxW));
-      ({size: height, guide: guideY} = snapEdge('y', anchorY, signY, fractionY, rawH, 1, maxH));
+      ({size: width, guide: guideX} = snapEdge('x', anchorX, signX, rawW, 1, maxW));
+      ({size: height, guide: guideY} = snapEdge('y', anchorY, signY, rawH, 1, maxH));
     } else {
       const minScale = Math.max(1 / w, 1 / h);
       const maxScale = Math.min(maxW / w, maxH / h);
       let scale = clamp((rawW * w + rawH * h) / (w * w + h * h), minScale, maxScale);
-      const movedX = snapEdge('x', anchorX, signX, fractionX, Math.round(w * scale),
+      const movedX = snapEdge('x', anchorX, signX, Math.round(w * scale),
         Math.round(w * minScale), Math.round(w * maxScale));
-      const movedY = snapEdge('y', anchorY, signY, fractionY, Math.round(h * scale),
+      const movedY = snapEdge('y', anchorY, signY, Math.round(h * scale),
         Math.round(h * minScale), Math.round(h * maxScale));
-      const distanceX = movedX.guide === undefined ? Infinity : Math.abs(movedX.size - w * scale) * fractionX;
-      const distanceY = movedY.guide === undefined ? Infinity : Math.abs(movedY.size - h * scale) * fractionY;
+      const distanceX = movedX.guide === undefined ? Infinity : Math.abs(movedX.size - w * scale);
+      const distanceY = movedY.guide === undefined ? Infinity : Math.abs(movedY.size - h * scale);
       if (distanceX < Infinity && distanceX <= distanceY) {
         scale = clamp(movedX.size / w, minScale, maxScale);
         guideX = movedX.guide;
@@ -1133,15 +1150,11 @@
       height = Math.round(h * scale);
     }
     showGuides(guideX, guideY);
-    const change = {
+    const box = {
       x: west ? right - width : x, y: north ? bottom - height : y,
       w: width, h: height,
     };
-    if (!element('editor-text-style').hidden) {
-      const scale = free ? 1 : Math.max(width, height) / Math.max(w, h);
-      change.size = clamp(Math.round(origin.size * scale), 8, 60);
-    }
-    editWidget(change, false);
+    editWidget(boxChange(origin, box), false);
   }
 
   function setTool(value) {
@@ -1265,13 +1278,11 @@
     return best;
   }
 
-  function snapPosition(box, selected = [], visible = box, origin = box) {
-    const dx = visible.x - origin.x;
-    const dy = visible.y - origin.y;
-    const x = snapAxis('x', box.x + dx, visible.w, dx, schema.width - box.w + dx, selected);
-    const y = snapAxis('y', box.y + dy, visible.h, dy, schema.height - box.h + dy, selected);
-    box.x = x.position - dx;
-    box.y = y.position - dy;
+  function snapPosition(box, selected = []) {
+    const x = snapAxis('x', box.x, box.w, 0, schema.width - box.w, selected);
+    const y = snapAxis('y', box.y, box.h, 0, schema.height - box.h, selected);
+    box.x = x.position;
+    box.y = y.position;
     showGuides(x.guide, y.guide);
     return box;
   }
@@ -1374,10 +1385,11 @@
     if (tool !== 'select' || widget?.type !== 'text' || textEditing) return;
     selectWidget(index);
     const {width, height} = stage.getBoundingClientRect();
-    const w = Math.min(schema.width, Math.max(widget.w, 80 / width * schema.width));
-    const h = Math.min(schema.height, Math.max(widget.h, 40 / height * schema.height));
-    position(inlineText, {x: Math.min(widget.x, schema.width - w),
-      y: Math.min(widget.y, schema.height - h), w, h});
+    const box = controlBounds(widget);
+    const w = Math.min(schema.width, Math.max(box.w, 80 / width * schema.width));
+    const h = Math.min(schema.height, Math.max(box.h, 40 / height * schema.height));
+    position(inlineText, {x: Math.min(box.x, schema.width - w),
+      y: Math.min(box.y, schema.height - h), w, h});
     styleInlineText(widget, width);
     inlineText.value = widget.text;
     inlineText.hidden = false;
@@ -1387,7 +1399,7 @@
   }
 
   function styleInlineText(widget, width = stage.getBoundingClientRect().width) {
-    inlineText.style.fontSize = clamp(widget.size * width / schema.width, 16, 38) + 'px';
+    inlineText.style.fontSize = clamp(widget.size * (widget.placement?.scaleY ?? 1) * width / schema.width, 16, 38) + 'px';
     inlineText.style.fontFamily = widget.font.startsWith('mono') ? 'var(--mono)' : '';
     inlineText.style.fontWeight = widget.font.endsWith('bold') ? '700' : '';
     inlineText.style.textAlign = widget.align;
@@ -1705,11 +1717,14 @@
     }
     const layer = layers()[current().selection];
     if (layer?.type !== 'photo' || drag || layerDrag || paletteDrag) return;
-    const {photo} = layer;
-    const scale = Math.min(layer.w / photo.w, layer.h / photo.h);
+    const {photo, crop: [cropX, cropY, cropW, cropH]} = layer;
+    const box = controlBounds(layer);
+    const scale = Math.min(box.w / cropW, box.h / cropH, schema.width / photo.w, schema.height / photo.h);
     const w = photo.w * scale;
     const h = photo.h * scale;
-    position(cropSurface, {x: layer.x + (layer.w - w) / 2, y: layer.y + (layer.h - h) / 2, w, h});
+    const x = clamp(box.x + (box.w - cropW * scale) / 2 - cropX * scale, 0, Math.max(0, schema.width - w));
+    const y = clamp(box.y + (box.h - cropH * scale) / 2 - cropY * scale, 0, Math.max(0, schema.height - h));
+    position(cropSurface, {x, y, w, h});
     setTool('select');
     photoCrop.open({photo, crop: layer.crop, onApply: crop => editWidget({crop})});
   });
@@ -1802,7 +1817,8 @@
       }
       const value = clamp(Math.round(field.valueAsNumber), Number(field.min), Number(field.max));
       field.value = value;
-      editWidget({[name]: value});
+      const box = controlBounds(widget);
+      editWidget(boxChange(widget, {...box, [name]: value}));
     } else {
       editWidget({[name]: field.value});
     }
@@ -1859,11 +1875,11 @@
       return;
     }
     const size = clamp(Math.round(scaleField.valueAsNumber), 1, Number(scaleField.max));
-    const ratio = size / Math.max(widget.w, widget.h);
+    const box = controlBounds(widget);
+    const ratio = size / Math.max(box.w, box.h);
     scaleField.value = size;
-    const change = {w: Math.max(1, Math.round(widget.w * ratio)), h: Math.max(1, Math.round(widget.h * ratio))};
-    if (!element('editor-text-style').hidden) change.size = clamp(Math.round(widget.size * ratio), 8, 60);
-    editWidget(change);
+    editWidget(boxChange(widget, {...box, w: Math.max(1, Math.round(box.w * ratio)),
+      h: Math.max(1, Math.round(box.h * ratio))}));
   });
   for (const event of ['input', 'compositionend']) {
     fields.text.addEventListener(event, ({isComposing}) => {

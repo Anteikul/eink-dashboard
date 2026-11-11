@@ -3,7 +3,7 @@ import re
 from base64 import b64decode, b64encode
 from copy import deepcopy
 from functools import lru_cache
-from math import cos, pi, sin, tau
+from math import cos, floor, pi, sin, tau
 
 from PIL import Image, ImageChops, ImageDraw, ImageOps
 
@@ -155,6 +155,18 @@ def _validate_drawing(supplied, size):
     return {'type': 'drawing', **box, 'bitmap': _validate_bitmap(supplied.get('bitmap'), w, h)}
 
 
+def _validate_placement(placement, size):
+    if not isinstance(placement, dict):
+        raise ValueError('Keep each widget inside the display.')
+    x, y = placement.get('x'), placement.get('y')
+    _validate_box(x, y, 1, 1, size)
+    scales = {axis: placement.get(axis) for axis in ('scaleX', 'scaleY')}
+    if any(type(scale) not in (int, float) or not 1 / MAX_DIMENSION <= scale <= MAX_DIMENSION
+           for scale in scales.values()):
+        raise ValueError('Keep each widget inside the display.')
+    return {'x': x, 'y': y, **scales}
+
+
 def _validate_bitmap(bitmap, w, h):
     size = ((w + 7) // 8) * h
     if not isinstance(bitmap, str) or len(bitmap) != 4 * ((size + 2) // 3):
@@ -197,6 +209,8 @@ def validate_layout(screen, layout, size=PANEL_SIZE):
             template = resize_layer(template, PANEL_SIZE, size)
         widget = {key: supplied.get(key, value) for key, value in template.items()}
         _validate_box(*(widget[key] for key in BOX_KEYS), size=size)
+        if 'placement' in supplied:
+            widget['placement'] = _validate_placement(supplied['placement'], size)
         if widget['type'] == 'clock':
             if widget['variant'] in ('stacked', 'analog'):
                 widget['clockStyle'], widget['variant'] = widget['variant'], '24h'
@@ -271,6 +285,11 @@ def resize_layer(layer, source_size, target_size):
         resized['bitmap'] = b64encode(pixels.tobytes()).decode()
     else:
         resized['size'] = min(60, max(8, round(layer['size'] * min(scale_x, scale_y))))
+        if 'placement' in layer:
+            placement = layer['placement']
+            resized['placement'] = {**placement,
+                                    'x': min(target_w - 1, round(placement['x'] * scale_x)),
+                                    'y': min(target_h - 1, round(placement['y'] * scale_y))}
         if layer['type'] == 'divider':
             scale, limit = (scale_x, width) if layer['variant'] == 'vertical' else (scale_y, height)
             thickness = min(limit, max(1, round(layer.get('thickness', 1) * scale)))
@@ -668,7 +687,7 @@ def _widget_layers(layout, now, language, weather, units, track, cover, progress
                 if kind == 'photo':
                     art = art.convert('1')
             offset = ((w - art.width) // 2, (h - art.height) // 2) if art is not None else (0, 0)
-            yield offset, _apply_erasure(widget, art, offset, art=True), True
+            yield offset, art, True
             continue
         mask = Image.new('1', (w, h))
         if kind == 'clock':
@@ -682,7 +701,20 @@ def _widget_layers(layout, now, language, weather, units, track, cover, progress
         else:
             _draw_text(mask, widget, value, wrapped=widget['variant'] == 'wrapped',
                        fit=kind in ('date', 'playback-time'))
-        yield (0, 0), _apply_erasure(widget, mask), False
+        yield (0, 0), mask, False
+
+
+def _source_bounds(layer, offset, opaque):
+    if layer is None:
+        return None
+    if opaque:
+        bounds = layer.getchannel('A').getbbox() if layer.mode == 'RGBA' else (0, 0, *layer.size)
+    else:
+        bounds = layer.getbbox()
+    if bounds is None:
+        return None
+    left, top, right, bottom = bounds
+    return offset[0] + left, offset[1] + top, right - left, bottom - top
 
 
 def render_custom(layout, now, theme, language, *, weather=None, units='celsius', track=None,
@@ -692,10 +724,23 @@ def render_custom(layout, now, theme, language, *, weather=None, units='celsius'
     image = Image.new('1', size, 1 - foreground)
     layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size,
                             weather_enabled)
-    for widget, ((dx, dy), layer, opaque) in zip(layout, layers):
+    for widget, (offset, layer, opaque) in zip(layout, layers):
         if layer is None:
             continue
+        dx, dy = offset
         position = (widget.get('x', 0) + dx, widget.get('y', 0) + dy)
+        placement = widget.get('placement')
+        bounds = _source_bounds(layer, offset, opaque) if placement is not None else None
+        layer = _apply_erasure(widget, layer, offset, art=opaque)
+        if placement is not None:
+            if bounds is None:
+                continue
+            left, top, w, h = bounds
+            left, top = left - dx, top - dy
+            width = min(size[0], max(1, floor(w * placement['scaleX'] + .5)))
+            height = min(size[1], max(1, floor(h * placement['scaleY'] + .5)))
+            position = min(placement['x'], size[0] - width), min(placement['y'], size[1] - height)
+            layer = layer.crop((left, top, left + w, top + h)).resize((width, height), Image.Resampling.NEAREST)
         if opaque:
             alpha = layer.getchannel('A') if layer.mode == 'RGBA' else None
             image.paste(layer, position, alpha)
@@ -705,8 +750,9 @@ def render_custom(layout, now, theme, language, *, weather=None, units='celsius'
 
 
 def render_layer_atlas(layout, now, theme, language, *, weather=None, units='celsius', track=None,
-                       cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE, weather_enabled=True):
-    """Put independent transparent widgets in fixed slots below one background pixel."""
+                       cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE, weather_enabled=True,
+                       geometry=None):
+    """Put untransformed widget sources in slots below one background pixel."""
     foreground = 255 if theme == 'dark' else 0
     background = 255 - foreground
     width, height = size
@@ -714,9 +760,12 @@ def render_layer_atlas(layout, now, theme, language, *, weather=None, units='cel
     atlas.putpixel((0, 0), (background, background, background, 255))
     layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size,
                             weather_enabled)
-    for index, ((x, y), layer, opaque) in enumerate(layers):
+    for index, (widget, ((x, y), layer, opaque)) in enumerate(zip(layout, layers)):
+        if geometry is not None:
+            geometry.append(_source_bounds(layer, (x, y), opaque))
         if layer is None:
             continue
+        layer = _apply_erasure(widget, layer, (x, y), art=opaque)
         position = (x, y + 1 + height * index)
         if opaque:
             atlas.paste(layer.convert('RGBA'), position)
