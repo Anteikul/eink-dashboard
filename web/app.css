@@ -115,6 +115,7 @@ h2 { font-size: 15px; margin: 0; font-weight: 680; }
 .screen p { margin: 0; padding: 10px; text-align: center; font: 13px/1.45 var(--mono); }
 #status, .track-link { margin: 0; font-size: 13px; line-height: 1.4; }
 #status { display: flex; align-items: baseline; gap: 8px; color: var(--muted); }
+#status[data-state=ready] { white-space: nowrap; }
 #status::before { content: ''; flex: 0 0 8px; height: 8px; border-radius: 50%; background: var(--focus); }
 #status[data-state=pending]::before { background: var(--display-wait); }
 #status[data-state=error]::before { background: var(--display-alert); }
