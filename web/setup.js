@@ -5,6 +5,8 @@ const setupFields = document.querySelector('#setup-fields');
 const setupStatus = document.querySelector('#setup-status');
 const signIn = document.querySelector('#settings-sign-in');
 const deviceStatus = document.querySelector('#device-status');
+const deviceInputs = document.querySelector('#device-inputs');
+const saveDevice = document.querySelector('#save-device');
 const spotifyActionStatus = document.querySelector('#spotify-action-status');
 const spotifyCheck = document.querySelector('#spotify-check');
 const spotifyVerified = document.querySelector('#spotify-verified');
@@ -26,6 +28,7 @@ const updateButton = document.querySelector('#check-update');
 const installButton = document.querySelector('#install-update');
 const updateStatus = document.querySelector('#update-status');
 const installedVersion = document.querySelector('#installed-version');
+const installedVersionRow = document.querySelector('#installed-version-row');
 const availableVersion = document.querySelector('#available-version');
 const updatingStates = new Set(['checking', 'downloading', 'restarting']);
 const updateMessages = {
@@ -46,6 +49,7 @@ let placeRequest;
 let spotifyCheckRequest;
 let checkingUpdate = false;
 let offeredRevision = null;
+let savedDeviceValues;
 
 languageSelect.addEventListener('change', async () => {
   const status = document.querySelector('#language-status');
@@ -103,6 +107,7 @@ function fillDevice(settings) {
 function showSettings(data) {
   clearPlaces();
   fillDevice(data.settings);
+  savedDeviceValues = JSON.stringify(deviceValues());
   for (const [key, [min, max]] of Object.entries(data.ranges)) {
     const field = deviceForm.elements.namedItem(key);
     field.min = min;
@@ -220,6 +225,7 @@ function choosePlace(index) {
   if (!place) return;
   clearPlaces();
   fillDevice(place);
+  showDeviceChanges();
   city.focus();
 }
 
@@ -255,18 +261,40 @@ places.addEventListener('click', (event) => {
   if (option) choosePlace(Number(option.dataset.index));
 });
 
-deviceForm.addEventListener('submit', (event) => {
+function deviceValues() {
+  const values = Object.fromEntries(new FormData(deviceForm));
+  for (const field of deviceInputs.querySelectorAll('input[type="checkbox"]')) values[field.name] = field.checked;
+  return values;
+}
+
+function showDeviceChanges() {
+  const changed = JSON.stringify(deviceValues()) !== savedDeviceValues;
+  saveDevice.disabled = !changed;
+  setText(deviceStatus, changed ? 'You have unsaved changes.' : 'No unsaved changes.');
+}
+
+deviceForm.addEventListener('input', showDeviceChanges);
+deviceForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  action(async () => {
-    const form = Object.fromEntries(new FormData(deviceForm));
-    for (const field of deviceForm.querySelectorAll('input[type="number"]')) form[field.name] = field.valueAsNumber;
-    for (const field of deviceForm.querySelectorAll('input[type="checkbox"]')) form[field.name] = field.checked;
-    form.rotation = Number(form.rotation);
+  if (saveDevice.disabled) return;
+  const form = deviceValues();
+  for (const field of deviceInputs.querySelectorAll('input[type="number"]')) form[field.name] = field.valueAsNumber;
+  form.rotation = Number(form.rotation);
+  clearPlaces();
+  deviceInputs.disabled = saveDevice.disabled = true;
+  setText(deviceStatus, 'Saving settings…');
+  try {
     const data = await api('/api/settings', form);
-    clearPlaces();
     fillDevice(data.settings);
     setText(deviceStatus, 'Settings saved. The display will refresh shortly.');
-  }, deviceStatus);
+  } catch (error) {
+    setText(deviceStatus, error.message);
+    saveDevice.disabled = false;
+    return;
+  } finally {
+    deviceInputs.disabled = false;
+  }
+  savedDeviceValues = JSON.stringify(deviceValues());
 });
 
 spotifyForm.addEventListener('submit', (event) => {
@@ -336,7 +364,7 @@ setupCodeForm.addEventListener('submit', async (event) => {
 });
 
 function showUpdate(data) {
-  installedVersion.hidden = !data.version;
+  installedVersionRow.hidden = !data.version;
   installedVersion.textContent = data.version?.slice(0, 7) ?? '';
   offeredRevision = data.availableVersion ?? null;
   installButton.hidden = !offeredRevision;
@@ -395,8 +423,10 @@ api('/api/state').then(data => {
   document.documentElement.dataset.theme = data.appliedTheme || data.theme;
 }).catch(error => setText(document.querySelector('#language-status'), error.message));
 
-action(async () => {
-  showSettings(await api('/api/settings'));
+api('/api/settings').then(data => {
+  showSettings(data);
+  setText(setupStatus, '');
   setupFields.hidden = false;
+  if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
   checkUpdate();
-});
+}).catch(error => setText(setupStatus, error.message));

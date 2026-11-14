@@ -12,136 +12,159 @@
 <body>
   <main class="settings-page">
     <header class="settings-header">
-      <a class="editor-back editor-icon" href="/" aria-label="Back to display" data-i18n-attributes="aria-label">
+      <a class="settings-back" href="/">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7"/></svg>
+        <span data-i18n>Back to display</span>
       </a>
       <h1 data-i18n>Settings</h1>
+      <div class="language-setting">
+        <label for="language" data-i18n>Language</label>
+        <select id="language" disabled>
+          <option value="en" lang="en">English</option>
+          <option value="cs" lang="cs">Čeština</option>
+        </select>
+        <p id="language-status" role="status"></p>
+      </div>
     </header>
-    <div class="language-setting">
-      <label for="language" data-i18n>Language</label>
-      <select id="language" disabled>
-        <option value="en" lang="en">English</option>
-        <option value="cs" lang="cs">Čeština</option>
-      </select>
-      <p id="language-status" role="status" data-i18n></p>
-    </div>
-    <section class="setup" aria-labelledby="setup-title">
-      <h2 id="setup-title" data-i18n>Device setup</h2>
-      <p id="setup-status" role="status" data-i18n></p>
+    <div class="setup settings-body">
+      <p id="setup-status" role="status" data-i18n>Loading settings…</p>
       <a id="settings-sign-in" href="/unlock?next=settings" target="_blank" rel="noopener" data-i18n hidden>Sign in again</a>
       <div id="setup-fields" hidden>
-        <div class="settings-cards">
-          <section class="setup-form settings-card" aria-labelledby="update-title">
-            <h3 id="update-title" data-i18n>Updates</h3>
+        <nav class="settings-nav" aria-label="Settings sections" data-i18n-attributes="aria-label">
+          <a href="#display-settings-title" data-i18n>Display</a>
+          <a href="#weather-settings-title" data-i18n>Location and weather</a>
+          <a href="#playback-settings-title" data-i18n>Playback</a>
+          <a href="#wifi-settings-title" data-i18n>Wi-Fi setup</a>
+          <a href="#local-name-title" data-i18n>Local address</a>
+          <a href="#spotify-title" data-i18n>Spotify</a>
+          <a href="#web-password-title" data-i18n>Web password</a>
+          <a href="#update-title" data-i18n>Updates</a>
+        </nav>
+        <div class="settings-content">
+          <form id="device-form" class="setup-form settings-panel">
+            <fieldset id="device-inputs" class="settings-fields" aria-label="Device setup" data-i18n-attributes="aria-label">
+              <section class="settings-card" aria-labelledby="display-settings-title">
+                <h2 id="display-settings-title" tabindex="-1" data-i18n>Display</h2>
+                <div class="setup-grid">
+                  <label data-i18n>Display width (px)<input name="display_width" type="number" min="32" max="400" step="1" required></label>
+                  <label data-i18n>Display height (px)<input name="display_height" type="number" min="32" max="400" step="1" required></label>
+                  <label data-i18n>Rotation<select name="rotation">
+                    <option value="0">0°</option>
+                    <option value="90">90°</option>
+                    <option value="180">180°</option>
+                    <option value="270">270°</option>
+                  </select></label>
+                  <label data-i18n>Partial updates before a full refresh<input name="full_refresh_after" type="number" step="1" required></label>
+                </div>
+              </section>
+              <section class="settings-card" aria-labelledby="weather-settings-title">
+                <h2 id="weather-settings-title" tabindex="-1" data-i18n>Location and weather</h2>
+                <div class="settings-controls">
+                  <div class="city-search">
+                    <label for="city" data-i18n>City</label>
+                    <input id="city" name="location" required maxlength="120" autocomplete="off"
+                      role="combobox" aria-autocomplete="list" aria-controls="places" aria-expanded="false" aria-describedby="city-help">
+                    <p id="city-help" data-i18n>Choose a suggestion to fill in the coordinates and time zone.</p>
+                    <ul id="places" role="listbox" aria-label="Suggested cities" data-i18n-attributes="aria-label" hidden></ul>
+                    <p id="city-status" role="status"></p>
+                  </div>
+                  <div class="setup-grid">
+                    <label data-i18n>Latitude<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
+                    <label data-i18n>Longitude<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
+                    <label data-i18n>Time zone<input name="timezone" placeholder="Europe/Prague" required></label>
+                    <label data-i18n>Temperature units<select name="units"><option value="celsius">°C</option><option value="fahrenheit">°F</option></select></label>
+                    <label data-i18n>Weather check interval (min)<input name="weather_interval" type="number" step="1" required></label>
+                  </div>
+                  <label class="checkbox-setting" data-i18n><input type="checkbox" name="weather_enabled"> Show weather</label>
+                </div>
+              </section>
+              <section class="settings-card" aria-labelledby="playback-settings-title">
+                <h2 id="playback-settings-title" tabindex="-1" data-i18n>Playback</h2>
+                <div class="settings-controls">
+                  <label class="checkbox-setting" data-i18n><input type="checkbox" name="playback_enabled"> Switch to playback automatically</label>
+                  <label class="checkbox-setting" data-i18n><input type="checkbox" name="queue_prefetch"> Prepare covers from the queue</label>
+                  <div class="setup-grid">
+                    <label data-i18n>Check while playing (s)<input name="playing_interval" type="number" step="1" required></label>
+                    <label data-i18n>Check while idle (s)<input name="idle_interval" type="number" step="1" required></label>
+                  </div>
+                </div>
+              </section>
+              <section class="settings-card" aria-labelledby="wifi-settings-title">
+                <h2 id="wifi-settings-title" tabindex="-1" data-i18n>Wi-Fi setup</h2>
+                <label data-i18n>Wait before starting the setup hotspot (s)<input name="hotspot_delay" type="number" step="1" required></label>
+              </section>
+            </fieldset>
             <div class="settings-save">
-              <button id="check-update" type="button" data-i18n disabled>Check for updates</button>
-              <button id="install-update" type="button" hidden disabled><span data-i18n>Update</span><code id="available-version"></code></button>
-              <code id="installed-version" aria-label="Installed version" data-i18n-attributes="aria-label" hidden></code>
-              <p id="update-status" role="status"></p>
+              <p id="device-status" role="status" data-i18n>Changes to display, weather, playback, and Wi-Fi are saved together.</p>
+              <button id="save-device" type="submit" form="device-form" data-i18n disabled>Save settings</button>
             </div>
-          </section>
-        </div>
-        <form id="device-form" class="setup-form">
-          <div class="settings-cards">
-            <section class="setup-form settings-card" aria-labelledby="display-settings-title">
-              <h3 id="display-settings-title" data-i18n>Display</h3>
-              <div class="setup-grid">
-                <label data-i18n>Display width (px)<input name="display_width" type="number" min="32" max="400" step="1" required></label>
-                <label data-i18n>Display height (px)<input name="display_height" type="number" min="32" max="400" step="1" required></label>
-                <label data-i18n>Rotation<select name="rotation">
-                  <option value="0">0°</option>
-                  <option value="90">90°</option>
-                  <option value="180">180°</option>
-                  <option value="270">270°</option>
-                </select></label>
-                <label data-i18n>Partial updates before a full refresh<input name="full_refresh_after" type="number" step="1" required></label>
+          </form>
+          <div class="settings-panel">
+            <form id="local-name-form" class="setup-form settings-card" aria-labelledby="local-name-title">
+              <h2 id="local-name-title" tabindex="-1" data-i18n>Local address</h2>
+              <div class="settings-controls">
+                <label class="checkbox-setting" data-i18n><input id="local-name" type="checkbox"> Enable local address</label>
+                <label data-i18n>Local name<input id="local-hostname" type="text" autocomplete="off" spellcheck="false" maxlength="69" placeholder="eink.local" required></label>
+                <button type="submit" data-i18n>Save local address</button>
+                <p id="local-name-status" role="status"></p>
+              </div>
+            </form>
+            <section class="setup-form settings-card spotify-setup" aria-labelledby="spotify-title">
+              <div class="spotify-heading">
+                <h2 id="spotify-title" tabindex="-1" data-i18n>Spotify</h2>
+                <span id="spotify-verified" role="img" tabindex="0" aria-label="Spotify connected" data-i18n-attributes="aria-label" hidden>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+                </span>
+              </div>
+              <div class="settings-controls">
+                <p id="spotify-status" data-i18n></p>
+                <div id="spotify-check" hidden>
+                  <p id="spotify-check-status" role="status"></p>
+                  <button id="spotify-check-button" type="button" data-i18n>Check Spotify API</button>
+                </div>
+                <form id="spotify-form" class="setup-form">
+                  <p data-i18n>In the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify Developer Dashboard</a> select Web API and add this address to Redirect URIs.</p>
+                  <code id="redirect-uri"></code>
+                  <label data-i18n>Client ID<input name="clientId" pattern="[a-fA-F0-9]{32}" autocomplete="off" required></label>
+                  <button type="submit" data-i18n>Prepare sign-in</button>
+                </form>
+                <form id="spotify-finish" class="setup-form" hidden>
+                  <a id="spotify-auth" class="setup-link" data-i18n target="_blank" rel="noopener noreferrer">Open Spotify and authorize access</a>
+                  <p data-i18n>After approving access, copy the full address from the new tab and paste it here. The browser may show a connection error at 127.0.0.1. The address bar still contains the information needed to finish setup.</p>
+                  <label data-i18n>Redirect URL<textarea name="callback" rows="3" autocomplete="off" required></textarea></label>
+                  <button type="submit" data-i18n>Finish connecting</button>
+                </form>
+                <button id="spotify-disconnect" type="button" hidden data-i18n>Disconnect Spotify</button>
+                <p id="spotify-action-status" role="status"></p>
               </div>
             </section>
-            <section class="setup-form settings-card" aria-labelledby="weather-settings-title">
-              <h3 id="weather-settings-title" data-i18n>Location and weather</h3>
-              <div class="city-search">
-                <label for="city" data-i18n>City</label>
-                <input id="city" name="location" required maxlength="120" autocomplete="off"
-                  role="combobox" aria-autocomplete="list" aria-controls="places" aria-expanded="false">
-                <ul id="places" role="listbox" aria-label="Suggested cities" data-i18n-attributes="aria-label" hidden></ul>
-                <p id="city-status" role="status"></p>
+            <form id="setup-code-form" class="setup-form settings-card" aria-labelledby="web-password-title">
+              <h2 id="web-password-title" tabindex="-1" data-i18n>Web password</h2>
+              <div class="settings-controls">
+                <label class="checkbox-setting" data-i18n><input id="password-required" type="checkbox" checked> Require a password for settings and editor</label>
+                <p id="password-protection-status" role="status"></p>
+                <p id="setup-code-help" data-i18n>Use 8–64 letters, numbers, or symbols without spaces.</p>
+                <label data-i18n>New setup code<input type="password" name="newCode" pattern="[!-~]{8,64}" required autocomplete="new-password" aria-describedby="setup-code-help"></label>
+                <label data-i18n>Confirm new code<input type="password" name="confirmCode" required autocomplete="new-password"></label>
+                <button type="submit" data-i18n>Save new code</button>
+                <p id="setup-code-status" role="status"></p>
               </div>
-              <div class="setup-grid">
-                <label data-i18n>Latitude<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
-                <label data-i18n>Longitude<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
-                <label data-i18n>Time zone<input name="timezone" placeholder="Europe/Prague" required></label>
-                <label data-i18n>Temperature units<select name="units"><option value="celsius">°C</option><option value="fahrenheit">°F</option></select></label>
-                <label data-i18n>Weather check interval (min)<input name="weather_interval" type="number" step="1" required></label>
+            </form>
+            <section class="setup-form settings-card" aria-labelledby="update-title">
+              <h2 id="update-title" tabindex="-1" data-i18n>Updates</h2>
+              <div class="settings-controls">
+                <p id="installed-version-row" hidden><span data-i18n>Installed version</span> <code id="installed-version"></code></p>
+                <p id="update-status" role="status"></p>
+                <div class="settings-actions">
+                  <button id="check-update" type="button" data-i18n disabled>Check for updates</button>
+                  <button id="install-update" type="button" hidden disabled><span data-i18n>Update</span><code id="available-version"></code></button>
+                </div>
               </div>
-              <label class="checkbox-setting" data-i18n><input type="checkbox" name="weather_enabled"> Show weather</label>
-            </section>
-            <section class="setup-form settings-card" aria-labelledby="playback-settings-title">
-              <h3 id="playback-settings-title" data-i18n>Playback</h3>
-              <label class="checkbox-setting" data-i18n><input type="checkbox" name="playback_enabled"> Switch to playback automatically</label>
-              <label class="checkbox-setting" data-i18n><input type="checkbox" name="queue_prefetch"> Prepare covers from the queue</label>
-              <div class="setup-grid">
-                <label data-i18n>Check while playing (s)<input name="playing_interval" type="number" step="1" required></label>
-                <label data-i18n>Check while idle (s)<input name="idle_interval" type="number" step="1" required></label>
-              </div>
-            </section>
-            <section class="setup-form settings-card" aria-labelledby="wifi-settings-title">
-              <h3 id="wifi-settings-title" data-i18n>Wi-Fi setup</h3>
-              <label data-i18n>Wait before starting the setup hotspot (s)<input name="hotspot_delay" type="number" step="1" required></label>
             </section>
           </div>
-          <div class="settings-save">
-            <button type="submit" data-i18n>Save settings</button>
-            <p id="device-status" role="status"></p>
-          </div>
-        </form>
-        <div class="settings-cards">
-          <form id="local-name-form" class="setup-form settings-card">
-            <h3 data-i18n>Local address</h3>
-            <label class="checkbox-setting" data-i18n><input id="local-name" type="checkbox"> Enable local address</label>
-            <label data-i18n>Local name<input id="local-hostname" type="text" autocomplete="off" spellcheck="false" maxlength="69" placeholder="eink.local" required></label>
-            <button type="submit" data-i18n>Save local address</button>
-            <p id="local-name-status" role="status"></p>
-          </form>
-          <section class="setup-form settings-card spotify-setup" aria-labelledby="spotify-title">
-            <div class="spotify-heading">
-              <h3 id="spotify-title" data-i18n>Spotify</h3>
-              <span id="spotify-verified" role="img" tabindex="0" aria-label="Spotify connected" data-i18n-attributes="aria-label" hidden>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
-              </span>
-            </div>
-            <p id="spotify-status" data-i18n></p>
-            <div id="spotify-check" hidden>
-              <p id="spotify-check-status" role="status"></p>
-              <button id="spotify-check-button" type="button" data-i18n>Check Spotify API</button>
-            </div>
-            <form id="spotify-form" class="setup-form">
-              <p data-i18n>In the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify Developer Dashboard</a> select Web API and add this address to Redirect URIs.</p>
-              <code id="redirect-uri"></code>
-              <label data-i18n>Client ID<input name="clientId" pattern="[a-fA-F0-9]{32}" autocomplete="off" required></label>
-              <button type="submit" data-i18n>Prepare sign-in</button>
-            </form>
-            <form id="spotify-finish" class="setup-form" hidden>
-              <a id="spotify-auth" class="setup-link" data-i18n target="_blank" rel="noopener noreferrer">Open Spotify and authorize access</a>
-              <p data-i18n>After approving access, copy the full address from the new tab and paste it here. The browser may show a connection error at 127.0.0.1. The address bar still contains the information needed to finish setup.</p>
-              <label data-i18n>Redirect URL<textarea name="callback" rows="3" autocomplete="off" required></textarea></label>
-              <button type="submit" data-i18n>Finish connecting</button>
-            </form>
-            <button id="spotify-disconnect" type="button" hidden data-i18n>Disconnect Spotify</button>
-            <p id="spotify-action-status" role="status"></p>
-          </section>
-          <form id="setup-code-form" class="setup-form settings-card">
-            <h3 data-i18n>Web password</h3>
-            <label class="checkbox-setting" data-i18n><input id="password-required" type="checkbox" checked> Require a password for settings and editor</label>
-            <p id="password-protection-status" role="status"></p>
-            <p id="setup-code-help" data-i18n>Use 8–64 letters, numbers, or symbols without spaces.</p>
-            <label data-i18n>New setup code<input type="password" name="newCode" pattern="[!-~]{8,64}" required autocomplete="new-password" aria-describedby="setup-code-help"></label>
-            <label data-i18n>Confirm new code<input type="password" name="confirmCode" required autocomplete="new-password"></label>
-            <button type="submit" data-i18n>Save new code</button>
-            <p id="setup-code-status" role="status"></p>
-          </form>
         </div>
       </div>
-    </section>
+    </div>
   </main>
 </body>
 </html>

@@ -19,13 +19,13 @@ Open the address printed by the installer, such as `http://192.168.1.25/`, from 
 
 Open **Saved layouts** below the preview to choose which design Dashboard and Playback each use. **Display mode** controls which screen is shown. Sign in with the device setup code if the web password is enabled.
 
-The gear opens **Settings** at `/settings`, where you can choose English or Czech. Unlock **Device setup** with the code printed by the installer to change location, display options, weather and Spotify intervals, and Wi-Fi setup timing. In **Web password**, you can change the code or let anyone who can reach the web interface open the settings and editor. Turn the password requirement back on to use the current code again. To recover the code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
+The gear opens **Settings** at `/settings`, where you can choose English or Czech. If prompted, enter the setup code printed by the installer. Use the section links to jump to the setting you need. **Save settings** applies the pending changes to display, location and weather, playback, and Wi-Fi setup together. In **Web password**, you can change the code or let anyone who can reach the web interface open the settings and editor. Turn the password requirement back on to use the current code again. To recover the code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
 
 Under **Display**, choose a rotation of 0°, 90°, 180°, or 270°. The canvas dimensions follow the orientation automatically. The default canvas is 250 × 122 px in landscape and 122 × 250 px in portrait.
 
 Opening Settings checks the repository's `main` branch on GitHub. When a newer version is available, select **Update** to download it and restart the dashboard. If the new version cannot start, the Pi returns to the previous version. Device settings, Wi-Fi, Spotify credentials, and saved layouts stay in the installation folder. **Check for updates** runs the check again. Use `install.sh` for system packages and the optional Wi-Fi helper.
 
-You can also open `http://eink.local/` on the same network. To change the name or turn it off, unlock **Device setup** and use **Local address**. If you change or disable the name while using it, Settings reopens at the Pi's IP address. The setup hotspot uses the address shown on the e-paper display.
+You can also open `http://eink.local/` on the same network. To change the name or turn it off, open **Local address** in Settings. If you change or disable the name while using it, Settings reopens at the Pi's IP address. The setup hotspot uses the address shown on the e-paper display.
 
 ### Build your own screens
 
