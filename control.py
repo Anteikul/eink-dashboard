@@ -25,9 +25,9 @@ THEMES = ('light', 'dark')
 DISPLAY_MODES = ('auto', 'dashboard', 'playback')
 LAYOUT_ROUTES = ('/api/layouts', '/api/layout-preview', '/api/layout-library')
 MAX_BITMAP_BYTES = ((MAX_DIMENSION + 7) // 8) * MAX_DIMENSION
-MAX_PHOTO_BITMAP_BYTES = ((PHOTO_SIZE + 7) // 8) * PHOTO_SIZE
+MAX_PHOTO_BYTES = PHOTO_SIZE * PHOTO_SIZE
 MAX_LAYOUT_BYTES = (4 * ((MAX_BITMAP_BYTES + 2) // 3) * (MAX_DRAWINGS + MAX_WIDGETS)
-                    + 4 * ((MAX_PHOTO_BITMAP_BYTES + 2) // 3) * MAX_WIDGETS + 128 * 1024)
+                    + 4 * ((MAX_PHOTO_BYTES + 2) // 3) * MAX_WIDGETS + 128 * 1024)
 PROTECTED_PAGES = ('/settings', '/editor')
 SESSION_COOKIE = 'eink_session'
 SESSION_AGE = 8 * 60 * 60
