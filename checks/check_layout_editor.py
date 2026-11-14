@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 from PIL import Image, ImageDraw, ImageOps
 
 from control import PanelState, start_server
-from dashboard import fit_panel, pack
+from dashboard import fit_panel, pack, render_layout_preview
 from device_settings import DeviceSettings
 from layout_editor import clock_has_seconds, content_key, format_clock, format_date, render_custom, resize_layer
 
@@ -69,6 +69,40 @@ with TemporaryDirectory() as folder:
         assert import_photo(b'not an image')[0] == 400
         assert import_photo(b'not an image', code='wrong')[0] == 403
         photo_option = next(item for item in schema['widgets']['dashboard'] if item['type'] == 'photo')
+        tones = Image.new('L', (120, 80))
+        ImageDraw.Draw(tones).rectangle((0, 0, 59, 79), fill=140)
+        ImageDraw.Draw(tones).rectangle((60, 0, 119, 79), fill=200)
+        with io.BytesIO() as image:
+            tones.save(image, format='PNG')
+            status, gray_photo = import_photo(image.getvalue())
+        assert status == 200 and base64.b64decode(gray_photo.get('gray', '')) == tones.tobytes()
+        gray_widget = {**photo_option['template'], 'x': 4, 'y': 8, 'w': 60, 'h': 40,
+                       'photo': gray_photo, 'crop': [0, 0, 60, 80],
+                       'placement': {'x': 5, 'y': 6, 'scaleX': 2, 'scaleY': 1.5}}
+        payload = {'screen': 'dashboard', 'layout': [gray_widget]}
+        assert request('/api/layouts', payload)[0] == 200
+        assert DeviceSettings(root).layouts['dashboard'] == [gray_widget]
+        status, png = request('/api/layout-preview', payload)
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as preview:
+            expected = Image.new('L', preview.size, 255)
+            expected.paste(140, (5, 6, 65, 66))
+            assert preview.tobytes() == expected.convert('1', dither=Image.Dither.FLOYDSTEINBERG).tobytes()
+        status, png = request('/api/layout-preview', {**payload, 'layers': True})
+        assert status == 200
+        with Image.open(io.BytesIO(png)) as atlas:
+            assert atlas.getpixel((15, 1)) == (140, 140, 140, 255)
+        png = render_layout_preview('dashboard', [gray_widget], 'light', 'en', 'celsius',
+                                    size=(250, 244), rotation=0)
+        with Image.open(io.BytesIO(png)) as preview:
+            assert preview.size == (250, 122)
+            expected = Image.new('L', preview.size, 255)
+            expected.paste(140, (64, 3, 94, 33))
+            assert preview.tobytes() == expected.convert('1', dither=Image.Dither.FLOYDSTEINBERG).tobytes()
+        malformed = {**gray_widget, 'photo': {**gray_photo, 'gray': gray_photo['gray'][:-4]}}
+        assert request('/api/layout-preview', {**payload, 'layout': [malformed]})[0] == 400
+        # A photo saved by an older version still uses a packed one-bit bitmap.
+        photo = {'w': 16, 'h': 8, 'bitmap': base64.b64encode(source.convert('1').tobytes()).decode()}
         photo_widget = {**photo_option['template'], 'x': 4, 'y': 8, 'w': 8, 'h': 8,
                         'photo': photo, 'crop': [0, 0, 8, 8]}
         status, png = request('/api/layout-preview', {'screen': 'dashboard', 'layout': [photo_widget]})

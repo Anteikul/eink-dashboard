@@ -1,4 +1,4 @@
-"""Convert an uploaded photo to a bounded, monochrome source for the editor."""
+"""Convert an uploaded photo to a bounded grayscale source for the editor."""
 import shutil
 import subprocess
 from base64 import b64encode
@@ -52,8 +52,8 @@ def prepare_photo(data):
                 if 'A' in photo.getbands() or 'transparency' in photo.info:
                     rgba = photo.convert('RGBA')
                     photo = Image.alpha_composite(Image.new('RGBA', rgba.size, 'white'), rgba)
-                gray = ImageOps.autocontrast(photo.convert('L'), cutoff=1)
-                mono = gray.convert('1', dither=Image.Dither.FLOYDSTEINBERG)
-                return {'w': mono.width, 'h': mono.height, 'bitmap': b64encode(mono.tobytes()).decode()}
+                # Preserve the tones until the crop reaches the panel resolution.
+                gray = photo.convert('L')
+                return {'w': gray.width, 'h': gray.height, 'gray': b64encode(gray.tobytes()).decode()}
     except (OSError, SyntaxError, Image.DecompressionBombError, subprocess.SubprocessError) as error:
         raise ValueError(BAD_PHOTO) from error

@@ -189,15 +189,18 @@ def _validate_placement(placement, size):
 
 
 def _validate_bitmap(bitmap, w, h):
-    size = ((w + 7) // 8) * h
+    return _validate_pixels(bitmap, ((w + 7) // 8) * h, 'The drawing is invalid.')
+
+
+def _validate_pixels(bitmap, size, message):
     if not isinstance(bitmap, str) or len(bitmap) != 4 * ((size + 2) // 3):
-        raise ValueError('The drawing is invalid.')
+        raise ValueError(message)
     try:
         pixels = b64decode(bitmap, validate=True)
     except ValueError as error:
-        raise ValueError('The drawing is invalid.') from error
+        raise ValueError(message) from error
     if len(pixels) != size:
-        raise ValueError('The drawing is invalid.')
+        raise ValueError(message)
     return b64encode(pixels).decode()
 
 
@@ -275,7 +278,11 @@ def validate_layout(screen, layout, size=PANEL_SIZE):
                 raise ValueError('Import a photo first.')
             w, h = photo.get('w'), photo.get('h')
             _validate_box(0, 0, w, h, (PHOTO_SIZE, PHOTO_SIZE))
-            widget['photo'] = {'w': w, 'h': h, 'bitmap': _validate_bitmap(photo.get('bitmap'), w, h)}
+            if 'gray' in photo:
+                pixels = {'gray': _validate_pixels(photo['gray'], w * h, 'Import a photo first.')}
+            else:
+                pixels = {'bitmap': _validate_bitmap(photo.get('bitmap'), w, h)}
+            widget['photo'] = {'w': w, 'h': h, **pixels}
             crop = supplied.get('crop', [0, 0, w, h])
             if not isinstance(crop, (list, tuple)) or len(crop) != 4:
                 raise ValueError('Choose a valid crop inside the photo.')
@@ -678,6 +685,11 @@ def _drawing_mask(bitmap, w, h):
     return Image.frombytes('1', (w, h), b64decode(bitmap))
 
 
+@lru_cache(maxsize=MAX_WIDGETS)
+def _gray_photo(gray, w, h):
+    return Image.frombytes('L', (w, h), b64decode(gray))
+
+
 def _apply_erasure(widget, layer, offset=(0, 0), *, art=False):
     mask = widget.get('mask')
     if mask is None or layer is None:
@@ -710,17 +722,20 @@ def _widget_layers(layout, now, language, weather, units, track, cover, progress
         if kind in ('cover', 'photo'):
             source = cover
             resample = Image.Resampling.NEAREST
+            gray = False
             if kind == 'photo':
                 photo = widget['photo']
                 x, y, crop_w, crop_h = widget['crop']
-                source = _drawing_mask(photo['bitmap'], photo['w'], photo['h'])
+                gray = 'gray' in photo
+                decode, pixels = (_gray_photo, photo['gray']) if gray else (_drawing_mask, photo['bitmap'])
+                source = decode(pixels, photo['w'], photo['h'])
                 source = source.crop((x, y, x + crop_w, y + crop_h)).convert('L')
                 resample = Image.Resampling.LANCZOS
             art = None
             if source is not None:
                 art = (ImageOps.fit(source, (w, h), resample)
                        if widget['variant'] == 'fill' else _contain(source, w, h, resample))
-                if kind == 'photo':
+                if kind == 'photo' and not gray:
                     art = art.convert('1')
             offset = ((w - art.width) // 2, (h - art.height) // 2) if art is not None else (0, 0)
             yield offset, art, True
@@ -783,11 +798,24 @@ def _placement_left(widget, width, limit, now, units, language):
     return max(0, min(x, limit - width))
 
 
+def fit_canvas(image, view_size, background):
+    if image.size == view_size:
+        return image
+    x, y, width, height = panel_bounds(image.size, view_size)
+    fitted = image.resize((width, height), Image.Resampling.NEAREST)
+    if fitted.size == view_size:
+        return fitted
+    panel = Image.new(image.mode, view_size, background)
+    panel.paste(fitted, (x, y))
+    return panel
+
+
 def render_custom(layout, now, theme, language, *, weather=None, units='celsius', track=None,
-                  cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE, weather_enabled=True):
+                  cover=None, progress=0.0, duration_ms=0, size=PANEL_SIZE, weather_enabled=True, view_size=None):
     """Draw widgets back to front, using their boxes to clip every layer."""
-    foreground = int(theme == 'dark')
-    image = Image.new('1', size, 1 - foreground)
+    use_gray = any(widget['type'] == 'photo' and 'gray' in widget['photo'] for widget in layout)
+    foreground = 255 if theme == 'dark' else 0
+    image = Image.new('L' if use_gray else '1', size, 255 - foreground)
     layers = _widget_layers(layout, now, language, weather, units, track, cover, progress, duration_ms, size,
                             weather_enabled)
     for widget, (offset, layer, opaque) in zip(layout, layers):
@@ -797,6 +825,7 @@ def render_custom(layout, now, theme, language, *, weather=None, units='celsius'
         position = (widget.get('x', 0) + dx, widget.get('y', 0) + dy)
         placement = widget.get('placement')
         bounds = _source_bounds(layer, offset, opaque) if placement is not None else None
+        gray = layer.mode == 'L' and widget['type'] == 'photo'
         layer = _apply_erasure(widget, layer, offset, art=opaque)
         if placement is not None:
             if bounds is None:
@@ -807,12 +836,18 @@ def render_custom(layout, now, theme, language, *, weather=None, units='celsius'
             height = _scaled_extent(h, placement['scaleY'], size[1])
             position = (_placement_left(widget, width, size[0], now, units, language),
                         min(placement['y'], size[1] - height))
-            layer = layer.crop((left, top, left + w, top + h)).resize((width, height), Image.Resampling.NEAREST)
+            layer = layer.crop((left, top, left + w, top + h))
+            resample = Image.Resampling.LANCZOS if gray and not widget.get('mask') else Image.Resampling.NEAREST
+            layer = layer.resize((width, height), resample)
         if opaque:
             alpha = layer.getchannel('A') if layer.mode == 'RGBA' else None
             image.paste(layer, position, alpha)
         else:
             image.paste(foreground, position, layer)
+    if view_size is not None:
+        image = fit_canvas(image, view_size, 255 - foreground)
+    if use_gray:
+        image = image.convert('1', dither=Image.Dither.FLOYDSTEINBERG)
     return bytearray(image.convert('L').tobytes().translate(PIXEL_BITS))
 
 
