@@ -10,8 +10,6 @@
   const panel = element('editor-panel');
   const tabs = [...editor.querySelectorAll('[role=tab]')];
   const stage = element('editor-stage');
-  const canvasArea = element('editor-canvas-area');
-  const panelFrame = element('editor-panel-frame');
   const preview = element('editor-image');
   const output = preview.getContext('2d');
   const canvas = document.createElement('canvas');
@@ -28,6 +26,9 @@
   const previewStatus = element('editor-preview-status');
   const retry = element('editor-preview-retry');
   const widgetList = element('editor-widgets');
+  const layerCount = element('editor-layer-count');
+  const emptyLayers = element('editor-empty-layers');
+  const noSelection = element('editor-no-selection');
   const palette = element('editor-palette');
   const photoFile = element('editor-photo-file');
   const cropButton = element('editor-crop-photo');
@@ -39,8 +40,6 @@
     paintInk(canvas, decodeInk(photo.bitmap), 255);
   }, canvasPoint);
   const tools = element('editor-tools');
-  const toolbar = element('editor-toolbar');
-  const history = element('editor-history');
   const brush = element('editor-brush');
   const brushOptions = element('editor-brush-options');
   const brushWidth = element('editor-brush-width');
@@ -147,20 +146,6 @@
     return layerKeys.get(layer);
   }
 
-  function positionHistory() {
-    const area = canvasArea.getBoundingClientRect();
-    if (!schema || !area.width || !area.height) return;
-    const extraRow = toolbar.hasAttribute('data-history-row') ? toolbar.offsetHeight - tools.offsetHeight : 0;
-    const {width, height} = schema.panel;
-    const widthInOneRow = Math.min(area.width, (area.height + extraRow) * width / height);
-    toolbar.toggleAttribute('data-history-row', (widthInOneRow - tools.offsetWidth) / 2 < history.offsetWidth + 2);
-    history.style.marginInlineEnd = Math.max(0, area.right - panelFrame.getBoundingClientRect().right) + 'px';
-  }
-
-  const historyObserver = new ResizeObserver(positionHistory);
-  historyObserver.observe(canvasArea);
-  historyObserver.observe(panelFrame);
-
   function icon(type) {
     const ns = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(ns, 'svg');
@@ -207,7 +192,7 @@
     undo.disabled = current().undo.length === 0;
     redo.disabled = current().redo.length === 0;
     save.disabled = Boolean(savingScreen || librarySelection) || !hasChanges(current());
-    setText(saveStatus, current().message);
+    setText(saveStatus, draft.message || (hasChanges(draft) ? 'Unapplied changes' : ''));
   }
 
   function layerName(layer) {
@@ -224,8 +209,9 @@
       button.type = 'button';
       button.className = 'editor-icon';
       button.dataset.widget = item.type;
-      button.setAttribute('aria-label', translate(item.type === 'photo' ? 'Import photo' : item.label));
-      button.append(icon(item.type));
+      const label = document.createElement('span');
+      label.textContent = translate(item.type === 'photo' ? 'Import photo' : item.label);
+      button.append(icon(item.type), label);
       return button;
     }));
     updatePalette();
@@ -259,7 +245,9 @@
     if (textStyle && fontSize.value !== String(widget.size)) fontSize.value = widget.size;
     properties.hidden = !widget || isDrawing;
     drawingProperties.hidden = !isDrawing;
-    element('editor-inspector-title').hidden = !widget;
+    const count = selectedIndices().length;
+    noSelection.hidden = Boolean(widget);
+    if (!widget) setText(noSelection, count > 1 ? 'Use the canvas tools to align selected layers.' : 'Select a layer to edit its properties.');
     if (!widget || isDrawing) return;
 
     element('editor-selected-widget').textContent = widgetLabel(widget, current().selection);
@@ -394,6 +382,8 @@
       widgetButtons.push(button);
     }
     widgetList.replaceChildren(list);
+    layerCount.textContent = String(widgetButtons.length);
+    emptyLayers.hidden = widgetButtons.length > 0;
     updatePalette();
     updateSelection();
   }
@@ -984,6 +974,7 @@
       preview.width = width;
       preview.height = height;
       editor.style.setProperty('--display-ratio', width / height);
+      editor.toggleAttribute('data-portrait', height > width);
       stage.style.left = x / width * 100 + '%';
       stage.style.top = y / height * 100 + '%';
       stage.style.width = w / width * 100 + '%';
@@ -996,7 +987,7 @@
       content.hidden = false;
       setText(accessStatus, '');
       showScreen();
-      tabs.find(tab => tab.dataset.screen === screen).focus();
+      if (document.activeElement === accessRetry) tabs.find(tab => tab.dataset.screen === screen).focus();
     } catch (error) {
       if (controller.signal.aborted) return;
       showAccessError(error instanceof TypeError ? 'The Pi did not respond.' : error.message);
@@ -1933,7 +1924,17 @@
 
   retry.addEventListener('click', () => schedulePreview(0));
 
-  libraryToggle.addEventListener('click', () => setLibraryVisible(library.hidden));
+  libraryToggle.addEventListener('click', () => {
+    setLibraryVisible(library.hidden);
+    if (!library.hidden) {
+      element('editor-library-title').focus({preventScroll: true});
+      library.scrollIntoView({block: 'nearest'});
+    }
+  });
+  element('editor-library-close').addEventListener('click', () => {
+    setLibraryVisible(false);
+    libraryToggle.focus();
+  });
   libraryName.addEventListener('input', updateLibraryControls);
   libraryForm.addEventListener('submit', (event) => {
     event.preventDefault();

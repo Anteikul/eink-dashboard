@@ -28,16 +28,19 @@
         <div class="editor-tabs" role="tablist" aria-label="Layouts" data-i18n-attributes="aria-label">
           <button id="editor-dashboard-tab" class="editor-icon" type="button" role="tab" aria-label="Dashboard" aria-selected="true" aria-controls="editor-panel" data-screen="dashboard" data-label="Dashboard">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3ZM3 9h18M11 9v11m3-7h4m-4 4h4"/></svg>
+            <span data-i18n>Dashboard</span>
             <span class="editor-tab-dirty" hidden aria-hidden="true">•</span>
           </button>
           <button id="editor-playback-tab" class="editor-icon" type="button" role="tab" aria-label="Playback" aria-selected="false" aria-controls="editor-panel" data-screen="playback" data-label="Playback" tabindex="-1">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 10 6-10 6V6ZM12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/></svg>
+            <span data-i18n>Playback</span>
             <span class="editor-tab-dirty" hidden aria-hidden="true">•</span>
           </button>
         </div>
         <div class="editor-actions">
           <button id="editor-library-toggle" class="editor-icon" type="button" aria-label="Saved layouts" data-i18n-attributes="aria-label" aria-expanded="false" aria-controls="editor-library">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v13H3Zm0 4h18m-11 4h4"/></svg>
+            <span data-i18n>Saved layouts</span>
           </button>
           <button id="editor-blank" class="editor-icon" type="button" aria-label="Start blank" data-i18n-attributes="aria-label">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h9l5 5v13H5Zm9 0v5h5"/></svg>
@@ -47,14 +50,21 @@
           </button>
           <button id="editor-save" class="editor-icon" type="button" aria-label="Apply to display" data-i18n-attributes="aria-label">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l4 4v14H3V3Zm3 0v6h10V3M7 21v-8h10v8m-3-15v3"/></svg>
+            <span data-i18n>Apply to display</span>
           </button>
         </div>
+        <p id="editor-save-status" class="editor-message" role="status"></p>
       </div>
       <div id="editor-panel" role="tabpanel" aria-labelledby="editor-dashboard-tab">
         <div class="editor-grid">
+          <aside class="editor-palette" aria-labelledby="editor-palette-title">
+            <h2 id="editor-palette-title" data-i18n>Add widgets</h2>
+            <div id="editor-palette" role="group" aria-labelledby="editor-palette-title"></div>
+            <input id="editor-photo-file" type="file" accept=".jpg,.jpeg,.png,.heic,.heif,.webp,.gif,.bmp,.tif,.tiff" hidden>
+          </aside>
           <section class="editor-preview" aria-labelledby="editor-preview-title">
             <div class="section-line">
-              <h3 id="editor-preview-title" data-i18n>Display canvas</h3>
+              <h2 id="editor-preview-title" data-i18n>Display canvas</h2>
               <span id="editor-resolution">250 × 122 px</span>
             </div>
             <div id="editor-toolbar" class="editor-toolbar">
@@ -180,18 +190,18 @@
               </button>
             </div>
           </section>
-          <aside class="editor-palette" aria-labelledby="editor-palette-title">
-            <h3 id="editor-palette-title" data-i18n>Add widgets</h3>
-            <div id="editor-palette" role="group" aria-labelledby="editor-palette-title"></div>
-            <input id="editor-photo-file" type="file" accept=".jpg,.jpeg,.png,.heic,.heif,.webp,.gif,.bmp,.tif,.tiff" hidden>
-          </aside>
-          <aside class="editor-widgets" aria-labelledby="editor-widgets-title">
-            <h3 id="editor-widgets-title" data-i18n>Layers</h3>
-            <ul id="editor-widgets" aria-labelledby="editor-widgets-title"></ul>
-          </aside>
           <aside class="editor-inspector">
-            <div id="editor-widget-settings" class="editor-widget-settings">
-              <h3 id="editor-inspector-title" data-i18n>Widget settings</h3>
+            <section class="editor-widgets" aria-labelledby="editor-widgets-title">
+              <div class="section-line">
+                <h2 id="editor-widgets-title" data-i18n>Layers</h2>
+                <span id="editor-layer-count" aria-hidden="true"></span>
+              </div>
+              <p id="editor-empty-layers" class="editor-message" data-i18n hidden>No layers yet. Add a widget or draw on the canvas.</p>
+              <ul id="editor-widgets" aria-labelledby="editor-widgets-title"></ul>
+            </section>
+            <section id="editor-widget-settings" class="editor-widget-settings" aria-labelledby="editor-inspector-title">
+              <h2 id="editor-inspector-title" data-i18n>Widget settings</h2>
+              <p id="editor-no-selection" class="editor-message" data-i18n>Select a layer to edit its properties.</p>
               <div id="editor-drawing-properties" class="setup-form" hidden>
                 <button id="editor-remove-drawing" class="editor-icon" type="button" aria-label="Remove pen stroke" data-i18n-attributes="aria-label">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16m-11 0V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
@@ -232,9 +242,14 @@
                 </div>
                 <label id="editor-text-label" data-i18n>Custom text<textarea rows="2" maxlength="240" data-property="text"></textarea></label>
               </div>
-            </div>
+            </section>
             <section id="editor-library" aria-labelledby="editor-library-title" hidden>
-              <h3 id="editor-library-title" data-i18n>Saved layouts</h3>
+              <div class="section-line">
+                <h2 id="editor-library-title" tabindex="-1" data-i18n>Saved layouts</h2>
+                <button id="editor-library-close" class="editor-icon" type="button" aria-label="Close" data-i18n-attributes="aria-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>
+                </button>
+              </div>
               <form id="editor-library-form" class="setup-form">
                 <label for="editor-library-name" data-i18n>Layout name</label>
                 <div class="editor-library-row">
@@ -248,9 +263,6 @@
               <p id="editor-library-status" class="editor-message" role="status"></p>
             </section>
           </aside>
-        </div>
-        <div class="editor-status">
-          <p id="editor-save-status" class="editor-message" role="status"></p>
         </div>
       </div>
     </div>

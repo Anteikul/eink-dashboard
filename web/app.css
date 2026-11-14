@@ -366,12 +366,15 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 }
 
 #layout-editor {
+  --editor-surface: #f7f6ef;
+  --editor-workspace: #e1e3d9;
   display: flex;
   flex-direction: column;
   height: 100dvh;
   max-width: none;
   padding: 10px clamp(12px, 1.6vw, 30px);
 }
+:root[data-theme=dark] #layout-editor { --editor-surface: #272d27; --editor-workspace: #343d34; }
 #editor-content, #editor-panel {
   display: flex;
   flex: 1;
@@ -379,10 +382,10 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   min-height: 0;
 }
 #layout-editor [hidden] { display: none !important; }
-.editor-header { display: flex; flex: none; align-items: center; gap: 16px; margin: 0 0 6px; }
-.editor-header h1 { font-size: clamp(19px, 2vw, 26px); letter-spacing: -.035em; }
+.editor-header { display: flex; flex: none; align-items: center; gap: 8px; margin: 0 0 8px; }
+.editor-header h1 { font-size: clamp(21px, 2.4vw, 30px); letter-spacing: -.045em; }
 #editor-access-status:empty { display: none; }
-#layout-editor h3 { margin: 0; font-size: 14px; font-weight: 680; }
+#layout-editor h2 { margin: 0; font-size: 14px; font-weight: 680; }
 #layout-editor :is(input,select,textarea) { min-width: 0; }
 #layout-editor button:disabled { cursor: default; opacity: .55; }
 .editor-topbar {
@@ -390,25 +393,28 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   flex: none;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: end;
-  gap: 6px 16px;
-  margin-bottom: 12px;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--line);
 }
-.editor-tabs, .editor-actions { display: flex; gap: 5px; }
-.editor-actions { margin-bottom: 5px; }
+.editor-tabs, .editor-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+.editor-tabs { padding: 3px; border: 1px solid var(--line); border-radius: 8px; }
 .editor-topbar button { min-height: 40px; }
-.editor-tabs button { margin-bottom: -1px; border-radius: 5px 5px 0 0; }
-.editor-tabs button[aria-selected=true] { border-bottom: 2px solid var(--focus); background: color-mix(in srgb, var(--accent) 24%, var(--paper)); }
+.editor-tabs button[aria-selected=true] { background: var(--accent); border-color: #7a886d; color: #1e251f; }
 .editor-tab-dirty { position: absolute; top: 2px; right: 5px; color: var(--focus); }
+.editor-tabs [aria-selected=true] .editor-tab-dirty { color: #354c27; }
+.editor-topbar .editor-icon:has(> [data-i18n]) { width: auto; padding-inline: 11px; line-height: 1.15; }
+#editor-save-status { flex-basis: 100%; min-height: 1.4em; margin: 0; }
 .editor-grid {
   display: grid;
   flex: 1;
   min-height: 0;
-  grid-template-columns: 108px minmax(0, 1fr) 246px;
-  grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas: "palette canvas inspector" "palette canvas layers";
-  gap: clamp(12px, 2vw, 22px);
+  grid-template-columns: clamp(142px, 15vw, 190px) minmax(0, 1fr) clamp(212px, 22vw, 292px);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "palette canvas inspector";
+  gap: clamp(10px, 1.25vw, 18px);
 }
 .editor-preview {
   display: flex;
@@ -416,41 +422,46 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   grid-area: canvas;
   min-width: 0;
   container: editor-preview / inline-size;
+  padding: clamp(9px, 1.3vw, 16px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--editor-surface);
 }
 .editor-preview > :not(.editor-canvas-area) { flex: none; }
-.editor-palette { grid-area: palette; }
+.editor-palette { grid-area: palette; min-height: 0; overflow: auto; }
 .editor-inspector {
   grid-area: inspector;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 2px 5px 8px;
-  overflow: hidden;
-}
-.editor-widget-settings {
-  min-height: 0;
+  gap: 10px;
   overflow: auto;
   overscroll-behavior: contain;
 }
-.editor-widget-settings:has(> h3:not([hidden])), .editor-widgets {
-  padding: 8px;
+.editor-palette, .editor-widget-settings, .editor-widgets, #editor-library {
+  padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--ink) 3%, var(--paper));
+  background: var(--editor-surface);
 }
 .editor-canvas-area {
   display: grid;
   flex: 1;
   min-height: 0;
   container-type: size;
-  place-items: start center;
+  place-items: center;
+  padding: clamp(8px, 1.5vw, 20px);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--editor-workspace);
 }
 #editor-panel-frame {
   position: relative;
   width: min(100%, calc(100cqh * var(--display-ratio, 2.04918)));
   aspect-ratio: var(--display-ratio, 2.04918);
   background: #fff;
+  outline: 1px solid var(--line);
 }
 :root[data-theme=dark] #editor-panel-frame { background: #000; }
 #editor-stage {
@@ -564,16 +575,13 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   gap: 5px;
 }
 .editor-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
+  gap: 5px 9px;
   margin-bottom: 8px;
 }
-.editor-tools { grid-column: 2; justify-self: center; justify-content: center; }
-.editor-history { grid-column: 3; justify-self: end; }
-.editor-toolbar[data-history-row] { row-gap: 4px; }
-.editor-toolbar[data-history-row] :is(.editor-tools, .editor-history) { grid-column: 1 / -1; }
-.editor-toolbar[data-history-row] .editor-history { grid-row: 2; }
 .editor-contextbar { justify-content: center; gap: 8px; height: 36px; margin-bottom: 8px; }
 .editor-brush-options { gap: 8px; }
 .editor-contextbar .editor-icon { min-height: 36px; }
@@ -593,8 +601,8 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-canvas-alignment button { width: 34px; }
 .editor-canvas-alignment button:nth-child(4) { margin-left: 4px; }
 .editor-canvas-alignment button:nth-child(n+3)::after { inset-inline: auto 0; }
-#editor-palette { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
-#editor-palette .editor-icon { width: 100%; }
+#editor-palette { display: grid; gap: 5px; margin-top: 8px; }
+#editor-palette .editor-icon { justify-content: start; width: 100%; padding: 5px 7px; text-align: start; line-height: 1.15; }
 #editor-palette button { cursor: grab; touch-action: none; }
 #editor-palette button:active { cursor: grabbing; }
 .editor-icon {
@@ -620,9 +628,9 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 }
 .editor-history .editor-icon::after, .editor-actions .editor-icon::after,
 .editor-layer-heading .editor-icon::after { inset-inline: auto 0; }
-.editor-icon:focus-visible::after { display: block; }
+.editor-icon[aria-label]:not(:has(> [data-i18n])):focus-visible::after { display: block; }
 @media (hover: hover) {
-  .editor-icon:hover::after { display: block; }
+  .editor-icon[aria-label]:not(:has(> [data-i18n])):hover::after { display: block; }
 }
 .editor-icon svg, #editor-widgets svg {
   width: 21px;
@@ -637,8 +645,9 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-message { margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
 .editor-message:empty { margin: 0; }
 .editor-preview-status { display: flex; align-items: center; gap: 8px; }
-.editor-widgets { grid-area: layers; display: flex; flex-direction: column; align-self: start; min-width: 0; min-height: 0; max-height: 100%; }
-#editor-widgets { display: grid; gap: 6px; min-height: 0; max-height: min(168px, 24dvh); overflow: auto; overscroll-behavior: contain; margin: 6px 0 0; padding: 3px; list-style: none; }
+.editor-widgets, .editor-widget-settings, #editor-library { flex: none; min-width: 0; }
+.editor-widgets .section-line { margin-bottom: 6px; }
+#editor-widgets { display: grid; gap: 5px; max-height: min(220px, 32dvh); overflow: auto; overscroll-behavior: contain; margin: 0; padding: 3px; list-style: none; }
 #editor-widgets:empty { display: none; }
 #editor-widgets li { position: relative; }
 #editor-widgets button { width: 100%; min-height: 34px; gap: 8px; padding: 4px 8px; border-color: var(--line); text-align: left; cursor: grab; }
@@ -673,19 +682,10 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-alignment { display: flex; gap: 4px; }
 .editor-text-style > label { grid-column: 1 / -1; }
 .editor-alignment button { width: 36px; min-height: 34px; }
-.editor-status {
-  display: flex;
-  flex: 0 0 32px;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0 12px;
-  margin-top: 5px;
-  overflow: auto;
-}
-.editor-status p { margin: 0; font-size: 12px; }
 #editor-save { background: var(--accent); border-color: #7a886d; color: #1e251f; }
 #editor-library-toggle[aria-expanded=true] { background: var(--accent); border-color: #7a886d; color: #1e251f; }
-#editor-library { display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; }
+#editor-library .section-line { align-items: center; margin-bottom: 0; }
+#editor-library-close { width: 36px; min-height: 36px; }
 #editor-library-form { flex: none; margin: 8px 0; }
 .editor-library-row { display: flex; align-items: center; gap: 5px; }
 .editor-library-row input {
@@ -702,8 +702,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .editor-library-row button { flex: 0 0 36px; min-height: 36px; border-color: var(--line); }
 #editor-library-list {
   display: grid;
-  flex: 1;
-  min-height: 0;
+  max-height: min(330px, 42dvh);
   align-content: start;
   gap: 5px;
   overflow: auto;
@@ -779,30 +778,30 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   background: var(--crop-color);
 }
 
-@media (max-width: 800px) and (orientation: portrait), (max-width: 600px) {
+@media (max-width: 900px), (max-height: 560px) {
+  #layout-editor { height: auto; min-height: 100dvh; }
+  #editor-content, #editor-panel, .editor-grid { flex: none; }
   .editor-grid {
-    grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr);
-    grid-template-rows: auto minmax(0, 1.55fr) minmax(0, 1fr);
-    grid-template-areas: "palette palette" "canvas canvas" "inspector layers";
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas: "palette" "canvas" "inspector";
   }
-  .editor-palette { display: flex; align-items: center; gap: 9px; min-width: 0; }
-  #editor-palette { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 0; }
-  #editor-palette .editor-icon { width: 44px; }
-  .editor-inspector { padding: 0; }
-  .editor-widgets { padding: 6px; }
-  #editor-widgets { max-height: none; }
-  #editor-widgets button { gap: 4px; padding-inline: 4px; }
-  #editor-widgets svg, #editor-widgets .editor-grip { width: 16px; height: 16px; }
+  .editor-topbar { position: sticky; top: 0; z-index: 12; padding-top: 5px; background: var(--paper); }
+  #editor-palette { grid-template-columns: repeat(auto-fit, minmax(min(100%, 126px), 1fr)); }
+  .editor-canvas-area { flex: none; height: clamp(155px, 46vw, 400px); }
+  #layout-editor[data-portrait] .editor-canvas-area { height: clamp(235px, 57dvh, 470px); }
+  .editor-inspector { overflow: visible; }
+  #editor-library { scroll-margin-top: 180px; }
 }
 
 @media (max-width: 540px) {
   .editor-topbar { gap: 4px 8px; margin-bottom: 8px; }
-  .editor-topbar button { min-height: 36px; font-size: 13px; }
-  .editor-palette { display: block; }
-  #editor-palette { margin-top: 4px; }
-  #editor-palette .editor-icon { width: 40px; }
-  .editor-icon { width: 40px; min-height: 40px; }
+  .editor-topbar button { min-height: 40px; font-size: 13px; }
+  .editor-topbar .editor-icon:has(> [data-i18n]) { padding-inline: 8px; }
+  .editor-actions { width: 100%; }
+  .editor-actions #editor-save { margin-inline-start: auto; }
+  #layout-editor .editor-icon { min-height: 40px; }
+  .editor-actions > .editor-icon { width: 40px; }
   .editor-toolbar, .editor-contextbar { margin-bottom: 5px; }
 }
 
@@ -834,21 +833,6 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   .editor-contextbar { flex-wrap: wrap; height: 76px; align-content: center; }
 }
 
-@media (max-width: 540px) and (max-height: 650px) {
-  .editor-grid { grid-template-rows: auto minmax(0, 1fr) minmax(0, 23dvh); }
-  .editor-palette h3, .editor-preview .section-line {
-    display: none;
-  }
-  #editor-palette {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 38px);
-    gap: 3px;
-    margin-top: 0;
-  }
-  #editor-palette .editor-icon { width: 100%; min-height: 36px; }
-  .editor-status { flex-basis: 20px; }
-  #editor-library-form { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 5px; margin: 4px 0; }
-  #editor-library .editor-library-row :is(input, button) { min-height: 30px; }
-  .editor-library-layer-count { display: none; }
+@media (max-height: 440px) {
+  .editor-topbar { position: static; }
 }
