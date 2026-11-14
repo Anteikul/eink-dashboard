@@ -142,6 +142,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
         '/editor': ('editor.html', 'text/html; charset=utf-8'),
         '/settings': ('settings.html', 'text/html; charset=utf-8'),
         '/unlock': ('unlock.html', 'text/html; charset=utf-8'),
+        '/dashboard-favicon.ico': ('favicon.ico', 'image/vnd.microsoft.icon'),
         '/app.css': ('app.css', 'text/css; charset=utf-8'),
         '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
         '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),
