@@ -15,9 +15,9 @@ cd "$HOME" &&
 
 The installer uses `sudo` for missing packages and enables startup on boot. Leave the installation folder in place. For an older installation without **Updates** in Settings, install the current version in the existing folder and restart the Pi once.
 
-Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. Below the preview, choose **Automatic**, **Dashboard**, or **Playback**, and a light or dark theme. Automatic mode follows Spotify when automatic switching is enabled. Playback mode keeps the playback layout visible while Spotify is idle. The Pi remembers the selected mode after a restart.
+Open the address printed by the installer, such as `http://192.168.1.25/`, from a device on your local network. The page shows the last frame and connection status. The controls beside or below the preview let you choose **Automatic**, **Dashboard**, or **Playback**, and a light or dark theme. Automatic mode follows Spotify when automatic switching is enabled. Playback mode keeps the playback layout visible while Spotify is idle. The Pi remembers the selected mode after a restart.
 
-Open **Saved layouts** below the preview to choose which design Dashboard and Playback each use. **Display mode** controls which screen is shown. Sign in with the device setup code if the web password is enabled.
+Open **Saved layouts** below the theme controls to choose which design Dashboard and Playback each use. **Display mode** controls which screen is shown. Sign in with the device setup code if the web password is enabled.
 
 The gear opens **Settings** at `/settings`, where you can choose English or Czech. If prompted, enter the setup code printed by the installer. Use the section links to jump to the setting you need. **Save configuration** applies the pending changes to language, display, location and weather, playback, Wi-Fi setup, and the local address together. In **Web password**, you can change the code or let anyone who can reach the web interface open the settings and editor. Turn the password requirement back on to use the current code again. To recover the code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
 

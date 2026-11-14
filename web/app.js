@@ -4,6 +4,7 @@ const status = document.querySelector('#status');
 const image = document.querySelector('#preview');
 const bezel = image.closest('.bezel');
 const placeholder = document.querySelector('#placeholder');
+const frameDimensions = document.querySelector('#frame-dimensions');
 const trackLink = document.querySelector('#track-link');
 const layoutPicker = document.querySelector('#saved-layouts');
 const activeLayoutLabel = document.querySelector('#active-layout');
@@ -11,6 +12,7 @@ const layoutOptions = document.querySelector('#quick-layout-options');
 const layoutStatus = document.querySelector('#quick-layout-status');
 const layoutSections = [...layoutOptions.querySelectorAll('[data-screen]')];
 let revision = null;
+let previewError = false;
 let saving = false;
 let saveError = '';
 let reading = false;
@@ -20,16 +22,35 @@ let activeLayout;
 let selectedLayouts = {};
 
 image.addEventListener('load', () => {
+  previewError = false;
   bezel.toggleAttribute('data-portrait', image.naturalHeight > image.naturalWidth);
+  frameDimensions.textContent = `${image.naturalWidth} × ${image.naturalHeight} px`;
+  frameDimensions.hidden = false;
   placeholder.hidden = true;
   image.hidden = false;
 });
 
+image.addEventListener('error', () => {
+  revision = null;
+  previewError = true;
+  image.hidden = frameDimensions.hidden = true;
+  placeholder.hidden = false;
+  setText(placeholder, 'Could not load the screen preview.');
+  if (!saving && status.dataset.state !== 'error') {
+    showStatus('Could not load the screen preview.', 'error');
+  }
+});
+
+function showStatus(text, state) {
+  status.dataset.state = state;
+  if (status.textContent !== translate(text)) setText(status, text);
+}
+
 function showActiveLayout() {
   if (!activeLayout) return;
-  const {kind, name} = activeLayout;
+  const {kind, name, screen} = activeLayout;
   const title = name ?? translate(kind === 'default' ? 'Default layout' : 'Custom layout');
-  activeLayoutLabel.textContent = '· ' + title;
+  activeLayoutLabel.textContent = `${translate(screen === 'playback' ? 'Playback' : 'Dashboard')} · ${title}`;
   activeLayoutLabel.hidden = false;
   for (const section of layoutSections) {
     const selection = selectedLayouts[section.dataset.screen];
@@ -50,7 +71,8 @@ function show(data) {
   activeLayout = data.activeLayout;
   selectedLayouts = data.selectedLayouts ?? {};
   showActiveLayout();
-  const applied = data.appliedTheme === data.theme && data.page && (data.mode === 'auto' || data.page === data.mode);
+  const applied = data.revision && data.appliedTheme === data.theme
+    && data.page && (data.mode === 'auto' || data.page === data.mode);
   trackLink.hidden = !data.trackUrl;
   if (data.trackUrl) trackLink.querySelector('a').href = data.trackUrl;
   document.documentElement.dataset.theme = data.appliedTheme || data.theme;
@@ -63,7 +85,13 @@ function show(data) {
     image.src = '/screen.png?frame=' + revision;
   }
   for (const group of controls) group.disabled = false;
-  setText(status, saveError || (applied ? '' : 'Refreshing the display…'));
+  if (saveError || previewError) {
+    showStatus(saveError || 'Could not load the screen preview.', 'error');
+  } else if (!data.revision || (applied && !image.hidden)) {
+    showStatus('Display connected', 'ready');
+  } else {
+    showStatus('Refreshing the display…', 'pending');
+  }
 }
 
 async function read() {
@@ -77,7 +105,7 @@ async function read() {
     if (previous === change) show(data);
   } catch {
     if (previous === change) {
-      setText(status, 'Connection to the Pi lost. Reconnecting…');
+      showStatus('Connection to the Pi lost. Reconnecting…', 'error');
       for (const group of controls) group.disabled = true;
     }
   } finally {
@@ -105,7 +133,7 @@ async function saveDisplay(path, payload, pending, fallback) {
   saving = true;
   change++;
   saveError = '';
-  setText(status, pending);
+  showStatus(pending, 'pending');
   try {
     show(await request(path, payload, fallback));
   } finally {
@@ -123,7 +151,7 @@ for (const button of buttons) {
         theme ? 'Saving theme…' : 'Switching display mode…', 'Could not apply the change. Try again.');
     } catch (error) {
       saveError = message(error);
-      setText(status, saveError);
+      showStatus(saveError, 'error');
     }
   });
 }
@@ -173,7 +201,7 @@ layoutPicker.addEventListener('toggle', () => {
 
 layoutOptions.addEventListener('click', async event => {
   const button = event.target.closest('button[data-layout]');
-  if (!button || saving) return;
+  if (!button || saving || button.getAttribute('aria-pressed') === 'true') return;
   const screen = button.closest('[data-screen]').dataset.screen;
   layoutOptions.disabled = true;
   setText(layoutStatus, '');
@@ -182,8 +210,8 @@ layoutOptions.addEventListener('click', async event => {
       'Saving layout…', 'Could not save the layout.');
     setText(layoutStatus, 'Layout selected.');
   } catch (error) {
-    setText(status, '');
     reportLayoutError(error);
+    read();
   } finally {
     layoutOptions.disabled = false;
   }
