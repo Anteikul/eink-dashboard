@@ -143,6 +143,8 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
         '/settings': ('settings.html', 'text/html; charset=utf-8'),
         '/unlock': ('unlock.html', 'text/html; charset=utf-8'),
         '/dashboard-favicon.ico': ('favicon.ico', 'image/vnd.microsoft.icon'),
+        '/spotify-logo-black.png': ('spotify-logo-black.png', 'image/png'),
+        '/spotify-logo-white.png': ('spotify-logo-white.png', 'image/png'),
         '/app.css': ('app.css', 'text/css; charset=utf-8'),
         '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
         '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),
@@ -482,7 +484,10 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                 self.json(502, {'error': 'Could not apply the change. Try again.'})
                 return
             try:
-                self.json(200, settings.status())
+                result = settings.status()
+                if self.path == '/api/settings':
+                    result['ipUrl'] = f'http://{authority}'
+                self.json(200, result)
             finally:
                 reload_settings()
 

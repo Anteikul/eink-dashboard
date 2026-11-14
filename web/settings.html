@@ -19,11 +19,10 @@
       <h1 data-i18n>Settings</h1>
       <div class="language-setting">
         <label for="language" data-i18n>Language</label>
-        <select id="language" disabled>
+        <select id="language" name="language" form="device-form" disabled>
           <option value="en" lang="en">English</option>
           <option value="cs" lang="cs">Čeština</option>
         </select>
-        <p id="language-status" role="status"></p>
       </div>
     </header>
     <div class="setup settings-body">
@@ -93,25 +92,26 @@
                 <h2 id="wifi-settings-title" tabindex="-1" data-i18n>Wi-Fi setup</h2>
                 <label data-i18n>Wait before starting the setup hotspot (s)<input name="hotspot_delay" type="number" step="1" required></label>
               </section>
+              <section class="settings-card" aria-labelledby="local-name-title">
+                <h2 id="local-name-title" tabindex="-1" data-i18n>Local address</h2>
+                <div class="settings-controls">
+                  <label class="checkbox-setting" data-i18n><input type="checkbox" name="local_name"> Enable local address</label>
+                  <label data-i18n>Local name<input name="local_hostname" type="text" autocomplete="off" spellcheck="false" maxlength="69" placeholder="eink.local" required></label>
+                </div>
+              </section>
             </fieldset>
-            <div class="settings-save">
-              <p id="device-status" role="status" data-i18n>Changes to display, weather, playback, and Wi-Fi are saved together.</p>
-              <button id="save-device" type="submit" form="device-form" data-i18n disabled>Save settings</button>
-            </div>
           </form>
           <div class="settings-panel">
-            <form id="local-name-form" class="setup-form settings-card" aria-labelledby="local-name-title">
-              <h2 id="local-name-title" tabindex="-1" data-i18n>Local address</h2>
-              <div class="settings-controls">
-                <label class="checkbox-setting" data-i18n><input id="local-name" type="checkbox"> Enable local address</label>
-                <label data-i18n>Local name<input id="local-hostname" type="text" autocomplete="off" spellcheck="false" maxlength="69" placeholder="eink.local" required></label>
-                <button type="submit" data-i18n>Save local address</button>
-                <p id="local-name-status" role="status"></p>
-              </div>
-            </form>
             <section class="setup-form settings-card spotify-setup" aria-labelledby="spotify-title">
               <div class="spotify-heading">
-                <h2 id="spotify-title" tabindex="-1" data-i18n>Spotify</h2>
+                <h2 id="spotify-title" tabindex="-1">
+                  <img class="spotify-logo spotify-logo-light" src="/spotify-logo-black.png" width="104" height="28" alt="Spotify">
+                  <img class="spotify-logo spotify-logo-dark" src="/spotify-logo-white.png" width="104" height="28" alt="Spotify">
+                </h2>
+                <span id="spotify-checking" role="status" hidden>
+                  <span class="spotify-checking-label" data-i18n>Checking Spotify API…</span>
+                  <span class="spotify-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+                </span>
                 <span id="spotify-verified" role="img" tabindex="0" aria-label="Spotify connected" data-i18n-attributes="aria-label" hidden>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
                 </span>
@@ -161,6 +161,10 @@
                 </div>
               </div>
             </section>
+          </div>
+          <div class="settings-save">
+            <p id="device-status" role="status" data-i18n>Configuration changes are saved together.</p>
+            <button id="save-device" type="submit" form="device-form" data-i18n disabled>Save configuration</button>
           </div>
         </div>
       </div>

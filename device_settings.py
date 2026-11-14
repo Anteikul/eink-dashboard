@@ -35,7 +35,8 @@ SETTING_RANGES = {
     'playing_interval': (1, 120), 'idle_interval': (1, 120), 'hotspot_delay': (5, 300),
 }
 EXTRA_SETTINGS = (*SETTING_RANGES, 'display_width', 'display_height',
-                  'weather_enabled', 'playback_enabled', 'queue_prefetch')
+                  'weather_enabled', 'playback_enabled', 'queue_prefetch',
+                  'language', 'local_name', 'local_hostname')
 LANGUAGES = ('en', 'cs')
 ROTATIONS = (0, 90, 180, 270)
 REDIRECT_URI = 'http://127.0.0.1:8765/callback'
@@ -341,8 +342,7 @@ class DeviceSettings:
         with self.lock:
             values = validate_settings({
                 **{key: self.values[key] for key in EXTRA_SETTINGS}, **payload,
-                'language': self.values['language'], 'local_name': self.values['local_name'],
-                'local_hostname': self.values['local_hostname'], 'password_required': self.values['password_required'],
+                'password_required': self.values['password_required'],
             })
             size = display_size(values, self.rotation_override)
             layout_state = self.layout_state if size == self.layout_state[0] else (size, self.layouts_at(size))

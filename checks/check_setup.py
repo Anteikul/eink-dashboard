@@ -172,6 +172,15 @@ with TemporaryDirectory() as folder:
         legacy_settings = {key: value for key, value in selected.items() if key != 'language'}
         assert get('/api/settings', legacy_settings)[0] == 200
         assert DeviceSettings(root).values == {**selected, 'language': 'cs'}
+        combined = {**legacy_settings, 'location': 'Brno', 'language': 'en',
+                    'local_name': False, 'local_hostname': ' Desk-Eink ', 'password_required': False}
+        assert get('/api/settings', {**combined, 'local_hostname': 'not.example.com'})[0] == 400
+        assert DeviceSettings(root).values == {**selected, 'language': 'cs'}
+        status, saved = get('/api/settings', combined, origin=alias_origin, host=alias)
+        assert status == 200 and saved['ipUrl'] == base
+        assert saved['settings'] == {**combined, 'password_required': True, 'local_hostname': 'desk-eink.local'}
+        assert DeviceSettings(root).values == saved['settings']
+        assert get('/api/settings', {**selected, 'language': 'cs'})[0] == 200
         assert screen_content(datetime(2026, 11, 10), None, language='cs')[1] == 'Út 10. 11. 2026'
         assert screen_content(datetime(2026, 11, 10), None, language='en')[1] == 'Tue 10 Nov 2026'
         assert 'temperature_unit=fahrenheit' in Weather(selected).url
@@ -204,7 +213,7 @@ with TemporaryDirectory() as folder:
         assert get('/api/spotify/finish', {'callback': callback})[0] == 400
         assert get('/api/spotify/disconnect', {})[1]['spotifyConnected'] is False
         assert not settings.credentials.exists()
-        assert len(calls) == 5
+        assert len(calls) == 7
         original_code = settings.code
         assert get('/api/setup-code', {'newCode': 'short'})[0] == 400
         assert get('/api/setup-code', {'newCode': 'new-setup-code'}, code='wrong')[0] == 403

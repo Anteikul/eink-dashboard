@@ -181,11 +181,8 @@ const czech = new Map(Object.entries({
   'Language': 'Jazyk',
   'Device setup': 'Nastavení zařízení',
   'Local address': 'Místní adresa',
-  'Local address enabled.': 'Místní adresa je zapnutá.',
-  'Local address disabled.': 'Místní adresa je vypnutá.',
   'Enable local address': 'Zapnout místní adresu',
   'Local name': 'Místní název',
-  'Save local address': 'Uložit místní adresu',
   'Use a local name such as eink.local.': 'Zadej místní název, třeba eink.local.',
   'Choose whether to use the local address.': 'Zvol, zda chceš používat místní adresu.',
   'Setup code': 'Kód nastavení',
@@ -238,8 +235,8 @@ const czech = new Map(Object.entries({
   'Use HH:mm for 24-hour time, h:mm A for AM/PM, and ss for seconds. Put literal text in [brackets].':
     'Použij HH:mm pro 24hodinový čas, h:mm A pro AM/PM a ss pro sekundy. Vlastní text napiš do [hranatých závorek].',
   'Enter a time format with 1–64 characters.': 'Zadej formát času o délce 1–64 znaků.',
-  'Save settings': 'Uložit nastavení',
-  'Changes to display, weather, playback, and Wi-Fi are saved together.': 'Změny displeje, počasí, přehrávání a Wi-Fi se ukládají společně.',
+  'Save configuration': 'Uložit konfiguraci',
+  'Configuration changes are saved together.': 'Změny konfigurace se ukládají společně.',
   'You have unsaved changes.': 'Máš neuložené změny.',
   'No unsaved changes.': 'Žádné neuložené změny.',
   'Saving settings…': 'Ukládám nastavení…',
@@ -343,10 +340,7 @@ function setText(element, message) {
 
 function applyLanguage(language) {
   if (language !== 'en' && language !== 'cs') return;
-  if (languageSelect && !languageSelect.dataset.saving) {
-    languageSelect.disabled = false;
-    languageSelect.value = language;
-  }
+  if (languageSelect) languageSelect.value = language;
   if (document.documentElement.lang === language) return;
   document.documentElement.lang = language;
   document.title = translate(pageTitle);

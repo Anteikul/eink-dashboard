@@ -19,7 +19,7 @@ Open the address printed by the installer, such as `http://192.168.1.25/`, from 
 
 Open **Saved layouts** below the preview to choose which design Dashboard and Playback each use. **Display mode** controls which screen is shown. Sign in with the device setup code if the web password is enabled.
 
-The gear opens **Settings** at `/settings`, where you can choose English or Czech. If prompted, enter the setup code printed by the installer. Use the section links to jump to the setting you need. **Save settings** applies the pending changes to display, location and weather, playback, and Wi-Fi setup together. In **Web password**, you can change the code or let anyone who can reach the web interface open the settings and editor. Turn the password requirement back on to use the current code again. To recover the code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
+The gear opens **Settings** at `/settings`, where you can choose English or Czech. If prompted, enter the setup code printed by the installer. Use the section links to jump to the setting you need. **Save configuration** applies the pending changes to language, display, location and weather, playback, Wi-Fi setup, and the local address together. In **Web password**, you can change the code or let anyone who can reach the web interface open the settings and editor. Turn the password requirement back on to use the current code again. To recover the code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi.
 
 Under **Display**, choose a rotation of 0°, 90°, 180°, or 270°. The canvas dimensions follow the orientation automatically. The default canvas is 250 × 122 px in landscape and 122 × 250 px in portrait.
 

@@ -99,7 +99,21 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
 .setup [hidden] { display: none !important; }
 .setup-form { display: grid; gap: 8px; margin: 14px 0; }
 .spotify-setup .setup-form { margin: 0; }
-.spotify-heading { display: flex; align-items: center; align-self: start; gap: 6px; }
+.spotify-heading { display: flex; align-items: center; align-self: start; gap: 15px; }
+.spotify-logo { display: block; width: 104px; height: auto; }
+.spotify-logo-dark, :root[data-theme=dark] .spotify-logo-light { display: none; }
+:root[data-theme=dark] .spotify-logo-dark { display: block; }
+.spotify-checking-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.spotify-dots { display: flex; gap: 4px; }
+.spotify-dots span { width: 6px; height: 6px; border-radius: 50%; background: #a77000; }
+:root[data-theme=dark] .spotify-dots span { background: #f5c649; }
 #spotify-status:empty { display: none; }
 #spotify-verified { position: relative; display: inline-flex; border-radius: 3px; }
 #spotify-verified:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
@@ -187,7 +201,6 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   border-radius: 6px;
 }
 .language-setting select:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
-#language-status { flex-basis: 100%; margin: 0; color: var(--muted); }
 .settings-page [role=status]:empty { display: none; }
 .settings-body { padding: 0; margin: 0; border: 0; }
 #setup-fields {
@@ -250,8 +263,8 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   align-items: center;
   gap: 8px 18px;
   padding: 12px clamp(16px, 3vw, 24px) max(12px, env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line);
-  border-radius: 0 0 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px 8px 0 0;
   background: var(--settings-surface);
 }
 .settings-save button { flex-shrink: 0; }

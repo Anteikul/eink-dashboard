@@ -9,6 +9,7 @@ const deviceInputs = document.querySelector('#device-inputs');
 const saveDevice = document.querySelector('#save-device');
 const spotifyActionStatus = document.querySelector('#spotify-action-status');
 const spotifyCheck = document.querySelector('#spotify-check');
+const spotifyChecking = document.querySelector('#spotify-checking');
 const spotifyVerified = document.querySelector('#spotify-verified');
 const spotifyCheckStatus = document.querySelector('#spotify-check-status');
 const spotifyCheckButton = document.querySelector('#spotify-check-button');
@@ -20,10 +21,6 @@ const setupCodeForm = document.querySelector('#setup-code-form');
 const setupCodeStatus = document.querySelector('#setup-code-status');
 const passwordRequired = document.querySelector('#password-required');
 const passwordProtectionStatus = document.querySelector('#password-protection-status');
-const localName = document.querySelector('#local-name');
-const localHostname = document.querySelector('#local-hostname');
-const localNameForm = document.querySelector('#local-name-form');
-const localNameStatus = document.querySelector('#local-name-status');
 const updateButton = document.querySelector('#check-update');
 const installButton = document.querySelector('#install-update');
 const updateStatus = document.querySelector('#update-status');
@@ -51,22 +48,6 @@ let checkingUpdate = false;
 let offeredRevision = null;
 let savedDeviceValues;
 
-languageSelect.addEventListener('change', async () => {
-  const status = document.querySelector('#language-status');
-  languageSelect.dataset.saving = 'true';
-  languageSelect.disabled = true;
-  setText(status, '');
-  try {
-    const data = await api('/api/language', {language: languageSelect.value});
-    applyLanguage(data.language);
-  } catch (error) {
-    setText(status, error.message);
-  } finally {
-    delete languageSelect.dataset.saving;
-    applyLanguage(document.documentElement.lang);
-  }
-});
-
 async function api(path, payload, signal) {
   const options = {signal};
   if (payload !== undefined) {
@@ -83,7 +64,7 @@ async function api(path, payload, signal) {
     }
     throw new Error(data.error || 'Could not load settings.');
   }
-  if (path !== '/api/state' && path !== '/api/language') signIn.hidden = true;
+  if (path !== '/api/state') signIn.hidden = true;
   return data;
 }
 
@@ -107,14 +88,14 @@ function fillDevice(settings) {
 function showSettings(data) {
   clearPlaces();
   fillDevice(data.settings);
+  applyLanguage(data.settings.language);
+  languageSelect.disabled = false;
   savedDeviceValues = JSON.stringify(deviceValues());
   for (const [key, [min, max]] of Object.entries(data.ranges)) {
     const field = deviceForm.elements.namedItem(key);
     field.min = min;
     field.max = max;
   }
-  localName.checked = data.settings.local_name;
-  localHostname.value = data.settings.local_hostname;
   passwordRequired.checked = data.settings.password_required;
   showSpotify(data);
 }
@@ -128,6 +109,7 @@ function showSpotify(data) {
   disconnect.hidden = !data.spotifyConnected;
   spotifyCheckRequest?.abort();
   spotifyCheck.hidden = !data.spotifyConnected;
+  spotifyChecking.hidden = true;
   spotifyVerified.hidden = true;
   spotifyCheckButton.disabled = false;
   if (data.spotifyConnected) verifySpotify();
@@ -138,44 +120,23 @@ async function verifySpotify() {
   spotifyCheckRequest = controller;
   spotifyCheckButton.disabled = true;
   spotifyVerified.hidden = true;
-  setText(spotifyCheckStatus, 'Checking Spotify API…');
+  spotifyChecking.hidden = false;
+  setText(spotifyCheckStatus, '');
   try {
     const result = await api('/api/spotify/check', {}, controller.signal);
     if (!result.verified) throw new Error('Could not verify Spotify API.');
-    if (!controller.signal.aborted) {
-      spotifyVerified.hidden = false;
-      setText(spotifyCheckStatus, '');
-    }
+    if (!controller.signal.aborted) spotifyVerified.hidden = false;
   } catch (error) {
     if (!controller.signal.aborted) setText(spotifyCheckStatus, error.message);
   } finally {
-    if (spotifyCheckRequest === controller) spotifyCheckButton.disabled = false;
+    if (spotifyCheckRequest === controller) {
+      spotifyChecking.hidden = true;
+      spotifyCheckButton.disabled = false;
+    }
   }
 }
 
 spotifyCheckButton.addEventListener('click', verifySpotify);
-
-localNameForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const button = localNameForm.querySelector('button');
-  button.disabled = true;
-  setText(localNameStatus, '');
-  try {
-    const data = await api('/api/local-name', {enabled: localName.checked, hostname: localHostname.value});
-    localName.checked = data.enabled;
-    localHostname.value = data.hostname;
-    const host = window.location.hostname;
-    if (host.endsWith('.local') && (!data.enabled || host !== data.hostname)) {
-      window.location.replace(new URL('/settings', data.ipUrl));
-      return;
-    }
-    setText(localNameStatus, data.enabled ? 'Local address enabled.' : 'Local address disabled.');
-  } catch (error) {
-    setText(localNameStatus, error.message);
-  } finally {
-    button.disabled = false;
-  }
-});
 
 function clearPlaces() {
   clearTimeout(placeTimer);
@@ -274,6 +235,7 @@ function showDeviceChanges() {
 }
 
 deviceForm.addEventListener('input', showDeviceChanges);
+languageSelect.addEventListener('input', showDeviceChanges);
 deviceForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (saveDevice.disabled) return;
@@ -281,20 +243,26 @@ deviceForm.addEventListener('submit', async (event) => {
   for (const field of deviceInputs.querySelectorAll('input[type="number"]')) form[field.name] = field.valueAsNumber;
   form.rotation = Number(form.rotation);
   clearPlaces();
-  deviceInputs.disabled = saveDevice.disabled = true;
+  deviceInputs.disabled = languageSelect.disabled = saveDevice.disabled = true;
   setText(deviceStatus, 'Saving settings…');
+  let data;
   try {
-    const data = await api('/api/settings', form);
-    fillDevice(data.settings);
-    setText(deviceStatus, 'Settings saved. The display will refresh shortly.');
+    data = await api('/api/settings', form);
   } catch (error) {
     setText(deviceStatus, error.message);
     saveDevice.disabled = false;
     return;
   } finally {
-    deviceInputs.disabled = false;
+    deviceInputs.disabled = languageSelect.disabled = false;
   }
+  fillDevice(data.settings);
+  applyLanguage(data.settings.language);
   savedDeviceValues = JSON.stringify(deviceValues());
+  setText(deviceStatus, 'Settings saved. The display will refresh shortly.');
+  const host = window.location.hostname;
+  if (host.endsWith('.local') && (!data.settings.local_name || host !== data.settings.local_hostname)) {
+    window.location.replace(new URL('/settings', data.ipUrl));
+  }
 });
 
 spotifyForm.addEventListener('submit', (event) => {
@@ -418,12 +386,8 @@ window.addEventListener('pageshow', event => {
   if (event.persisted && !setupFields.hidden) checkUpdate();
 });
 
-api('/api/state').then(data => {
-  applyLanguage(data.language);
-  document.documentElement.dataset.theme = data.appliedTheme || data.theme;
-}).catch(error => setText(document.querySelector('#language-status'), error.message));
-
-api('/api/settings').then(data => {
+Promise.all([api('/api/settings'), api('/api/state')]).then(([data, state]) => {
+  document.documentElement.dataset.theme = state.appliedTheme || state.theme;
   showSettings(data);
   setText(setupStatus, '');
   setupFields.hidden = false;
