@@ -454,6 +454,20 @@ with TemporaryDirectory() as folder:
             assert (schema['width'], schema['height']) == (width, height)
             assert schema['panel'] == {
                 'rotation': rotation, 'width': width, 'height': height, 'bounds': [0, 0, width, height]}
+            if portrait:
+                defaults = schema['defaults']['dashboard']
+                widget_templates = {item['type']: item['template'] for item in schema['widgets']['dashboard']}
+                clock, date, divider, weather = defaults
+                assert clock == widget_templates['clock'] and date == widget_templates['date']
+                assert clock['y'] + clock['h'] <= date['y'] < divider['y'] < weather['y']
+                assert divider['variant'] == 'horizontal'
+                for screen in ('dashboard', 'playback'):
+                    status, png = request('/api/layout-preview', {'screen': screen, 'layout': schema['defaults'][screen]})
+                    assert status == 200
+                    with Image.open(io.BytesIO(png)) as preview:
+                        assert preview.size == (122, 250)
+                        assert preview.crop((0, 0, 122, 80)).getextrema() == (0, 255)
+                        assert preview.crop((0, 175, 122, 250)).getextrema() == (0, 255)
             status, png = request(listing + '&name=Star%C5%A1%C3%AD&thumbnail=1')
             assert status == 200
             with Image.open(io.BytesIO(png)) as thumbnail:

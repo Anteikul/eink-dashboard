@@ -5,7 +5,8 @@ from types import ModuleType
 
 from PIL import Image
 
-from dashboard import PANEL_SIZE, ROW_BYTES, changed_regions, fit_panel, pack, render
+from dashboard import PANEL_SIZE, ROW_BYTES, canvas_defaults, changed_regions, fit_panel, pack, render
+from layout_editor import panel_view_size, render_custom
 
 # The controller simulation replaces all GPIO-facing operations.
 sys.modules.setdefault('lgpio', ModuleType('lgpio'))
@@ -53,16 +54,20 @@ for rotation, transpose in ((90, Image.Transpose.ROTATE_270), (270, Image.Transp
     assert bytes(turned) == portrait_image.transpose(transpose).tobytes()
 
 for rotation in (0, 90, 180, 270):
+    size = panel_view_size(rotation)
     for theme in ('light', 'dark'):
         before = datetime(2026, 11, 9, 18, 39)
         after = datetime(2026, 11, 9, 18, 40)
         weather = (4, 3, False)
-        empty_frame = render(before, None, theme)
-        cloud_frame = render(before, weather, theme)
-        minute_frame = render(after, weather, theme)
+        if size == PANEL_SIZE:
+            frames = [render(now, current_weather, theme) for now, current_weather in (
+                (before, None), (before, weather), (after, weather))]
+        else:
+            frames = [render_custom(canvas_defaults(size)['dashboard'], now, theme, 'en',
+                                    size=size, view_size=size, weather=current_weather)
+                      for now, current_weather in ((before, None), (before, weather), (after, weather))]
         empty, cloud, next_minute = (
-            pack(fit_panel(frame, PANEL_SIZE, theme, rotation=rotation), 0)
-            for frame in (empty_frame, cloud_frame, minute_frame)
+            pack(fit_panel(frame, size, theme, rotation=rotation), 0) for frame in frames
         )
         panel = PingPongPanel(empty)
         panel.display_regions(cloud, changed_regions(empty, cloud))
@@ -70,11 +75,15 @@ for rotation in (0, 90, 180, 270):
         clock_regions = changed_regions(cloud, next_minute)
         assert clock_regions
         if rotation in (0, 180):
-            assert cloud == pack(cloud_frame, rotation)
+            assert cloud == pack(frames[1], rotation)
             assert all(
                 region.last_row < 161 if rotation == 180 else region.first_row > 88
                 for region in clock_regions
             )
+        elif rotation == 90:
+            assert all(region.last_row < 80 for region in clock_regions)
+        else:
+            assert all(region.first_row >= 170 for region in clock_regions)
         panel.display_regions(next_minute, clock_regions)
         assert panel.visible == next_minute, 'Clock-only refresh reverted the weather pixels'
         assert panel.ram[0x24] == panel.ram[0x26] == next_minute
