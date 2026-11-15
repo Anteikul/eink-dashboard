@@ -10,6 +10,7 @@
   const panel = element('editor-panel');
   const tabs = [...editor.querySelectorAll('[role=tab]')];
   const stage = element('editor-stage');
+  const panelFrame = element('editor-panel-frame');
   const preview = element('editor-image');
   const output = preview.getContext('2d');
   const canvas = document.createElement('canvas');
@@ -126,6 +127,7 @@
   let previewController;
   let previewTimer;
   let atlas;
+  let displayInk = 0;
   let tiles = new Map();
   const layerKeys = new WeakMap();
   const previousTileKeys = new WeakMap();
@@ -554,13 +556,9 @@
     context.putImageData(image, 0, 0);
   }
 
-  function inkColor() {
-    return document.documentElement.dataset.theme === 'dark' ? 255 : 0;
-  }
-
   function composeInk(layer) {
     const {w, h, bitmap} = layer;
-    const color = inkColor();
+    const color = displayInk;
     const key = w + ':' + h + ':' + color + ':' + bitmap;
     let tile = inkTiles.get(key);
     if (!tile) {
@@ -717,6 +715,11 @@
         atlas?.close();
         atlas = image;
         tiles = nextTiles;
+        frame.drawImage(atlas, 0, 0, 1, 1, 0, 0, 1, 1);
+        const background = frame.getImageData(0, 0, 1, 1).data[0];
+        displayInk = 255 - background;
+        panelFrame.dataset.displayTheme = background ? 'light' : 'dark';
+        if (drag?.bytes) paintInk(drawing, drag.bytes, displayInk);
         for (const [index, layer] of layers().entries()) positionLayer(hitboxes[index], layer);
         positionSelection();
         updateInspector();
@@ -1286,7 +1289,7 @@
       }
     }
     drag.point = point;
-    paintInk(drawing, bytes, inkColor());
+    paintInk(drawing, bytes, displayInk);
     compose();
   }
 
@@ -2040,32 +2043,25 @@
     }
   });
 
-  new MutationObserver(records => {
+  new MutationObserver(() => {
     if (!schema || content.hidden) return;
-    const root = document.documentElement;
-    if (records.some(record => record.attributeName === 'lang')) {
-      delete fields.variant.dataset.type;
-      for (const [index, widget] of layers().entries()) {
-        const label = widgetLabel(widget, index);
-        hitboxes[index]?.setAttribute('aria-label', label);
-        widgetButtons[index].setAttribute('aria-label', label);
-        widgetButtons[index].querySelector('span').textContent = layerName(widget);
-      }
-      renderPalette();
-      if (!library.hidden) showLibraryEntries(libraryEntries, librarySelected);
-      updateInspector();
-      updateStatus();
-    } else if (!records.some(record => record.oldValue !== root.getAttribute('data-theme'))) {
-      return;
+    delete fields.variant.dataset.type;
+    for (const [index, widget] of layers().entries()) {
+      const label = widgetLabel(widget, index);
+      hitboxes[index]?.setAttribute('aria-label', label);
+      widgetButtons[index].setAttribute('aria-label', label);
+      widgetButtons[index].querySelector('span').textContent = layerName(widget);
     }
-    if (drag?.bytes) paintInk(drawing, drag.bytes, inkColor());
+    renderPalette();
+    if (!library.hidden) showLibraryEntries(libraryEntries, librarySelected);
+    updateInspector();
+    updateStatus();
     schedulePreview();
-  }).observe(document.documentElement, {attributeOldValue: true, attributeFilter: ['lang', 'data-theme']});
+  }).observe(document.documentElement, {attributeFilter: ['lang']});
 
   loadLayouts();
   fetch('/api/state').then(response => response.ok ? response.json() : null).then(data => {
     if (!data) return;
-    document.documentElement.dataset.theme = data.theme;
     applyLanguage(data.language);
   }).catch(() => {});
 }

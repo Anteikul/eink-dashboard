@@ -160,6 +160,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             '/wifi.js': ('wifi.js', 'text/javascript; charset=utf-8'),
             '/locale.js': ('locale.js', 'text/javascript; charset=utf-8'),
         }
+    routes['/theme.js'] = ('theme.js', 'text/javascript; charset=utf-8')
     subnet = ipaddress.IPv4Network(f'{host}/24', strict=False) if wifi is not None else None
     site = {url: (kind, (assets / filename).read_bytes())
             for url, (filename, kind) in routes.items()}

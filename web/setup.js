@@ -64,7 +64,7 @@ async function api(path, payload, signal) {
     }
     throw new Error(data.error || 'Could not load settings.');
   }
-  if (path !== '/api/state') signIn.hidden = true;
+  signIn.hidden = true;
   return data;
 }
 
@@ -386,8 +386,7 @@ window.addEventListener('pageshow', event => {
   if (event.persisted && !setupFields.hidden) checkUpdate();
 });
 
-Promise.all([api('/api/settings'), api('/api/state')]).then(([data, state]) => {
-  document.documentElement.dataset.theme = state.appliedTheme || state.theme;
+api('/api/settings').then(data => {
   showSettings(data);
   setText(setupStatus, '');
   setupFields.hidden = false;

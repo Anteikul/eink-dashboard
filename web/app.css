@@ -61,7 +61,9 @@ h2 { font-size: 15px; margin: 0; font-weight: 680; }
 .display-page [hidden] { display: none !important; }
 .display-header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 15px 20px; }
 .display-header h1 { font-size: clamp(44px, 8vw, 76px); }
+.display-header-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 .display-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.display-appearance { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; font-weight: 600; }
 .display-links a {
   display: inline-flex;
   align-items: center;
@@ -126,6 +128,18 @@ h2 { font-size: 15px; margin: 0; font-weight: 680; }
 .display-control fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-color: var(--display-outline); }
 #mode-controls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .display-control button { justify-content: center; padding-inline: 4px; font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
+#web-theme {
+  min-height: 44px;
+  padding: 6px 10px;
+  color: var(--ink);
+  background: var(--display-surface);
+  border: 1px solid var(--display-outline);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 400;
+}
+#web-theme:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .quick-layouts { scroll-margin-block-start: 16px; }
 .quick-layouts summary {
   display: flex;
@@ -464,7 +478,7 @@ button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke
   background: #fff;
   outline: 1px solid var(--line);
 }
-:root[data-theme=dark] #editor-panel-frame { background: #000; }
+#editor-panel-frame[data-display-theme=dark] { background: #000; }
 #editor-stage {
   position: absolute;
   user-select: none;
