@@ -12,6 +12,7 @@ from photo_import import PHOTO_SIZE, PHOTO_UPLOAD_LIMIT
 
 WIDTH, HEIGHT = 250, 122
 PANEL_SIZE = WIDTH, HEIGHT
+PORTRAIT_SIZE = HEIGHT, WIDTH
 MIN_DIMENSION, MAX_DIMENSION = 32, 400
 MAX_WIDGETS = 18
 MAX_DRAWINGS = 96
@@ -48,7 +49,7 @@ MONTHS_SHORT_CS = ('led', 'úno', 'bře', 'dub', 'kvě', 'čer', 'čvc', 'srp', 
 
 
 def panel_view_size(rotation):
-    return PANEL_SIZE[::-1] if rotation in (90, 270) else PANEL_SIZE
+    return PORTRAIT_SIZE if rotation in (90, 270) else PANEL_SIZE
 
 
 def panel_bounds(size, view_size):
@@ -118,31 +119,54 @@ WIDGETS = {
     'playback': {widget['type']: widget for widget in (*PLAYBACK, *COMMON)},
 }
 
+PORTRAIT_TEMPLATES = {
+    'clock': {'x': 7, 'y': 23, 'w': 108, 'h': 56, 'size': 34, 'align': 'center'},
+    'date': {'x': 7, 'y': 81, 'w': 108, 'h': 26, 'size': 13, 'align': 'center'},
+    'weather': {'x': 8, 'y': 139, 'w': 106, 'h': 94, 'size': 30},
+    'text': {'x': 8, 'y': 10, 'w': 106, 'h': 38},
+    'photo': {'x': 8, 'y': 50, 'w': 106, 'h': 150},
+    'divider': {'x': 14, 'y': 124, 'w': 94, 'h': 1},
+    'cover': {'x': 11, 'y': 13, 'w': 100, 'h': 100},
+    'title': {'x': 8, 'y': 118, 'w': 106, 'h': 54, 'size': 16, 'align': 'center'},
+    'artist': {'x': 8, 'y': 174, 'w': 106, 'h': 27, 'align': 'center'},
+    'playback-time': {'x': 8, 'y': 200, 'w': 106, 'h': 16, 'align': 'center'},
+    'progress': {'x': 9, 'y': 219, 'w': 104, 'h': 5},
+}
+
+
+def _widget_template(template, size):
+    source = PANEL_SIZE
+    if size[0] < size[1]:
+        source = PORTRAIT_SIZE
+        template = {**template, **PORTRAIT_TEMPLATES[template['type']]}
+    return template.copy() if size == source else resize_layer(template, source, size)
+
 
 def editor_schema(size=PANEL_SIZE):
-    dashboard = WIDGETS['dashboard']
-    playback = WIDGETS['playback']
-    schema = deepcopy({
+    widgets = deepcopy({screen: list(definitions.values()) for screen, definitions in WIDGETS.items()})
+    templates = {}
+    for screen, definitions in widgets.items():
+        for widget in definitions:
+            widget['template'] = _widget_template(widget['template'], size)
+        templates[screen] = {widget['type']: widget['template'] for widget in definitions}
+    dashboard, playback = templates['dashboard'], templates['playback']
+    divider = dashboard['divider'].copy()
+    if size[0] >= size[1]:
+        divider = _widget_template({**WIDGETS['dashboard']['divider']['template'], 'variant': 'vertical',
+                                    'x': 161, 'y': 30, 'w': 1, 'h': 65}, size)
+    return {
         'width': size[0],
         'height': size[1],
         'maxWidgets': MAX_WIDGETS,
         'maxDrawings': MAX_DRAWINGS,
         'photoMaxBytes': PHOTO_UPLOAD_LIMIT,
         'defaults': {
-            'dashboard': [dashboard['clock']['template'].copy(), dashboard['date']['template'].copy(),
-                          {**dashboard['divider']['template'], 'variant': 'vertical',
-                           'x': 161, 'y': 30, 'w': 1, 'h': 65},
-                          {**dashboard['weather']['template'], 'variant': 'icon-above'}],
-            'playback': [playback[kind]['template'].copy() for kind in ('cover', 'title', 'artist', 'progress')],
+            'dashboard': [dashboard['clock'].copy(), dashboard['date'].copy(), divider,
+                          {**dashboard['weather'], 'variant': 'icon-above'}],
+            'playback': [playback[kind].copy() for kind in ('cover', 'title', 'artist', 'progress')],
         },
-        'widgets': {screen: list(definitions.values()) for screen, definitions in WIDGETS.items()},
-    })
-    if size != PANEL_SIZE:
-        for screen, defaults in schema['defaults'].items():
-            schema['defaults'][screen] = resize_layout(defaults, PANEL_SIZE, size)
-            for widget in schema['widgets'][screen]:
-                widget['template'] = resize_layer(widget['template'], PANEL_SIZE, size)
-    return schema
+        'widgets': widgets,
+    }
 
 
 def validate_display_size(size):
@@ -230,7 +254,7 @@ def validate_layout(screen, layout, size=PANEL_SIZE):
             raise ValueError('This widget is unavailable on this screen.')
         template = definition['template']
         if size != PANEL_SIZE and not all(key in supplied for key in BOX_KEYS):
-            template = resize_layer(template, PANEL_SIZE, size)
+            template = _widget_template(template, size)
         widget = {key: supplied.get(key, value) for key, value in template.items()}
         _validate_box(*(widget[key] for key in BOX_KEYS), size=size)
         if 'placement' in supplied:
