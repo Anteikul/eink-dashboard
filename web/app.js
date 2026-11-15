@@ -75,7 +75,6 @@ function show(data) {
     && data.page && (data.mode === 'auto' || data.page === data.mode);
   trackLink.hidden = !data.trackUrl;
   if (data.trackUrl) trackLink.querySelector('a').href = data.trackUrl;
-  document.documentElement.dataset.theme = data.appliedTheme || data.theme;
   for (const button of buttons) {
     const key = button.closest('fieldset').dataset.control;
     button.setAttribute('aria-pressed', String(button.dataset[key] === data[key]));

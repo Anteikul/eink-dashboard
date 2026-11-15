@@ -39,6 +39,5 @@ unlockForm.addEventListener('submit', async event => {
 
 fetch('/api/state').then(response => response.ok ? response.json() : null).then(data => {
   if (!data) return;
-  document.documentElement.dataset.theme = data.appliedTheme || data.theme;
   applyLanguage(data.language);
 }).catch(() => {});

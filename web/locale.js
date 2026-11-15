@@ -13,6 +13,8 @@ const czech = new Map(Object.entries({
   'Display mode': 'Obsah displeje',
   'Automatic': 'Automaticky',
   'Display theme': 'Motiv displeje',
+  'Web appearance': 'Vzhled webu',
+  'System': 'Podle systému',
   'Light': 'Světlý',
   'Dark': 'Tmavý',
   'Connecting to the display…': 'Připojuji se k displeji…',
