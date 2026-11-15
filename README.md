@@ -4,7 +4,7 @@ A small desk display for the time, weather, and the track playing on Spotify. Pu
 
 ![Finished E-ink Dashboard in a white 3D-printed enclosure, showing the time, date, and weather](docs/images/finished-device.webp)
 
-[Parts and enclosure](#parts-and-enclosure) · [Install](#install) · [Use the dashboard](#use-the-dashboard)
+[Parts and enclosure](#parts-and-enclosure) · [Install](#install) · [Use the dashboard](#use-the-dashboard) · [How it works](docs/how-it-works.md)
 
 ## Parts and enclosure
 
@@ -69,6 +69,8 @@ The installer starts the dashboard and enables it on boot. Leave the installatio
 
 ### Make it a picture frame
 
+![Finished E-ink Dashboard displaying a black-and-white illustration in its white enclosure](docs/images/finished-device-picture-frame.webp)
+
 Open **Edit layouts → Dashboard → Start blank**. Import a photo or illustration, crop and resize it to fill the canvas, then choose **Apply to display**. On the main page, select **Dashboard** to keep that image on screen. The e-paper panel holds the last image even after you shut down the Pi and unplug it. [Waveshare display details](https://www.waveshare.com/2.13inch-e-Paper-HAT.htm)
 
 ### Build your own layout
@@ -107,7 +109,9 @@ The Raspberry Pi hosts the interface, renders the display, and processes and sto
 <details>
 <summary>Optional Wi-Fi setup hotspot</summary>
 
-From the installation folder, run `sh install.sh --wifi-setup`. If the Pi cannot join a saved network, the display shows the **EinkSetup** hotspot name and password. Join it from a phone, open `http://10.42.0.1/` and enter the details for your 2.4 GHz network. The display shows the new address when the Pi connects.
+![Close-up of the e-paper panel showing the Wi-Fi setup hotspot screen](docs/images/wifi-setup.webp)
+
+From the installation folder, run `sh install.sh --wifi-setup`. If the Pi cannot join a saved network, join the **EinkSetup** hotspot using the name and password shown on your own display. Open `http://10.42.0.1/` and enter the details for your 2.4 GHz network. The display shows the new address when the Pi connects.
 
 </details>
 
