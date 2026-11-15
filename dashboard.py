@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 from control import PanelState, preview_png, start_server
 from device_settings import DEFAULTS, ROTATIONS, DeviceSettings, write_private
 from layout_editor import (
-    PANEL_SIZE, clock_has_seconds, content_key, editor_schema, panel_bounds, panel_view_size, preview_weather,
+    PANEL_SIZE, clock_has_seconds, content_key, editor_schema, fit_canvas, panel_view_size, preview_weather,
     render_custom, render_layer_atlas,
 )
 from local_name import LocalName
@@ -127,13 +127,7 @@ def fit_preview(pixels, size, theme, view_size):
     from PIL import Image
 
     source = Image.frombytes('L', size, bytes(pixels))
-    x, y, width, height = panel_bounds(size, view_size)
-    resized = source.resize((width, height), Image.Resampling.NEAREST)
-    if resized.size == view_size:
-        return bytearray(resized.tobytes())
-    panel = Image.new('L', view_size, int(theme == 'light'))
-    panel.paste(resized, (x, y))
-    return bytearray(panel.tobytes())
+    return bytearray(fit_canvas(source, view_size, int(theme == 'light')).tobytes())
 
 
 def fit_panel(pixels, size, theme, *, rotation=0):
@@ -169,8 +163,10 @@ def render_layout_preview(screen, layout, theme, language, units, *, layers=Fals
     if layout is None and size != PANEL_SIZE:
         layout = canvas_defaults(size)[screen]
     if layout is not None:
-        pixels = render_custom(layout, now, theme, language, **sample)
-    elif music:
+        view_size = panel_view_size(rotation) if rotation is not None else size
+        pixels = render_custom(layout, now, theme, language, view_size=view_size, **sample)
+        return preview_png(pixels, *view_size)
+    if music:
         track, cover, progress = (sample[key] for key in ('track', 'cover', 'progress'))
         pixels = render_music(track, theme, cover, progress_pixels(progress, cover))
     else:
@@ -441,12 +437,13 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
             elif layout is not None:
                 screen = render_custom(layout, now, theme, language, weather=current_weather, units=units,
                                        track=track, cover=cover, progress=progress, duration_ms=duration_ms, size=size,
-                                       weather_enabled=weather_enabled)
+                                       weather_enabled=weather_enabled, view_size=view_size)
             elif music:
                 screen = render_music(track, theme, cover, filled)
             else:
                 screen = render(now, current_weather, theme, units, language, weather_enabled=weather_enabled)
-            preview = fit_preview(screen, size if layout is not None else PANEL_SIZE, theme, view_size)
+            preview = (screen if layout is not None and not (hotspot or showing_join)
+                       else fit_preview(screen, PANEL_SIZE, theme, view_size))
             pixels = pack(fit_panel(preview, view_size, theme, rotation=rotation), 0)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.

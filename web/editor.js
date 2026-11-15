@@ -37,7 +37,19 @@
   const photoCrop = createPhotoCrop(cropSurface, cropButton, (canvas, photo) => {
     canvas.width = photo.w;
     canvas.height = photo.h;
-    paintInk(canvas, decodeInk(photo.bitmap), 255);
+    if (photo.gray) {
+      const context = canvas.getContext('2d');
+      const image = context.createImageData(photo.w, photo.h);
+      const pixels = decodeInk(photo.gray);
+      for (let i = 0; i < pixels.length; i++) {
+        const offset = i * 4;
+        image.data[offset] = image.data[offset + 1] = image.data[offset + 2] = pixels[i];
+        image.data[offset + 3] = 255;
+      }
+      context.putImageData(image, 0, 0);
+    } else {
+      paintInk(canvas, decodeInk(photo.bitmap), 255);
+    }
   }, canvasPoint);
   const tools = element('editor-tools');
   const brush = element('editor-brush');
@@ -440,7 +452,7 @@
 
   function compose() {
     if (!atlas) return;
-    frame.imageSmoothingEnabled = false;
+    let hasGrayPhoto = false;
     frame.drawImage(atlas, 0, 0, 1, 1, 0, 0, schema.width, schema.height);
     for (const widget of layers()) {
       if (widget.type === 'drawing') {
@@ -448,9 +460,11 @@
         continue;
       }
       const tile = tileFor(widget);
+      const gray = Boolean(widget.photo?.gray);
+      hasGrayPhoto ||= gray;
       if (tile && widget.placement && tile.bounds) {
         const {x, y, w, h} = tile.bounds;
-        composeTile(atlas, x, tile.y + y, w, h, controlBounds(widget));
+        composeTile(atlas, x, tile.y + y, w, h, controlBounds(widget), gray && !widget.mask);
       } else if (tile && !widget.placement) {
         composeTile(atlas, 0, tile.y, tile.w, tile.h, widget);
       }
@@ -461,6 +475,31 @@
     output.imageSmoothingEnabled = false;
     output.drawImage(atlas, 0, 0, 1, 1, 0, 0, preview.width, preview.height);
     output.drawImage(canvas, x, y, w, h);
+    if (hasGrayPhoto) ditherPhotoPreview();
+  }
+
+  function ditherPhotoPreview() {
+    // Match Pillow's integer Floyd–Steinberg diffusion on the final panel pixels.
+    const {width, height} = preview;
+    const image = output.getImageData(0, 0, width, height);
+    const {data} = image;
+    const errors = new Int32Array(width + 1);
+    for (let y = 0; y < height; y++) {
+      let right = 0, below = 0, belowRight = 0;
+      for (let x = 0; x < width; x++) {
+        const offset = (y * width + x) * 4;
+        const gray = clamp(data[offset] + Math.trunc((right + errors[x + 1]) / 16), 0, 255);
+        const value = gray > 128 ? 255 : 0;
+        data[offset] = data[offset + 1] = data[offset + 2] = value;
+        const error = gray - value;
+        errors[x] = below + 3 * error;
+        below = belowRight + 5 * error;
+        belowRight = error;
+        right = 7 * error;
+      }
+      errors[width] = below;
+    }
+    output.putImageData(image, 0, 0);
   }
 
   function decodeInk(bitmap) {
@@ -535,10 +574,11 @@
     composeTile(tile, 0, 0, w, h, layer);
   }
 
-  function composeTile(source, sourceX, sourceY, sourceWidth, sourceHeight, {x, y, w, h}) {
+  function composeTile(source, sourceX, sourceY, sourceWidth, sourceHeight, {x, y, w, h}, smooth = false) {
+    frame.imageSmoothingEnabled = smooth;
     if (drag?.erase) {
       eraseContext.clearRect(0, 0, w, h);
-      eraseContext.imageSmoothingEnabled = false;
+      eraseContext.imageSmoothingEnabled = smooth;
       eraseContext.drawImage(source, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, w, h);
       eraseContext.globalCompositeOperation = 'destination-out';
       eraseContext.drawImage(drawing, -x, -y);
@@ -1345,7 +1385,7 @@
     const target = screen;
     photoImporting = true;
     updatePalette();
-    setText(photoStatus, 'Converting photo to black and white…');
+    setText(photoStatus, 'Preparing photo…');
     try {
       const response = await request('/api/photo-import', {file, fallback: 'Could not import the photo.'});
       const photo = await response.json();
