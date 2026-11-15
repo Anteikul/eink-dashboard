@@ -18,6 +18,8 @@ from layout_editor import clock_has_seconds, content_key, format_clock, format_d
 with TemporaryDirectory() as folder:
     root = Path(folder)
     settings = DeviceSettings(root)
+    settings.change_code('', 'test-password')
+    settings.set_password_required(True)
     state = PanelState(root / 'theme.txt')
     server = start_server('127.0.0.1', 0, state, settings, lambda: None)
     base = f'http://127.0.0.1:{server.server_port}'

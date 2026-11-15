@@ -214,13 +214,14 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             self.reply(status, 'application/json', json.dumps(body).encode(), headers)
 
         def setup_credentials(self):
+            # None means access is denied. An empty string means no password is set.
             code = settings.code
             if not settings.values['password_required']:
                 return code
             supplied = self.headers.get('X-Setup-Code', '')
             if supplied and settings.authorized(supplied):
                 return supplied
-            if valid_session(self.headers.get('Cookie', ''), settings.session_key, code):
+            if code and valid_session(self.headers.get('Cookie', ''), settings.session_key, code):
                 return code
             return None
 

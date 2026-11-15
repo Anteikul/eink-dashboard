@@ -147,12 +147,6 @@ if ! grep -Fxq "$job" "$tmp/current"; then
     crontab "$tmp/current"
 fi
 
-code=$(python3 - <<'PY'
-from pathlib import Path
-from device_settings import DeviceSettings
-print(DeviceSettings(Path.cwd()).code)
-PY
-)
 if flock -n .panel.lock true; then
     nohup ./start-at-boot.sh </dev/null >/dev/null 2>&1 &
 else
@@ -167,4 +161,3 @@ elif [ -S /run/eink-wifi.sock ]; then
 else
     printf '%s\n' 'Open the Pi IP address in your browser once the Pi is online.'
 fi
-printf 'Setup code: %s\n' "$code"
