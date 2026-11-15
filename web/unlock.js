@@ -10,7 +10,7 @@ unlockForm.addEventListener('submit', async event => {
   if (submit.disabled) return;
   const code = codeField.value.trim();
   if (!code) {
-    setText(unlockStatus, 'Check the device setup code.');
+    setText(unlockStatus, 'Check the web password.');
     codeField.focus();
     return;
   }
@@ -24,7 +24,8 @@ unlockForm.addEventListener('submit', async event => {
     });
     if (!response.ok) {
       const result = await response.json();
-      throw new Error(result.error || 'Could not sign in.');
+      const error = result.error === 'Check the device setup code.' ? 'Check the web password.' : result.error;
+      throw new Error(error || 'Could not sign in.');
     }
     unlockForm.reset();
     window.location.replace(destination);

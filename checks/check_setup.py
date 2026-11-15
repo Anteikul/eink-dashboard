@@ -67,6 +67,18 @@ with TemporaryDirectory() as folder:
             assert PanelState(root / 'theme.txt').status()['mode'] == mode
         assert get('/api/display-mode', {'mode': 'unknown'}, code='')[0] == 400
         assert get('/api/display-mode', {'mode': 'playback'}, code='', origin='http://other.example')[0] == 403
+        assert not settings.code_path.exists()
+        assert get('/api/settings', code='')[1]['settings']['password_required'] is False
+        assert get('/api/layouts', code='')[0] == 200
+        for destination in ('settings', 'editor'):
+            with urlopen(base + '/' + destination) as response:
+                assert response.geturl() == base + '/' + destination
+        assert get('/api/unlock', {'code': ''}, code='')[0] == 403
+        assert get('/api/password-protection', {'required': True}, code='')[0] == 400
+        assert not settings.code_path.exists()
+        assert get('/api/setup-code', {'newCode': 'test-password'}, code='')[0] == 200
+        assert DeviceSettings(root).values['password_required'] is False
+        assert get('/api/password-protection', {'required': True}, code='')[0] == 200
         sign_in_pages = []
         for destination in ('settings', 'editor'):
             try:
@@ -145,10 +157,11 @@ with TemporaryDirectory() as folder:
         assert get('/api/layout-library/apply', {'screen': 'dashboard', 'name': None},
                    origin='http://other.example')[0] == 403
         status, data = get('/api/settings')
-        assert status == 200 and data['settings'] == DEFAULTS and not data['spotifyConnected']
+        protected_defaults = {**DEFAULTS, 'password_required': True}
+        assert status == 200 and data['settings'] == protected_defaults and not data['spotifyConnected']
         assert get('/api/spotify/check', {})[0] == 409
         assert get('/api/spotify/check', {}, code='wrong')[0] == 403
-        selected = {**DEFAULTS, 'location': 'London', 'latitude': 51.5,
+        selected = {**protected_defaults, 'location': 'London', 'latitude': 51.5,
                     'longitude': -0.12, 'timezone': 'Europe/London', 'rotation': 0,
                     'units': 'fahrenheit'}
         assert get('/api/settings', {**selected, 'timezone': 'fake'})[0] == 400
@@ -282,8 +295,7 @@ with TemporaryDirectory() as folder, patch('control.ThreadingHTTPServer', bind_t
                 assert response.status == 200
         request = Request(base + '/api/settings', data=json.dumps(DEFAULTS).encode(),
                           headers={'Host': '127.0.0.1', 'Origin': 'http://127.0.0.1',
-                                   'Content-Type': 'application/json',
-                                   'X-Setup-Code': settings.code})
+                                   'Content-Type': 'application/json'})
         with urlopen(request) as response:
             assert response.status == 200
     finally:
@@ -291,3 +303,17 @@ with TemporaryDirectory() as folder, patch('control.ThreadingHTTPServer', bind_t
         server.server_close()
 
 print('Default HTTP port accepts browser requests without a port suffix.')
+
+with TemporaryDirectory() as folder:
+    root = Path(folder)
+    (root / '.setup-code').write_text('legacy-password\n')
+    (root / '.settings.json').write_text(json.dumps({'location': 'Brno'}))
+    legacy = DeviceSettings(root)
+    assert legacy.values['password_required'] is True
+    assert legacy.authorized('legacy-password')
+    legacy.code_path.unlink()
+    legacy.path.write_text(json.dumps({'password_required': True}))
+    missing_password = DeviceSettings(root)
+    assert missing_password.values['password_required'] is True
+    assert not missing_password.authorized('')
+    assert not missing_password.code_path.exists()

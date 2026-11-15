@@ -19,9 +19,9 @@ A small desk display for the time, weather, and the track playing on Spotify. Pu
 
 The [enclosure STL](hardware/eink-box.stl) contains both pieces in their print orientation. Drop them onto the build plate at **100% scale** with **supports turned off**.
 
-1. Unplug the power supply. Route the cable through the back of the case before soldering its leads inside.
-2. Insulate the solder joints and secure the **outer cable jacket** to the case near the exit with a cable tie and mount, a clamp, or another strain relief. Leave a little slack between the anchor and the solder joints.
-3. Give the cable a gentle tug from outside. The case should take the pull and the soldered wires should stay still. Check the wiring for shorts before powering up.
+1. With the power supply unplugged, feed a standard USB power cable through the rear opening, micro-USB end first.
+2. Plug the cable into the Pi's **PWR IN** port, then place the Pi and display in the case.
+3. Secure the **outer cable jacket** to the case with a cable tie and mount or a small clamp. Leave a little slack inside so a tug on the cable pulls against the case. If you solder a permanent cable, insulate the joints and keep that slack between the anchor and the solder joints.
 
 ### Connect the display
 
@@ -55,9 +55,9 @@ Fit the HAT directly onto the Pi's 40-pin header, or use the eight-wire display 
      sh eink-dashboard-main/install.sh
    ```
 
-3. From the same network, open [eink.local](http://eink.local/) or the address printed by the installer. Keep the setup code handy for Settings and the layout editor.
+3. From the same network, open [eink.local](http://eink.local/) or the address printed by the installer. Settings and the layout editor open without a setup code.
 
-The installer starts the dashboard and enables it on boot. Leave the installation folder in place.
+The installer starts the dashboard and enables it on boot. Leave the installation folder in place. To restrict access to Settings and the layout editor, save a password under **Settings → Web password**, then turn on password protection.
 
 ## Use the dashboard
 
@@ -91,13 +91,17 @@ Mix clocks, dates, weather, text, photos, and album art. Drag widgets onto the c
 ![Finished E-ink Dashboard showing Money for Nothing by Dire Straits with album artwork and a progress bar](docs/images/finished-device-spotify.webp)
 
 1. Create an app that uses **Web API** in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard). Add `http://127.0.0.1:8765/callback` as a redirect URI. The app owner needs Premium in [Development Mode](https://developer.spotify.com/documentation/web-api/concepts/quota-modes).
-2. In **Settings → Spotify**, enter the **Client ID** and choose **Prepare sign-in**. Open Spotify and approve access.
+2. In **Settings → Spotify**, enter the **Client ID** and choose **Connect Spotify**. The permission page opens in a new tab or window. Use the link under the form if your browser blocks it.
 3. Copy the full redirect URL from the browser's address bar, even if the page at `127.0.0.1` shows a connection error. Paste it into **Redirect URL** and choose **Finish connecting**.
+
+## Local by default
+
+The Raspberry Pi hosts the interface, renders the display, and processes and stores your photos, layouts, and settings locally. Connecting Spotify uses its API for playback and album art. Weather and city search use [Open-Meteo](https://open-meteo.com/), and update checks contact GitHub.
 
 ## Updates and troubleshooting
 
 - **Settings → Updates** checks GitHub for updates. If a new version fails to start, the Pi returns to the previous version.
-- If you lose the setup code, run `cat ~/eink-dashboard-main/.setup-code` on the Pi. If `eink.local` does not resolve, use the Pi's IP address.
+- If `eink.local` does not resolve, use the Pi's IP address.
 - In the installation folder, run `tail -f dashboard.log` for startup and refresh messages or `./install.sh --check` to check dependencies. Use `./start.sh` to start the dashboard manually when it is stopped.
 
 <details>
@@ -107,4 +111,10 @@ From the installation folder, run `sh install.sh --wifi-setup`. If the Pi cannot
 
 </details>
 
-Weather data comes from [Open-Meteo](https://open-meteo.com/). The [Waveshare driver](waveshare_epd/epd2in13_V4.py) retains its original licence notice.
+## License
+
+The project is released under the [MIT License](LICENSE). The [Waveshare driver](waveshare_epd/epd2in13_V4.py) retains its original license notice.
+
+## Contributing
+
+Feel free to contribute. For a bug or idea, [open an issue](https://github.com/Anteikul/eink-dashboard/issues/new). To send a change, fork the repo, make and test your change on a new branch, then open a pull request with a short description and screenshots for UI changes.

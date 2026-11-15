@@ -267,11 +267,29 @@ deviceForm.addEventListener('submit', async (event) => {
 
 spotifyForm.addEventListener('submit', (event) => {
   event.preventDefault();
+  const submit = spotifyForm.querySelector('button');
+  if (submit.disabled) return;
+  submit.disabled = true;
+  finishForm.hidden = true;
   action(async () => {
-    const data = await api('/api/spotify/start', {clientId: spotifyForm.elements.clientId.value.trim()});
-    document.querySelector('#spotify-auth').href = data.url;
-    finishForm.hidden = false;
-    document.querySelector('#spotify-auth').focus();
+    let popup;
+    try {
+      // Open during the click so browsers allow the tab before the API responds.
+      popup = window.open('about:blank', '_blank');
+      if (popup) popup.opener = null;
+      const data = await api('/api/spotify/start', {clientId: spotifyForm.elements.clientId.value.trim()});
+      const link = document.querySelector('#spotify-auth');
+      link.href = data.url;
+      finishForm.reset();
+      finishForm.hidden = false;
+      if (popup && !popup.closed) popup.location.replace(data.url);
+      else link.focus();
+    } catch (error) {
+      popup?.close();
+      throw error;
+    } finally {
+      submit.disabled = false;
+    }
   }, spotifyActionStatus);
 });
 
@@ -313,7 +331,7 @@ setupCodeForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const newCode = setupCodeForm.elements.newCode.value;
   if (newCode !== setupCodeForm.elements.confirmCode.value) {
-    setText(setupCodeStatus, 'The new codes do not match.');
+    setText(setupCodeStatus, 'The passwords do not match.');
     return;
   }
   const button = setupCodeForm.querySelector('button');
@@ -323,7 +341,7 @@ setupCodeForm.addEventListener('submit', async (event) => {
     await api('/api/setup-code', {newCode});
     setupCodeForm.elements.newCode.value = '';
     setupCodeForm.elements.confirmCode.value = '';
-    setText(setupCodeStatus, 'Setup code changed.');
+    setText(setupCodeStatus, 'Web password saved.');
   } catch (error) {
     setText(setupCodeStatus, error.message);
   } finally {

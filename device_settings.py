@@ -24,7 +24,7 @@ from wifi_setup import GRACE
 DEFAULTS = {
     'location': 'Prague', 'latitude': 50.0755, 'longitude': 14.4378,
     'timezone': 'Europe/Prague', 'units': 'celsius', 'rotation': 180, 'language': 'en',
-    'local_name': True, 'password_required': True,
+    'local_name': True, 'password_required': False,
     'display_width': PANEL_SIZE[0], 'display_height': PANEL_SIZE[1],
     'weather_enabled': True, 'weather_interval': 15, 'full_refresh_after': 5,
     'playback_enabled': True, 'playing_interval': PLAYING_INTERVAL, 'idle_interval': IDLE_INTERVAL,
@@ -148,13 +148,16 @@ class DeviceSettings:
         self.lock = threading.Lock()
         self.pending = None
         self.rotation_override = rotation
-        self.values = validate_settings({**DEFAULTS, **json.loads(self.path.read_text())}) if self.path.is_file() else DEFAULTS.copy()
+        try:
+            self.code = self.code_path.read_text().strip()
+        except FileNotFoundError:
+            self.code = ''
+        saved = json.loads(self.path.read_text()) if self.path.is_file() else {}
+        # Earlier installs generated a code even before a settings file existed.
+        self.values = validate_settings({**DEFAULTS, 'password_required': bool(self.code), **saved})
         self._stored_layouts = self.load_layouts()
         size = display_size(self.values, self.rotation_override)
         self.layout_state = size, self.layouts_at(size)
-        if not self.code_path.exists():
-            write_private(self.code_path, secrets.token_urlsafe(18) + '\n')
-        self.code = self.code_path.read_text().strip()
         session_key_path = directory / '.web-session-key'
         try:
             self.session_key = bytes.fromhex(session_key_path.read_text().strip())
@@ -315,14 +318,20 @@ class DeviceSettings:
             return library_listing(entries, details=True)
 
     def authorized(self, code):
-        return hmac.compare_digest(self.code.encode(), code.encode())
+        return bool(self.code) and hmac.compare_digest(self.code.encode(), code.encode())
 
     def change_code(self, current, new_code):
         if not isinstance(new_code, str) or not re.fullmatch(r'[!-~]{8,64}', new_code):
             raise ValueError('Use 8–64 letters, numbers, or symbols without spaces.')
         with self.lock:
-            if not self.authorized(current):
-                return False
+            if self.code or self.values['password_required']:
+                if not self.authorized(current):
+                    return False
+            else:
+                if current != '':
+                    return False
+                # Record the opt-in state before the first password file is written.
+                self.write_values(self.values)
             write_private(self.code_path, new_code + '\n')
             self.code = new_code
             return True
@@ -335,6 +344,8 @@ class DeviceSettings:
         if type(required) is not bool:
             raise ValueError('Check the on/off settings.')
         with self.lock:
+            if required and not self.code:
+                raise ValueError('Save a web password before enabling protection.')
             if self.values['password_required'] != required:
                 self.write_values({**self.values, 'password_required': required})
 
