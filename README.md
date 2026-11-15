@@ -15,6 +15,8 @@ A small desk display for the time, weather, and the track playing on Spotify. Pu
 | Storage and power | A microSD card for Raspberry Pi OS and a [micro-USB power supply](https://www.raspberrypi.com/products/micro-usb-power-supply/). |
 | Enclosure | [Download the printable STL](hardware/eink-box.stl). Have a small cable tie and tie mount or a cable clamp ready for assembly. |
 
+I tested the dashboard on the Waveshare 2.13-inch V4 panel (250 × 122 px). The layout editor and renderer adapt to other resolutions using the width and height in **Settings → Display**. To use a different physical panel, adapt the driver and native dimensions for that model.
+
 ### Print and assemble
 
 The [enclosure STL](hardware/eink-box.stl) contains both pieces in their print orientation. Drop them onto the build plate at **100% scale** with **supports turned off**.
