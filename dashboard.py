@@ -295,7 +295,6 @@ class Weather:
 def run(rotation, duration, listen, port, settings, wifi_setup=False):
     from panel import VerifiedEPD, epdconfig
 
-    view_size = panel_view_size(rotation)
     stop = threading.Event()
     reload_requested = threading.Event()
 
@@ -382,6 +381,11 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 join_until = None
             seconds = JOIN_CONFIRM_SECONDS if join_until is None else ceil(join_until - time.monotonic())
             showing_join = joined is not None and seconds > 0
+            frame_rotation = rotation
+            if hotspot or showing_join:
+                theme = 'light'
+                frame_rotation -= frame_rotation % 180
+            view_size = panel_view_size(frame_rotation)
             prepared = spotify.current if spotify else None
             size, layouts = settings.layout_state
             page = None if hotspot or showing_join else display_page(
@@ -444,7 +448,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 screen = render(now, current_weather, theme, units, language, weather_enabled=weather_enabled)
             preview = (screen if layout is not None and not (hotspot or showing_join)
                        else fit_preview(screen, PANEL_SIZE, theme, view_size))
-            pixels = pack(fit_panel(preview, view_size, theme, rotation=rotation), 0)
+            pixels = pack(fit_panel(preview, view_size, theme, rotation=frame_rotation), 0)
             # An advancing bar touches fresh pixels. Defer maintenance until
             # another part of the image changes instead of flashing mid-track.
             full = (displayed_page != page or displayed_music != music
