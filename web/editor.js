@@ -464,7 +464,7 @@
       const tile = tileFor(widget);
       const gray = Boolean(widget.photo?.gray);
       hasGrayPhoto ||= gray;
-      if (tile && widget.placement && tile.bounds) {
+      if (tile && tile.bounds) {
         const {x, y, w, h} = tile.bounds;
         composeTile(atlas, x, tile.y + y, w, h, controlBounds(widget), gray && !widget.mask);
       } else if (tile && !widget.placement) {
@@ -610,18 +610,25 @@
   }
 
   function eraseWidget(layer, brush, brushStride) {
-    const {w, h, mask} = layer;
-    const box = layer.placement ? controlBounds(layer) : layer;
-    const source = layer.placement ? sourceBounds(layer) : {x: 0, y: 0, w, h};
+    const customText = layer.type === 'text';
+    const {mask} = layer;
+    const w = customText ? schema.width : layer.w;
+    const h = customText ? schema.height : layer.h;
+    const measured = customText || layer.placement;
+    const box = measured ? controlBounds(layer) : layer;
+    const source = measured ? sourceBounds(layer) : {x: 0, y: 0, w, h};
     const rowBytes = stride(w);
     const old = mask ? decodeInk(mask.bitmap) : null;
     const oldStride = mask ? stride(mask.w) : 0;
+    const fixedMask = customText && mask?.space === 'source';
     const bytes = new Uint8Array(rowBytes * h);
     if (mask) {
       for (let py = 0; py < h; py++) {
-        const oldY = Math.floor((py + .5) * mask.h / h);
+        const oldY = fixedMask ? py : Math.floor((py + .5) * mask.h / (customText ? layer.h : h));
+        if (oldY >= mask.h) continue;
         for (let px = 0; px < w; px++) {
-          const oldX = Math.floor((px + .5) * mask.w / w);
+          const oldX = fixedMask ? px : Math.floor((px + .5) * mask.w / (customText ? layer.w : w));
+          if (oldX >= mask.w) continue;
           if (old[oldY * oldStride + (oldX >> 3)] & (128 >> (oldX & 7))) {
             bytes[py * rowBytes + (px >> 3)] |= 128 >> (px & 7);
           }
@@ -630,10 +637,13 @@
     }
     let changed = false;
     for (let py = 0; py < box.h; py++) {
+      const globalY = box.y + py;
+      if (globalY < 0 || globalY >= schema.height) continue;
       const maskY = source.y + Math.floor((py + .5) * source.h / box.h);
       for (let px = 0; px < box.w; px++) {
         const globalX = box.x + px;
-        if (!(brush[(box.y + py) * brushStride + (globalX >> 3)] & (128 >> (globalX & 7)))) continue;
+        if (globalX < 0 || globalX >= schema.width) continue;
+        if (!(brush[globalY * brushStride + (globalX >> 3)] & (128 >> (globalX & 7)))) continue;
         const maskX = source.x + Math.floor((px + .5) * source.w / box.w);
         const offset = maskY * rowBytes + (maskX >> 3);
         const bit = 128 >> (maskX & 7);
@@ -643,7 +653,8 @@
         }
       }
     }
-    return changed ? {...layer, mask: {w, h, bitmap: btoa(String.fromCharCode(...bytes))}} : layer;
+    return changed ? {...layer, mask: {w, h, bitmap: btoa(String.fromCharCode(...bytes)),
+      ...(customText && {space: 'source'})}} : layer;
   }
 
   function eraseLayers(mask) {

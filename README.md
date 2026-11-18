@@ -86,7 +86,7 @@ Mix clocks, dates, weather, text, photos, and album art. Drag widgets onto the c
 
 - Import JPEG, PNG, HEIC/HEIF, WebP, GIF, BMP, or TIFF up to 16 MB. Use **Crop photo** to adjust framing. Photos are converted to black and white at the panel's resolution.
 - Hold **Shift** while resizing to adjust width and height independently. Use **Snap** to align edges and centres, or open **Position and dimensions** for pixel-level control.
-- Double-click custom text to edit it on the canvas. Use **Ctrl+Z** and **Ctrl+Shift+Z** to undo and redo, or **⌘Z** and **⌘⇧Z** on Mac.
+- Double-click custom text to edit it on the canvas. Press **Shift+Enter** for a new line and **Enter** to finish, both on the canvas and in the text field on the right. Custom text grows beyond its initial box without adding an ellipsis, up to the edge of the display. The Wrapped variant continues onto new rows; Single line grows horizontally and also keeps manual line breaks. Use **Ctrl+Z** and **Ctrl+Shift+Z** to undo and redo, or **⌘Z** and **⌘⇧Z** on Mac.
 
 </details>
 
