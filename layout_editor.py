@@ -3,7 +3,7 @@ import re
 from base64 import b64decode, b64encode
 from copy import deepcopy
 from functools import lru_cache
-from math import cos, floor, pi, sin, tau
+from math import ceil, cos, floor, pi, sin, tau
 
 from PIL import Image, ImageChops, ImageDraw, ImageOps
 
@@ -296,6 +296,8 @@ def validate_layout(screen, layout, size=PANEL_SIZE):
             w, h = mask.get('w'), mask.get('h')
             _validate_box(0, 0, w, h, (MAX_DIMENSION, MAX_DIMENSION))
             widget['mask'] = {'w': w, 'h': h, 'bitmap': _validate_bitmap(mask.get('bitmap'), w, h)}
+            if widget['type'] == 'text' and mask.get('space') == 'source':
+                widget['mask']['space'] = 'source'
         if widget['type'] == 'photo':
             photo = supplied.get('photo')
             if not isinstance(photo, dict):
@@ -351,6 +353,14 @@ def resize_layer(layer, source_size, target_size, *, offset=(0, 0)):
             thickness = min(limit, max(1, round(layer.get('thickness', 1) * scale)))
             if thickness != 1 or 'thickness' in layer:
                 resized['thickness'] = thickness
+        if layer['type'] == 'text' and layer.get('mask', {}).get('space') == 'source':
+            mask = layer['mask']
+            mask_size = (min(MAX_DIMENSION, max(1, round(mask['w'] * scale_x))),
+                         min(MAX_DIMENSION, max(1, round(mask['h'] * scale_y))))
+            pixels = _drawing_mask(mask['bitmap'], mask['w'], mask['h'])
+            pixels = pixels.resize(mask_size, Image.Resampling.NEAREST)
+            resized['mask'] = {'w': mask_size[0], 'h': mask_size[1],
+                               'bitmap': b64encode(pixels.tobytes()).decode(), 'space': 'source'}
     return resized
 
 
@@ -544,7 +554,7 @@ def _fit_face(widget, size, lines, w, h):
     return face, size
 
 
-def _draw_text(mask, widget, value, *, wrapped=False, fit=False):
+def _draw_text(mask, widget, value, *, wrapped=False, fit=False, grow=None):
     w, h = mask.size
     size = widget['size']
     if isinstance(value, tuple):
@@ -560,7 +570,12 @@ def _draw_text(mask, widget, value, *, wrapped=False, fit=False):
         face = _face(widget, size)
     line_height = size + 2
     if isinstance(value, str):
-        if wrapped:
+        if grow is not None:
+            # Custom text keeps every row; its initial box is not a line limit.
+            for paragraph in value.splitlines():
+                lines.extend((fit_lines(paragraph, face, w, max(1, len(paragraph))) or [''])
+                             if wrapped else [paragraph])
+        elif wrapped:
             rows = max(1, h // line_height)
             for paragraph in value.splitlines():
                 available = rows - len(lines)
@@ -572,14 +587,22 @@ def _draw_text(mask, widget, value, *, wrapped=False, fit=False):
     draw = ImageDraw.Draw(mask)
     boxes = [draw.textbbox((0, 0), line, font=face) for line in lines]
     if not boxes:
-        return
+        return mask
     top = min(index * line_height + box[1] for index, box in enumerate(boxes))
     bottom = max(index * line_height + box[3] for index, box in enumerate(boxes))
+    if grow is not None:
+        if not wrapped:
+            w = min(grow[0], max(w, ceil(max(face.getlength(line) for line in lines)),
+                                max(right - left for left, _, right, _ in boxes)))
+        h = min(grow[1], max(h, bottom - top))
+        mask = Image.new('1', (w, h))
+        draw = ImageDraw.Draw(mask)
     start_y = max(0, (h - (bottom - top)) // 2) - top
     for index, (line, (left, _, right, _)) in enumerate(zip(lines, boxes)):
         width = right - left
         start_x = {'left': 0, 'center': (w - width) // 2, 'right': w - width}[widget['align']]
         draw.text((start_x - left, start_y + index * line_height), line, font=face, fill=1)
+    return mask
 
 
 def _dial_box(w, h):
@@ -719,7 +742,8 @@ def _apply_erasure(widget, layer, offset=(0, 0), *, art=False):
     if mask is None or layer is None:
         return layer
     erased = _drawing_mask(mask['bitmap'], mask['w'], mask['h'])
-    erased = erased.resize((widget['w'], widget['h']), Image.Resampling.NEAREST)
+    if widget['type'] != 'text' or mask.get('space') != 'source':
+        erased = erased.resize((widget['w'], widget['h']), Image.Resampling.NEAREST)
     x, y = offset
     visible = ImageChops.invert(erased.crop((x, y, x + layer.width, y + layer.height)))
     if art:
@@ -774,8 +798,9 @@ def _widget_layers(layout, now, language, weather, units, track, cover, progress
         elif kind == 'progress':
             _draw_progress(mask, widget, value)
         else:
-            _draw_text(mask, widget, value, wrapped=widget['variant'] == 'wrapped',
-                       fit=kind in ('date', 'playback-time'))
+            grow = size if kind == 'text' else None
+            mask = _draw_text(mask, widget, value, wrapped=widget['variant'] == 'wrapped',
+                              fit=kind in ('date', 'playback-time'), grow=grow)
         yield (0, 0), mask, False
 
 
