@@ -408,6 +408,7 @@ api('/api/settings').then(data => {
   showSettings(data);
   setText(setupStatus, '');
   setupFields.hidden = false;
+  document.dispatchEvent(new Event('settings-loaded'));
   if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
   checkUpdate();
 }).catch(error => setText(setupStatus, error.message));
