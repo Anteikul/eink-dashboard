@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/app.css">
   <script src="/locale.js" defer></script>
   <script src="/setup.js" defer></script>
+  <script src="/wifi-settings.js" defer></script>
 </head>
 <body>
   <main class="settings-page">
@@ -91,7 +92,30 @@
               </section>
               <section class="settings-card" aria-labelledby="wifi-settings-title">
                 <h2 id="wifi-settings-title" tabindex="-1" data-i18n>Wi-Fi setup</h2>
-                <label data-i18n>Wait before starting the setup hotspot (s)<input name="hotspot_delay" type="number" step="1" required></label>
+                <div class="settings-controls">
+                  <fieldset id="wifi-network-controls" class="wifi-controls">
+                    <div class="settings-actions">
+                      <button id="wifi-refresh" type="button" data-i18n>Refresh networks</button>
+                      <button id="wifi-other" type="button" data-i18n>Other network…</button>
+                    </div>
+                    <div id="wifi-support" class="settings-controls" hidden>
+                      <p data-i18n>Update Wi-Fi support on the Pi before changing networks.</p>
+                      <p data-i18n>In the updated installation folder on the Pi, run this command once, then restart the Pi:</p>
+                      <code>sh install.sh --wifi-setup</code>
+                    </div>
+                    <div>
+                      <h3 data-i18n>Nearby networks</h3>
+                      <ul id="wifi-nearby" class="wifi-networks" aria-label="Nearby networks" data-i18n-attributes="aria-label"></ul>
+                    </div>
+                    <div>
+                      <h3 data-i18n>Saved networks</h3>
+                      <ul id="wifi-saved" class="wifi-networks" aria-label="Saved networks" data-i18n-attributes="aria-label"></ul>
+                    </div>
+                  </fieldset>
+                  <p id="wifi-status" role="status"></p>
+                  <p data-i18n>Changing Wi-Fi can disconnect this page. Join the same network as the Pi, then open its new address shown on the display.</p>
+                  <label data-i18n>Wait before starting the setup hotspot (s)<input name="hotspot_delay" type="number" step="1" required></label>
+                </div>
               </section>
               <section class="settings-card" aria-labelledby="local-name-title">
                 <h2 id="local-name-title" tabindex="-1" data-i18n>Local address</h2>
@@ -171,5 +195,30 @@
       </div>
     </div>
   </main>
+  <dialog id="wifi-connect-dialog" class="wifi-dialog" aria-labelledby="wifi-connect-title">
+    <form id="wifi-connect-form" class="setup-form settings-controls">
+      <h2 id="wifi-connect-title" data-i18n>Connect to Wi-Fi</h2>
+      <label data-i18n>Network name (SSID)<input name="ssid" required autocomplete="off" spellcheck="false"></label>
+      <label id="wifi-password-label" data-i18n>Password<input name="password" type="password" autocomplete="new-password" maxlength="64"></label>
+      <p data-i18n>For an open network, leave the password empty.</p>
+      <p id="wifi-connect-status" role="status"></p>
+      <div class="settings-actions">
+        <button type="submit" data-i18n>Connect</button>
+        <button id="wifi-connect-cancel" type="button" data-i18n>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="wifi-forget-dialog" class="wifi-dialog" aria-labelledby="wifi-forget-title">
+    <div class="settings-controls">
+      <h2 id="wifi-forget-title" data-i18n>Forget this network?</h2>
+      <strong id="wifi-forget-name"></strong>
+      <p data-i18n>The saved connection and its password will be removed.</p>
+      <p id="wifi-forget-active" hidden data-i18n>This is the current network. Forgetting it can disconnect the dashboard.</p>
+      <div class="settings-actions">
+        <button id="wifi-forget-confirm" type="button" data-i18n>Forget network</button>
+        <button id="wifi-forget-cancel" type="button" data-i18n>Cancel</button>
+      </div>
+    </div>
+  </dialog>
 </body>
 </html>

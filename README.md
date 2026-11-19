@@ -115,6 +115,10 @@ The Raspberry Pi hosts the interface, renders the display, and processes and sto
 
 From the installation folder, run `sh install.sh --wifi-setup`. If the Pi cannot join a saved network, join the **EinkSetup** hotspot using the name and password shown on your own display. Open `http://10.42.0.1/` and enter the details for your 2.4 GHz network. The display shows the new address when the Pi connects.
 
+In **Settings → Wi-Fi setup**, refresh the nearby networks, connect using a password, reconnect to a saved network, or forget a saved connection. Choose **Saved networks** to reuse a stored password; nearby rows always ask for connection details so networks with the same name cannot select the wrong saved profile. Saved networks remain listed when out of range. Switching networks or forgetting the current network can disconnect the page; join the Pi's network and reopen the address shown on its display. New connections support open networks and WPA personal security; other security types require an existing NetworkManager profile. Profiles for another adapter and profiles using advanced NetworkManager `match` rules are excluded.
+
+If upgrading an existing installation, run `sh install.sh --wifi-setup` once from the updated installation folder, then restart the Pi. This also updates the restricted Wi-Fi helper; the web update alone cannot replace that root-owned component. Until it is updated, Settings can show networks but disables connecting and forgetting them.
+
 </details>
 
 ## License

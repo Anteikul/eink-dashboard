@@ -134,7 +134,7 @@ class PanelState:
                     'mode': self.mode, 'page': self.page, 'revision': self.revision, 'trackUrl': self.track_url}
 
 
-def start_server(host, port, state, settings, reload_settings, *, wifi=None, layout_preview=None, spotify=None,
+def start_server(host, port, state, settings, reload_settings, *, wifi=None, wifi_manager=None, layout_preview=None, spotify=None,
                  updater=None, rotation=None):
     assets = Path(__file__).with_name('web')
     routes = {
@@ -148,6 +148,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
         '/app.css': ('app.css', 'text/css; charset=utf-8'),
         '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
         '/setup.js': ('setup.js', 'text/javascript; charset=utf-8'),
+        '/wifi-settings.js': ('wifi-settings.js', 'text/javascript; charset=utf-8'),
         '/locale.js': ('locale.js', 'text/javascript; charset=utf-8'),
         '/editor.js': ('editor.js', 'text/javascript; charset=utf-8'),
         '/photo-crop.js': ('photo-crop.js', 'text/javascript; charset=utf-8'),
@@ -167,8 +168,9 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
     admin_routes = {'/api/settings', '/api/setup-code', '/api/password-protection', '/api/local-name', '/api/places', '/api/spotify/start',
                     '/api/spotify/finish', '/api/spotify/disconnect', '/api/layouts', '/api/layout-preview',
                     '/api/layout-library', '/api/layout-library/apply', '/api/photo-import', '/api/spotify/check',
-                    '/api/update', '/api/update/install'}
-    allowed_routes = {'/api/wifi'} if wifi is not None else admin_routes | {
+                    '/api/update', '/api/update/install', '/api/wifi-networks', '/api/wifi-status',
+                    '/api/wifi-connect', '/api/wifi-forget'}
+    allowed_routes = {'/api/wifi'} if wifi is not None else (admin_routes - {'/api/wifi-status'}) | {
         '/api/theme', '/api/display-mode', '/api/language', '/api/unlock',
     }
     photo_lock = threading.Lock()
@@ -287,6 +289,19 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
             elif path == '/api/settings':
                 if self.setup_access():
                     self.json(200, settings.status())
+            elif path in ('/api/wifi-networks', '/api/wifi-status'):
+                if not self.setup_access():
+                    return
+                if wifi_manager is None:
+                    self.json(503, {'error': 'Wi-Fi management is not available on this device.'})
+                    return
+                try:
+                    self.json(200, wifi_manager.networks() if path == '/api/wifi-networks'
+                              else wifi_manager.management_status())
+                except ValueError as error:
+                    self.json(409, {'error': str(error)})
+                except OSError:
+                    self.json(502, {'error': 'Could not read Wi-Fi networks. Try again.'})
             elif path == '/api/update':
                 if self.setup_access():
                     self.json(200, update_status())
@@ -372,6 +387,18 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, lay
                     else:
                         cookie = session_cookie(settings.session_key, submitted)
                         self.json(200, {}, [('Set-Cookie', cookie)])
+                    return
+                if self.path in ('/api/wifi-networks', '/api/wifi-connect', '/api/wifi-forget'):
+                    if wifi_manager is None:
+                        self.json(503, {'error': 'Wi-Fi management is not available on this device.'})
+                    elif self.path == '/api/wifi-networks':
+                        self.json(200, wifi_manager.networks(rescan=True))
+                    elif wifi_manager.manage('connect' if self.path == '/api/wifi-connect' else 'forget',
+                                             ssid=payload.get('ssid', ''), password=payload.get('password', ''),
+                                             profile=payload.get('uuid')):
+                        self.json(202, wifi_manager.management_status())
+                    else:
+                        self.json(409, {'error': 'A Wi-Fi change is already in progress.'})
                     return
                 if self.path == '/api/theme':
                     state.set_theme(payload.get('theme'))

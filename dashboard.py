@@ -350,7 +350,8 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
         threading.Thread(target=network.poll, args=(stop,), daemon=True).start()
     active_link = Link(listen)
     server = (start_server(listen, port, state, settings, reload_settings,
-                           layout_preview=render_layout_preview, spotify=spotify, updater=updater, rotation=rotation)
+                           wifi_manager=network, layout_preview=render_layout_preview,
+                           spotify=spotify, updater=updater, rotation=rotation)
               if listen else None)
     local_name = LocalName()
     try:
@@ -365,6 +366,7 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                 if link.address:
                     server = start_server(link.address, port, state, settings, reload_settings,
                                           wifi=network if hotspot else None,
+                                          wifi_manager=network,
                                           layout_preview=render_layout_preview, spotify=spotify, updater=updater,
                                           rotation=rotation)
                 active_link = link
