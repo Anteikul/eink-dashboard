@@ -281,7 +281,7 @@ def start_server(host, port, state, settings, reload_settings, *, wifi=None, wif
                     self.reply(200, *site[path])
             elif wifi is not None:
                 if path == '/api/wifi':
-                    self.json(200, {'status': wifi.status, 'language': settings.values['language']})
+                    self.json(200, {'status': wifi.hotspot_status(), 'language': settings.values['language']})
                 else:
                     self.send_error(404)
             elif path == '/api/state':

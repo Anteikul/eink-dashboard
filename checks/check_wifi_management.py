@@ -1,4 +1,5 @@
 """Wi-Fi discovery, saved profiles and authenticated settings operations."""
+import errno
 import json
 import sys
 import unittest
@@ -6,13 +7,17 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from control import PanelState, start_server
+from dashboard import run
 from device_settings import DeviceSettings
-from wifi_setup import AP_UUID, NetworkManagerRadio, NetworkSetup, configure
+from wifi_setup import (
+    AP_ADDRESS, AP_UUID, GRACE, PORTAL_IDLE_GRACE, RECONNECT_INTERVAL,
+    Hotspot, Link, NetworkManagerRadio, NetworkSetup, configure,
+)
 
 HOME = '11111111-1111-4111-8111-111111111111'
 OTHER = '22222222-2222-4222-8222-222222222222'
@@ -41,6 +46,8 @@ class Radio:
             raise OSError('Simulated Wi-Fi failure')
         if operation == 'connect':
             self.connection = (profile or OTHER, '192.168.2.20')
+        elif operation == 'hotspot':
+            self.connection = (AP_UUID, AP_ADDRESS)
 
 
 class DiscoveryChecks(unittest.TestCase):
@@ -153,6 +160,86 @@ class QueueChecks(unittest.TestCase):
         with self.assertRaises(OSError):
             self.network.step(1, Event())
         self.assertEqual(self.network.management_status()['status'], 'failed')
+
+
+class HotspotRecoveryChecks(unittest.TestCase):
+    def setUp(self):
+        self.radio = Radio()
+        self.network = NetworkSetup(self.radio)
+        self.stop = Event()
+        self.network.step(0, self.stop)
+        self.radio.connection = (None, None)
+        self.network.step(1, self.stop)
+        self.network.step(1 + GRACE, self.stop)
+        self.hotspot = self.network.link.hotspot
+        self.retry_at = 1 + GRACE + RECONNECT_INTERVAL
+
+    def test_hotspot_returns_to_last_working_network_without_restart(self):
+        self.network.step(self.retry_at - 1, self.stop)
+        self.assertEqual(self.network.link.hotspot, self.hotspot)
+        self.assertEqual(len(self.radio.operations), 1)
+
+        self.network.step(self.retry_at, self.stop)
+
+        self.assertEqual(self.radio.operations[-1], ('connect', '', '', HOME))
+        self.assertEqual(self.network.link, Link('192.168.2.20'))
+
+    def test_failed_recovery_restores_same_hotspot_and_backs_off(self):
+        change = self.radio.change
+
+        def fail_reconnect(operation, *args, **kwargs):
+            if operation == 'connect':
+                self.radio.connection = (None, None)
+                raise OSError('Saved network unavailable')
+            change(operation, *args, **kwargs)
+
+        with patch.object(self.radio, 'change', side_effect=fail_reconnect) as attempt:
+            self.network.step(self.retry_at, self.stop)
+            self.network.step(self.retry_at + RECONNECT_INTERVAL - 1, self.stop)
+
+        self.assertEqual(self.network.link, Link(AP_ADDRESS, self.hotspot))
+        self.assertEqual(self.network.management_status()['status'], 'ready')
+        self.assertEqual([call.args[0] for call in attempt.call_args_list], ['connect', 'hotspot'])
+        self.assertEqual(self.radio.operations[0], self.radio.operations[1])
+
+        self.network.step(self.retry_at + RECONNECT_INTERVAL, self.stop)
+        self.assertIsNone(self.network.link.hotspot)
+
+    def test_open_setup_page_defers_automatic_reconnect(self):
+        with patch('wifi_setup.time.monotonic', return_value=self.retry_at - 1):
+            self.assertEqual(self.network.hotspot_status(), 'ready')
+
+        self.network.step(self.retry_at, self.stop)
+        self.assertEqual(self.network.link.hotspot, self.hotspot)
+        self.assertEqual(len(self.radio.operations), 1)
+
+        self.network.step(self.retry_at - 1 + PORTAL_IDLE_GRACE, self.stop)
+        self.assertIsNone(self.network.link.hotspot)
+
+
+class DashboardLinkChecks(unittest.TestCase):
+    def test_web_server_retries_when_hotspot_address_disappears_during_bind(self):
+        link = Link(AP_ADDRESS, Hotspot('EinkSetup-TEST', '12345678'))
+        network = SimpleNamespace(link=link, joined=None, poll=Mock())
+        server = Mock()
+        panel = SimpleNamespace(VerifiedEPD=Mock(), epdconfig=Mock())
+        panel.VerifiedEPD.return_value.init.return_value = 0
+        weather = SimpleNamespace(current=None, poll=Mock())
+        bind_error = OSError(errno.EADDRNOTAVAIL, 'Address unavailable')
+
+        with TemporaryDirectory() as folder:
+            settings = DeviceSettings(Path(folder))
+            with (patch.dict(sys.modules, {'panel': panel}),
+                  patch('dashboard.Weather', return_value=weather),
+                  patch('dashboard.LocalName'),
+                  patch('dashboard.NetworkSetup', return_value=network),
+                  patch('dashboard.start_server', side_effect=[bind_error, server]) as start):
+                self.assertFalse(run(0, 2, None, 80, settings, wifi_setup=True))
+
+        self.assertEqual([call.args[:2] for call in start.call_args_list], [(AP_ADDRESS, 80)] * 2)
+        self.assertIs(start.call_args.kwargs['wifi'], network)
+        server.shutdown.assert_called_once_with()
+        server.server_close.assert_called_once_with()
 
 
 class HttpChecks(unittest.TestCase):

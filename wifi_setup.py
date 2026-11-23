@@ -20,7 +20,9 @@ AP_ALPHABET = '34679ACDEFHJKMNPRTUVWXY'
 WIFI_SOCKET = '/run/eink-wifi.sock'
 NMCLI = '/usr/bin/nmcli'
 GRACE = 30
-BUSY = ('joining', 'forgetting')
+RECONNECT_INTERVAL = 120
+PORTAL_IDLE_GRACE = 30
+BUSY = ('joining', 'forgetting', 'reconnecting')
 
 
 def validate_profile_uuid(value):
@@ -221,6 +223,8 @@ class NetworkSetup:
         self.status = 'ready'
         self.disconnected_at = None
         self.hotspot = None
+        self.last_profile = None
+        self.reconnect_at = 0
         self.operation = None
         self.operation_id = 0
 
@@ -232,6 +236,11 @@ class NetworkSetup:
             self.pending = {'operation': 'join', 'ssid': credentials[0], 'password': credentials[1]}
             self.status = 'joining'
             return True
+
+    def hotspot_status(self):
+        with self.lock:
+            self.reconnect_at = max(self.reconnect_at, time.monotonic() + PORTAL_IDLE_GRACE)
+            return self.status
 
     def management_status(self):
         with self.lock:
@@ -274,6 +283,8 @@ class NetworkSetup:
             pending, self.pending = self.pending, None
         if pending is None:
             self.refresh_link(now)
+            if self.link.hotspot:
+                self.reconnect(now)
             return
         if stop.wait(0.75):
             return
@@ -282,6 +293,9 @@ class NetworkSetup:
             self.radio.change(**pending)
         except OSError:
             status = 'failed'
+        else:
+            if status == 'forgotten' and pending['profile'] == self.last_profile:
+                self.last_profile = None
         try:
             self.refresh_link(now, restore_hotspot=status == 'failed')
             if status == 'connected' and self.link.address and not self.link.hotspot:
@@ -295,6 +309,24 @@ class NetworkSetup:
             with self.lock:
                 self.status = status
 
+    def reconnect(self, now):
+        with self.lock:
+            if self.last_profile is None or now < self.reconnect_at or self.status in BUSY:
+                return
+            previous_status = self.status
+            self.status = 'reconnecting'
+            self.reconnect_at = now + RECONNECT_INTERVAL
+
+        try:
+            try:
+                self.radio.change('connect', '', '', profile=self.last_profile)
+            except OSError:
+                print('Could not reconnect to the last Wi-Fi network. Keeping the setup hotspot.', flush=True)
+            self.refresh_link(now, restore_hotspot=True)
+        finally:
+            with self.lock:
+                self.status = previous_status
+
     def refresh_link(self, now, *, restore_hotspot=False):
         connection, address = self.radio.link()
         if address and connection != AP_UUID:
@@ -303,6 +335,7 @@ class NetworkSetup:
             self.link = Link(address)
             self.disconnected_at = None
             self.hotspot = None
+            self.last_profile = connection
             return
         if address == AP_ADDRESS and self.hotspot:
             self.link = Link(address, self.hotspot)
@@ -324,6 +357,8 @@ class NetworkSetup:
         self.radio.change('hotspot', self.hotspot.ssid, self.hotspot.password)
         self.link = Link(AP_ADDRESS, self.hotspot)
         self.disconnected_at = None
+        with self.lock:
+            self.reconnect_at = max(self.reconnect_at, now + RECONNECT_INTERVAL)
 
     def poll(self, stop):
         while not stop.is_set():
