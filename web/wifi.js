@@ -2,10 +2,10 @@ const form = document.querySelector('#wifi-form');
 const submit = form.querySelector('button[type=submit]');
 const message = document.querySelector('#setup-status');
 
-async function refresh() {
+async function refresh(showStatus = true) {
   try {
     const response = await fetch('/api/wifi');
-    if (!response.ok) return;
+    if (!response.ok || !showStatus) return;
     const data = await response.json();
     applyLanguage(data.language);
     if (data.status === 'failed') {
@@ -44,3 +44,6 @@ refresh();
 setInterval(() => {
   if (submit.disabled) refresh();
 }, 2000);
+setInterval(() => {
+  if (!document.hidden && !submit.disabled) refresh(false);
+}, 10000);

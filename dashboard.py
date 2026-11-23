@@ -1,5 +1,6 @@
 """Clock and current Prague weather for a Waveshare 2.13-inch V4."""
 import argparse
+import errno
 import fcntl
 import json
 import signal
@@ -363,13 +364,20 @@ def run(rotation, duration, listen, port, settings, wifi_setup=False):
                     server.shutdown()
                     server.server_close()
                     server = None
+                active_link = Link()
                 if link.address:
-                    server = start_server(link.address, port, state, settings, reload_settings,
-                                          wifi=network if hotspot else None,
-                                          wifi_manager=network,
-                                          layout_preview=render_layout_preview, spotify=spotify, updater=updater,
-                                          rotation=rotation)
-                active_link = link
+                    try:
+                        server = start_server(link.address, port, state, settings, reload_settings,
+                                              wifi=network if hotspot else None, wifi_manager=network,
+                                              layout_preview=render_layout_preview, spotify=spotify,
+                                              updater=updater, rotation=rotation)
+                    except OSError as error:
+                        if error.errno != errno.EADDRNOTAVAIL:
+                            raise
+                        print(f'Wi-Fi address {link.address} unavailable. Retrying the web server.',
+                              flush=True)
+                    else:
+                        active_link = link
             preferences = settings.values
             local_name.update(link.address if server and not hotspot and preferences['local_name'] else None,
                               preferences['local_hostname'])
